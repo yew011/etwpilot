@@ -1,0 +1,105 @@
+﻿<Fluent:RibbonWindow x:Class="EtwPilot.MainWindow"
+                     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+                     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+                     xmlns:vm="clr-namespace:EtwPilot.ViewModel"
+                     xmlns:view="clr-namespace:EtwPilot.View"
+                     xmlns:local="clr-namespace:EtwPilot"
+                     xmlns:Fluent="urn:fluent-ribbon"
+                     Title="ETW Pilot" 
+                     mc:Ignorable="d"
+                     Width="1500" 
+                     Height="900"
+                     Name="MainRibbonWindow"
+                     Icon="{DynamicResource logo}"
+                     DataContext="{StaticResource g_MainWindowViewModel}">
+    <Fluent:RibbonWindow.Resources>        
+        <!-- DataTemplates for current content view model -->
+        <DataTemplate DataType="{x:Type vm:ProviderViewModel}">
+            <view:ProviderView/>
+        </DataTemplate>
+        <DataTemplate DataType="{x:Type vm:ProviderManifestViewModel}">
+            <view:ProviderManifestView/>
+        </DataTemplate>
+    </Fluent:RibbonWindow.Resources>
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <Fluent:Ribbon VerticalAlignment="Top"
+                       IsDisplayOptionsButtonVisible="False"
+                       Name="MainWindowRibbon"
+                       SelectedTabChanged="MainWindowRibbon_SelectedTabChanged">
+            <!--Backstage-->
+            <Fluent:Ribbon.Menu>
+                <Fluent:Backstage>
+                    <Fluent:BackstageTabControl>
+                        <Fluent:BackstageTabItem Header="New" />
+                        <Fluent:BackstageTabItem Header="Print" />
+                        <Fluent:Button Header="Blue" />
+                    </Fluent:BackstageTabControl>
+                </Fluent:Backstage>
+            </Fluent:Ribbon.Menu>
+
+            <!--Tabs-->
+            <Fluent:RibbonTabItem Header="Providers" Name="ProvidersTab">
+                <Fluent:RibbonGroupBox Header="Options" Width="120">
+                    <Fluent:Button Header="Refresh"
+                                   Icon="{DynamicResource refresh}"
+                                   Command="{Binding LoadProvidersCommand}"/>
+                </Fluent:RibbonGroupBox>
+            </Fluent:RibbonTabItem>
+            <Fluent:RibbonTabItem Header="Sessions" Name="SessionsTab">
+                <Fluent:RibbonGroupBox Header="Control">
+                    <Fluent:Button Header="New"
+                                   Icon="{DynamicResource plus}"
+                                   />
+                </Fluent:RibbonGroupBox>
+            </Fluent:RibbonTabItem>
+            <Fluent:RibbonTabItem Header="Insights" />
+
+            <!-- Providers contextual tabs -->
+            <Fluent:RibbonTabItem Header="All" Name="ShowAllProvidersTab"
+                                  Group="{Binding Source={x:Reference providersContextualTabGroup}}"
+                                  Visibility="{Binding ProviderManifestVisible}"/>
+            <Fluent:RibbonTabItem Header="{Binding m_ProviderManifestViewModel.SelectedProviderManifest.Provider}"
+                                  Group="{Binding Source={x:Reference providersContextualTabGroup}}"
+                                  Visibility="{Binding ProviderManifestVisible}"/>
+            
+            <!--Contextual Tab Groups-->
+            <Fluent:Ribbon.ContextualGroups>
+                <Fluent:RibbonContextualTabGroup Name="providersContextualTabGroup"
+                                                 Header="Providers" 
+                                                 Visibility="{Binding ProviderManifestVisible}"
+                                                 Background="Green" 
+                                                 BorderBrush="Green"/>
+            </Fluent:Ribbon.ContextualGroups>
+            
+        </Fluent:Ribbon>
+        <ContentControl Content="{Binding CurrentViewModel}" Grid.Row="1"/>
+
+        <Fluent:StatusBar Grid.Row="2"
+                          Name="MainWindowStatusBar"
+                          Visibility="{Binding m_ProgressState.Visible}">
+            <Fluent:StatusBarItem HorizontalAlignment="Left" Value="150">
+                <StackPanel Orientation="Horizontal">
+                    <TextBlock HorizontalAlignment="Left">
+                        <Run Text="Status:" />
+                        <Run Text="{Binding m_ProgressState.StatusText}"/>
+                    </TextBlock>
+                    <ProgressBar Minimum="0"
+                         Maximum="{Binding m_ProgressState.ProgressMax}"
+                         Value="{Binding m_ProgressState.ProgressValue}"
+                         VerticalAlignment="Top"
+                         HorizontalAlignment="Left"
+                         Width="125"
+                         Height="20"/>
+                </StackPanel>
+            </Fluent:StatusBarItem>
+        </Fluent:StatusBar>
+    </Grid>
+</Fluent:RibbonWindow>
