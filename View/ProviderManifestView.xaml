@@ -5,10 +5,10 @@
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              xmlns:local="clr-namespace:EtwPilot.ViewModel"
              xmlns:Fluent="urn:fluent-ribbon"
+             xmlns:Utilities="clr-namespace:EtwPilot.Utilities"
              mc:Ignorable="d" 
              d:DesignHeight="450" d:DesignWidth="800"
-             Name="ProviderManifestViewControl"
-             DataContext="{StaticResource g_MainWindowViewModel}">
+             Name="ProviderManifestViewControl">
     <Grid>
     <Grid.RowDefinitions>
         <RowDefinition Height="*" />
@@ -18,7 +18,7 @@
             <DataGrid Name="ManifestEventsDataGrid"
                       IsReadOnly="true"
                       AutoGenerateColumns="false"
-                      ItemsSource="{Binding m_ProviderManifestViewModel.SelectedProviderManifest.Events}">
+                      ItemsSource="{Binding SelectedProviderManifest.Events}">
                 <DataGrid.Columns>
                     <DataGridTextColumn Header="Id" Binding="{Binding Id}"/>
                     <DataGridTextColumn Header="Version" Binding="{Binding Version}" />
@@ -30,30 +30,22 @@
             <DataGrid Name="ManifestTasksDataGrid"
                       IsReadOnly="true"
                       AutoGenerateColumns="false"
-                      ItemsSource="{Binding m_ProviderManifestViewModel.SelectedProviderManifest.Tasks}">
+                      ItemsSource="{Binding SelectedProviderManifest.Tasks}">
                 <DataGrid.Columns>
                     <DataGridTextColumn Header="Name" Binding="{Binding Key.Name}"/>
                     <DataGridTextColumn Header="Value" Binding="{Binding Key.Value}" />
                     <DataGridTextColumn Header="Description" Binding="{Binding Key.Description}" />
                     <DataGridTextColumn Header="Count" Binding="{Binding Value.Count}" />
+                    <DataGridTemplateColumn>
+                       <DataGridTemplateColumn.CellTemplate>
+                            <DataTemplate>
+                                <Expander Expanded="Expander_Expanded"
+                                          Collapsed="Expander_Collapsed"
+                                          Visibility="{Binding Value.Count, Converter={StaticResource IsGreaterThanZero}}"/>
+                            </DataTemplate>
+                       </DataGridTemplateColumn.CellTemplate>
+                    </DataGridTemplateColumn>
                 </DataGrid.Columns>
-                <DataGrid.ItemContainerStyle>
-                  <Style TargetType="{x:Type DataGridRow}">
-                      <Style.Triggers>
-                         <!--<DataTrigger Binding="{Binding Value.Count, Converter={StaticResource IsGreaterThanZero}}">
-                            <Setter Property="DetailsVisibility" Value="Visible"/>
-                         </DataTrigger>-->
-                           <DataTrigger Binding="{Binding Value.Count}" Value="0">
-                                <Setter Property="DetailsVisibility" Value="Collapsed"/>
-                            </DataTrigger>
-                      </Style.Triggers>
-                   </Style>
-                </DataGrid.ItemContainerStyle>
-                <DataGrid.CellStyle>
-                     <Style TargetType="DataGridCell">
-                         <Setter Property="BorderThickness" Value="1"/>
-                     </Style>
-                </DataGrid.CellStyle>
                 <DataGrid.RowDetailsTemplate>
                     <DataTemplate>
                         <DataGrid Name="ManifestOpcodesDataGrid"
@@ -74,7 +66,7 @@
             <DataGrid Name="ManifestChannelsDataGrid"
                       IsReadOnly="true"
                       AutoGenerateColumns="false"
-                      ItemsSource="{Binding m_ProviderManifestViewModel.SelectedProviderManifest.Channels}">
+                      ItemsSource="{Binding SelectedProviderManifest.Channels}">
                 <DataGrid.Columns>
                     <DataGridTextColumn Header="Name" Binding="{Binding Name}"/>
                     <DataGridTextColumn Header="Value" Binding="{Binding Value}" />
@@ -86,7 +78,7 @@
             <DataGrid Name="ManifestKeywordsDataGrid"
                       IsReadOnly="true"
                       AutoGenerateColumns="false"
-                      ItemsSource="{Binding m_ProviderManifestViewModel.SelectedProviderManifest.Keywords}">
+                      ItemsSource="{Binding SelectedProviderManifest.Keywords}">
                 <DataGrid.Columns>
                     <DataGridTextColumn Header="Name" Binding="{Binding Name}"/>
                     <DataGridTextColumn Header="Value" Binding="{Binding Value, Converter={StaticResource DecimalToHex}}" />
@@ -98,10 +90,19 @@
             <DataGrid Name="ManifestTemplatesDataGrid"
                         IsReadOnly="true"
                         AutoGenerateColumns="false"
-                        ItemsSource="{Binding m_ProviderManifestViewModel.SelectedProviderManifest.Templates}">
+                        ItemsSource="{Binding SelectedProviderManifest.Templates}">
                 <DataGrid.Columns>
                     <DataGridTextColumn Header="Name" Binding="{Binding Key}"/>
                     <DataGridTextColumn Header="Fields" Binding="{Binding Value.Count}" />
+                    <DataGridTemplateColumn>
+                       <DataGridTemplateColumn.CellTemplate>
+                            <DataTemplate>
+                                <Expander Expanded="Expander_Expanded"
+                                          Collapsed="Expander_Collapsed"
+                                          Visibility="{Binding Value.Count, Converter={StaticResource IsGreaterThanZero}}"/>
+                            </DataTemplate>
+                       </DataGridTemplateColumn.CellTemplate>
+                    </DataGridTemplateColumn>
                 </DataGrid.Columns>
                 <DataGrid.RowDetailsTemplate>
                     <DataTemplate>
@@ -125,7 +126,7 @@
             <DataGrid Name="ManifestStringsDataGrid"
                       IsReadOnly="true"
                       AutoGenerateColumns="false"
-                      ItemsSource="{Binding m_ProviderManifestViewModel.SelectedProviderManifest.StringTable}">
+                      ItemsSource="{Binding SelectedProviderManifest.StringTable}">
                 <DataGrid.Columns>
                     <DataGridTextColumn Header="Value" Binding="{Binding }" />
                 </DataGrid.Columns>

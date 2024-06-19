@@ -9,9 +9,18 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <None Remove="images\csv.png" />
+    <None Remove="images\export.png" />
+    <None Remove="images\json.png" />
+    <None Remove="images\session.png" />
+    <None Remove="images\xml.png" />
+  </ItemGroup>
+
+  <ItemGroup>
     <PackageReference Include="CommunityToolkit.Mvvm" Version="8.2.2" />
-    <PackageReference Include="etwlib" Version="1.2.0" />
+    <PackageReference Include="etwlib" Version="1.6.0" />
     <PackageReference Include="Fluent.Ribbon" Version="10.1.0" />
+    <PackageReference Include="Microsoft.Xaml.Behaviors.Wpf" Version="1.1.122" />
     <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
   </ItemGroup>
 
@@ -21,9 +30,12 @@
     <Resource Include="images\calendar.png" />
     <Resource Include="images\check-vector.png" />
     <Resource Include="images\clipboard.png" />
+    <Resource Include="images\csv.png" />
     <Resource Include="images\diskette.png" />
+    <Resource Include="images\export.png" />
     <Resource Include="images\gear.png" />
     <Resource Include="images\green_dot.png" />
+    <Resource Include="images\json.png" />
     <Resource Include="images\lightbulb.png" />
     <Resource Include="images\open-folder.png" />
     <Resource Include="images\plus.png" />
@@ -33,12 +45,17 @@
     <Resource Include="images\refresh.png" />
     <Resource Include="images\refresh_small.png" />
     <Resource Include="images\satellite.png" />
+    <Resource Include="images\session.png" />
     <Resource Include="images\stop.png" />
     <Resource Include="images\str_string.png" />
 	<Resource Include="images\logo.png" />
+	<Resource Include="images\xml.png" />
   </ItemGroup>
 
   <ItemGroup>
+    <Page Update="View\MainWindowView.xaml">
+      <Generator>MSBuild:Compile</Generator>
+    </Page>
     <Page Update="View\ProviderManifestView.xaml">
       <Generator>MSBuild:Compile</Generator>
     </Page>

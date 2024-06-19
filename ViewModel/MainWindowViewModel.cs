@@ -18,15 +18,36 @@ under the License.
 */
 using CommunityToolkit.Mvvm.Input;
 using etwlib;
+using Fluent;
 using System.ComponentModel;
-using System.Runtime.CompilerServices;
+using System.Diagnostics;
 using System.Windows;
 using System.Windows.Input;
+using System.IO;
+using System.Windows.Controls;
+using MessageBox = System.Windows.MessageBox;
+using System.Windows.Forms;
+using Newtonsoft.Json;
+using System.Data;
+using System.Text;
+using System.Xml;
+using System.Xml.Serialization;
+using EtwPilot.Utilities;
 
 namespace EtwPilot.ViewModel
 {
-    class MainWindowViewModel : ViewModelBase
+    using static EtwPilot.Utilities.TraceLogger;
+
+    internal class MainWindowViewModel : ViewModelBase
     {
+        internal enum ExportFormat
+        {
+            Csv = 1,
+            Xml,
+            Json,
+            Custom
+        }
+
         #region Properties
 
         private ProgressState _m_ProgressState;
@@ -71,16 +92,44 @@ namespace EtwPilot.ViewModel
             }
         }
 
-        private ProviderManifestViewModel _m_ProviderManifestViewModel;
-        public ProviderManifestViewModel m_ProviderManifestViewModel
+        private SettingsFormViewModel _m_SettingsFormViewModel;
+        public SettingsFormViewModel m_SettingsFormViewModel
         {
-            get => _m_ProviderManifestViewModel;
+            get => _m_SettingsFormViewModel;
             set
             {
-                if (_m_ProviderManifestViewModel != value)
+                if (_m_SettingsFormViewModel != value)
                 {
-                    _m_ProviderManifestViewModel = value;
-                    OnPropertyChanged("m_ProviderManifestViewModel");
+                    _m_SettingsFormViewModel = value;
+                    OnPropertyChanged("m_SettingsFormViewModel");
+                }
+            }
+        }
+
+        private SessionViewModel _m_SessionViewModel;
+        public SessionViewModel m_SessionViewModel
+        {
+            get => _m_SessionViewModel;
+            set
+            {
+                if (_m_SessionViewModel != value)
+                {
+                    _m_SessionViewModel = value;
+                    OnPropertyChanged("m_SessionViewModel");
+                }
+            }
+        }
+
+        private NewSessionFormViewModel _m_NewSessionFormViewModel;
+        public NewSessionFormViewModel m_NewSessionFormViewModel
+        {
+            get => _m_NewSessionFormViewModel;
+            set
+            {
+                if (_m_NewSessionFormViewModel != value)
+                {
+                    _m_NewSessionFormViewModel = value;
+                    OnPropertyChanged("_m_NewSessionFormViewModel");
                 }
             }
         }
@@ -99,16 +148,16 @@ namespace EtwPilot.ViewModel
             }
         }
 
-        private ParsedEtwManifest _selectedProviderManifest;
-        public ParsedEtwManifest SelectedProviderManifest
+        private Visibility _SessionsVisible;
+        public Visibility SessionsVisible
         {
-            get => _selectedProviderManifest;
+            get => _SessionsVisible;
             set
             {
-                if (_selectedProviderManifest != value)
+                if (_SessionsVisible != value)
                 {
-                    _selectedProviderManifest = value;
-                    OnPropertyChanged("SelectedProviderManifest");
+                    _SessionsVisible = value;
+                    OnPropertyChanged("SessionsVisible");
                 }
             }
         }
@@ -117,147 +166,509 @@ namespace EtwPilot.ViewModel
 
         #region commands
 
-        private ICommand _loadProvidersCommand;
-        public ICommand LoadProvidersCommand
-        {
-            get => _loadProvidersCommand == null ? new AsyncRelayCommand(Command_LoadProviders) : _loadProvidersCommand;
-            set
-            {
-                _loadProvidersCommand = value;
-            }
-        }
-
-        private AsyncRelayCommand<Guid> _loadProviderManifestCommand;
-        public AsyncRelayCommand<Guid> LoadProviderManifestCommand
-        {
-            get => _loadProviderManifestCommand == null ? new AsyncRelayCommand<Guid>(Command_LoadProviderManifest) : _loadProviderManifestCommand;
-            set
-            {
-                _loadProviderManifestCommand = value;
-            }
-        }
+        public AsyncRelayCommand LoadProvidersCommand { get; set; }
+        public AsyncRelayCommand LoadSessionsCommand { get; set; }
+        public AsyncRelayCommand<Guid> LoadProviderManifestCommand { get; set; }
+        public AsyncRelayCommand<ExportFormat> ExportProvidersCommand { get; set; }
+        public AsyncRelayCommand<ExportFormat> ExportSessionsCommand { get; set; }
+        public AsyncRelayCommand DumpProviderManifestsCommand { get; set; }
+        public AsyncRelayCommand SaveProvidersToClipboardCommand { get; set; }
+        public AsyncRelayCommand SaveSessionsToClipboardCommand { get; set; }
+        public AsyncRelayCommand<SelectionChangedEventArgs> SwitchCurrentViewModelCommand { get; set; }
+        public AsyncRelayCommand<RoutedEventArgs> BackstageMenuClickCommand { get; set; }
+        public AsyncRelayCommand<CancelEventArgs> WindowClosingCommand { get; set; }
+        public AsyncRelayCommand<RoutedEventArgs> WindowLoadedCommand { get; set; }
+        public AsyncRelayCommand CancelCurrentCommandCommand { get; set; }
+        public AsyncRelayCommand NewSessionFromProviderCommand { get; set; }
 
         #endregion
 
+        private AsyncRelayCommand m_CurrentCommand = null;
+
         public MainWindowViewModel()
         {
+            //
+            // Set up commands
+            //
+            LoadProvidersCommand = new AsyncRelayCommand(Command_LoadProviders, CanExecute);
+            LoadSessionsCommand = new AsyncRelayCommand(Command_LoadSessions, CanExecute);
+            LoadProviderManifestCommand = new AsyncRelayCommand<Guid>(
+                Command_LoadProviderManifest, _ => CanExecute());
+            ExportProvidersCommand = new AsyncRelayCommand<ExportFormat>(
+                Command_ExportProviders, _ => CanExecute());
+            ExportSessionsCommand = new AsyncRelayCommand<ExportFormat>(
+                Command_ExportSessions, _ => CanExecute());
+            DumpProviderManifestsCommand = new AsyncRelayCommand(
+                Command_DumpProviderManifests, CanExecute);
+            SaveProvidersToClipboardCommand = new AsyncRelayCommand(
+                Command_SaveProvidersToClipboard, CanExecute);
+            SaveSessionsToClipboardCommand = new AsyncRelayCommand(
+                Command_SaveSessionsToClipboard, CanExecute);
+            SwitchCurrentViewModelCommand = new AsyncRelayCommand<SelectionChangedEventArgs>(
+                Command_SwitchCurrentViewModel, _ => true);
+            BackstageMenuClickCommand = new AsyncRelayCommand<RoutedEventArgs>(
+                Command_BackstageMenuClick, _ => CanExecute());
+            WindowClosingCommand = new AsyncRelayCommand<CancelEventArgs>(
+                Command_WindowClosing, _ => true);
+            WindowLoadedCommand = new AsyncRelayCommand<RoutedEventArgs>(
+                Command_WindowLoaded, _ => CanExecute());
+            CancelCurrentCommandCommand = new AsyncRelayCommand(Command_CancelCurrentCommand);
+            NewSessionFromProviderCommand = new AsyncRelayCommand(
+                Command_NewSessionFromProvider, CanExecute);
+
+            //
+            // Our progress state is tied to statemanager.
+            //
             m_ProgressState = new ProgressState();
-            m_ProviderViewModel = new ProviderViewModel(m_ProgressState);
-            m_ProviderManifestViewModel = new ProviderManifestViewModel(m_ProgressState);
+
+            //
+            // Setup StateManager for other viewmodels
+            //
+            StateManager.ProgressState = m_ProgressState;
+
+            //
+            // Instatiate other viewmodels. SettingsFormViewModel must be instantiated first
+            // as it sets StateManager.SettingsModel which other viewmodels use.
+            //
+            m_SettingsFormViewModel = new SettingsFormViewModel();
+            m_SettingsFormViewModel.LoadDefault();
+            m_ProviderViewModel = new ProviderViewModel();
+            m_SessionViewModel = new SessionViewModel();
+            m_NewSessionFormViewModel = new NewSessionFormViewModel();
+
+            //
+            // Set current viewmodel
+            //
             CurrentViewModel = m_ProviderViewModel;
             ProviderManifestVisible = Visibility.Hidden;
+
+            //
+            // Initialize traces and set trace levels
+            //
+            etwlib.TraceLogger.Initialize();
+            etwlib.TraceLogger.SetLevel(m_SettingsFormViewModel.m_SettingsModel.TraceLevelEtwlib);
+            EtwPilot.Utilities.TraceLogger.Initialize();
+            EtwPilot.Utilities.TraceLogger.SetLevel(m_SettingsFormViewModel.m_SettingsModel.TraceLevelApp);
+            symbolresolver.TraceLogger.Initialize();
+            symbolresolver.TraceLogger.SetLevel(m_SettingsFormViewModel.m_SettingsModel.TraceLevelSymbolresolver);
+
+            Trace(TraceLoggerType.MainWindow,
+                  TraceEventType.Information,
+                  "MainWindow opened");
         }
 
-        public void ShowProviderViewModel()
+        private async Task Command_WindowClosing(CancelEventArgs Args)
         {
-            CurrentViewModel = m_ProviderViewModel;
+            await OnWindowClosing(Args);
+        }
+
+        private async Task Command_WindowLoaded(RoutedEventArgs Args)
+        {
+            //
+            // This is the default tab displayed, so load it with content.
+            //
+            await Command_LoadProviders();
+        }
+
+        private async Task Command_CancelCurrentCommand()
+        {
+            if (m_CurrentCommand == null || !m_CurrentCommand.CanBeCanceled)
+            {
+                return;
+            }
+            m_CurrentCommand.Cancel();
         }
 
         private async Task Command_LoadProviders()
         {
-            if (_m_ProgressState.Visible == Visibility.Visible)
+            StateManager.ProgressState.InitializeProgress(2);
+            CurrentViewModel = m_ProviderViewModel;
+            await m_ProviderViewModel.LoadProviders();
+            m_ProgressState.UpdateProgressMessage($"Loaded {m_ProviderViewModel.Providers.Count} providers");
+            m_ProgressState.FinalizeProgress();
+        }
+
+        private async Task Command_LoadProviderManifest(Guid Id)
+        {
+            m_ProgressState.InitializeProgress(1);
+            var manifest = await m_ProviderViewModel.LoadProviderManifest(Id);
+            if (manifest == null)
             {
                 return;
             }
-            m_ProgressState.Visible = Visibility.Visible;
-            CurrentViewModel = m_ProviderViewModel;
-            await m_ProviderViewModel.LoadProviders();
-            m_ProgressState.Visible = Visibility.Hidden;
-        }
-
-        private async Task<ParsedEtwManifest?> Command_LoadProviderManifest(Guid Id)
-        {
-            if (m_ProgressState.Visible == Visibility.Visible)
-            {
-                return null;
-            }
+            CurrentViewModel = manifest;
             ProviderManifestVisible = Visibility.Visible;
-            m_ProgressState.Visible = Visibility.Visible;
-            var provider = await m_ProviderManifestViewModel.LoadProviderManifest(Id);
-            CurrentViewModel = m_ProviderManifestViewModel;
-            m_ProgressState.Visible = Visibility.Hidden;
-            return provider;
-        }
-    }
-
-    public class ProgressState : INotifyPropertyChanged
-    {
-        public event PropertyChangedEventHandler PropertyChanged;
-
-        private Visibility _visible;
-        public Visibility Visible
-        {
-            get => _visible;
-            set { _visible = value; OnPropertyChanged("Visible"); }
+            m_ProgressState.UpdateProgressMessage($"Loaded manifest for provider {Id}");
+            m_ProgressState.FinalizeProgress();
         }
 
-        private int _ProgressValue;
-        public int ProgressValue
+        private async Task Command_LoadSessions()
         {
-            get => _ProgressValue;
-            set { _ProgressValue = value; OnPropertyChanged("ProgressValue"); }
+            StateManager.ProgressState.InitializeProgress(2);
+            CurrentViewModel = m_SessionViewModel;
+            await m_SessionViewModel.LoadSessions();
+            m_ProgressState.UpdateProgressMessage($"Loaded {m_SessionViewModel.Sessions.Count} sessions");
+            m_ProgressState.FinalizeProgress();
         }
 
-        public string _StatusText;
-        public string StatusText
+        private async Task Command_NewSessionFromProvider()
         {
-            get => _StatusText;
-            set { _StatusText = value; OnPropertyChanged("StatusText"); }
-        }
-
-        public int _ProgressMax;
-        public int ProgressMax
-        {
-            get => _ProgressMax;
-            set { _ProgressMax = value; OnPropertyChanged("ProgressMax"); }
-        }
-
-        public ProgressState()
-        {
-            FinalizeProgress();
-        }
-
-        protected void OnPropertyChanged([CallerMemberName] string propertyName = null)
-        {
-            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
-        }
-
-        public void InitializeProgress(int Max)
-        {
-            Application.Current.Dispatcher.Invoke(new Action(() =>
+            var providers = GetSelectedProvidersFromVm();
+            if (providers == null)
             {
-                ProgressMax = Max;
-                StatusText = "";
-                ProgressValue = 0;
-                Visible = Visibility.Visible;
-            }));
+                return;
+            }
+
+            //
+            // Launch sessions tab
+            //
         }
 
-        public void FinalizeProgress()
+        private async Task Command_ExportProviders(ExportFormat Format)
         {
-            Application.Current.Dispatcher.Invoke(new Action(() =>
+            var providers = GetSelectedProvidersFromVm();
+            if (providers == null)
             {
-                ProgressMax = 0;
-                StatusText = "";
-                ProgressValue = 0;
-                Visible = Visibility.Hidden;
-            }));
+                return;
+            }
+
+            await DataExporter.Export(providers, Format, StateManager, "Providers");
         }
 
-        public void UpdateProgressMessage(string Text)
+        private async Task Command_ExportSessions(ExportFormat Format)
         {
-            Application.Current.Dispatcher.Invoke(new Action(() =>
+            var sessions = GetSelectedSessionsFromVm();
+            if (sessions == null)
             {
-                StatusText = Text;
-            }));
+                return;
+            }
+
+            if (Format == ExportFormat.Csv)
+            {
+                //
+                // ParsedEtwSession has a list field that would not make sense for CSV.
+                // So just stringify each object and pass that for export.
+                //
+                m_ProgressState.InitializeProgress(1);
+                var lines = new List<string>();
+                foreach (var session in sessions)
+                {
+                    lines.Add(session.ToString());
+                }
+
+                await DataExporter.Export(lines, ExportFormat.Custom, StateManager, "Sessions");
+            }
+            else
+            {
+                await DataExporter.Export(sessions, Format, StateManager, "Sessions");
+            }
         }
 
-        public void UpdateProgressValue()
+        private async Task Command_DumpProviderManifests(CancellationToken Token)
         {
-            Application.Current.Dispatcher.Invoke(new Action(() =>
+            var providers = GetSelectedProvidersFromVm();
+            if (providers == null)
             {
-                ProgressValue++;
-            }));
+                return;
+            }
+
+            var browser = new FolderBrowserDialog();
+            browser.Description = "Select a location to save the data";
+            browser.RootFolder = Environment.SpecialFolder.MyComputer;
+            var result = browser.ShowDialog();
+            if (result != DialogResult.OK)
+            {
+                return;
+            }
+
+            var root = Path.Combine(browser.SelectedPath, "Provider Manifests");
+            try
+            {
+                Directory.CreateDirectory(root);
+            }
+            catch (Exception ex)
+            {
+                Trace(TraceLoggerType.Settings,
+                      TraceEventType.Warning,
+                      $"Unable to create root directory " +
+                      $"'{root}': {ex.Message}");
+                return;
+            }
+
+            m_CurrentCommand = DumpProviderManifestsCommand;
+            m_ProgressState.InitializeProgress(providers.Count);
+
+            var numErrors = 0;
+            var i = 1;
+            foreach (var provider in providers)
+            {
+                if (Token.IsCancellationRequested)
+                {
+                    m_ProgressState.UpdateProgressMessage($"Operation cancelled");
+                    m_ProgressState.FinalizeProgress();
+                    return;
+                }
+
+                m_ProgressState.UpdateProgressMessage(
+                    $"Dumping manifest for provider {provider.Name} ({i++} of {providers.Count})...");
+                var target = Path.Combine(root, $"{provider.Id}.xml");
+                var manifest = await m_ProviderViewModel.LoadProviderManifest(provider.Id);
+                if (manifest == null)
+                {
+                    numErrors++;
+                    m_ProgressState.UpdateProgressValue();
+                    continue;
+                }
+                File.WriteAllText(target, manifest.SelectedProviderManifest.ToXml());
+                m_ProgressState.UpdateProgressValue();
+            }
+            m_ProgressState.UpdateProgressMessage($"Exported {providers.Count} manifests to {root} ({numErrors} errors)");            
+            m_ProgressState.FinalizeProgress();
+        }
+
+        private async Task Command_SaveProvidersToClipboard()
+        {
+            var providers = GetSelectedProvidersFromVm();
+            if (providers == null)
+            {
+                return;
+            }
+            m_ProgressState.InitializeProgress(1);
+            System.Windows.Clipboard.SetText(DataExporter.GetDataAsCsv(providers));
+            m_ProgressState.UpdateProgressMessage($"Copied {providers.Count} rows to clipboard");
+            m_ProgressState.FinalizeProgress();
+        }
+
+        private async Task Command_SaveSessionsToClipboard()
+        {
+            var sessions = GetSelectedSessionsFromVm();
+            if (sessions == null)
+            {
+                return;
+            }
+            m_ProgressState.InitializeProgress(1);
+            var sb = new StringBuilder();
+            foreach (var session in sessions)
+            {
+                sb.AppendLine(session.ToString());
+            }
+            System.Windows.Clipboard.SetText(sb.ToString());
+            m_ProgressState.UpdateProgressMessage($"Copied {sessions.Count} rows to clipboard");
+            m_ProgressState.FinalizeProgress();
+        }
+
+        private async Task Command_SwitchCurrentViewModel(SelectionChangedEventArgs Args)
+        {
+            if (Args.AddedItems.Count == 0)
+            {
+                return;
+            }
+            var tab = Args.AddedItems[0] as RibbonTabItem;
+
+            if (tab == null || tab.Name == null)
+            {
+                return;
+            }
+
+            switch (tab.Name)
+            {
+                case "ProvidersTab":
+                    {
+                        if (m_ProviderViewModel.Providers.Count == 0)
+                        {
+                            await Command_LoadProviders();
+                        }
+                        else
+                        {
+                            CurrentViewModel = m_ProviderViewModel;
+                        }
+                        break;
+                    }
+                case "SessionsTab":
+                    {
+                        if (m_SessionViewModel.Sessions.Count == 0)
+                        {
+                            await Command_LoadSessions();
+                        }
+                        else
+                        {
+                            CurrentViewModel = m_SessionViewModel;
+                        }
+                        break;
+                    }
+                case "InsightsTab":
+                    {
+                        CurrentViewModel = null;
+                        break;
+                    }
+                default:
+                    {
+                        break;
+                    }
+            }
+
+            //
+            // For provider manifest contextual tabs, we want to simply
+            // retrieve the correct manifest VM from the manifest cache
+            // inside provider VM.
+            //
+            if (tab.Name.StartsWith("Manifest_"))
+            {
+                CurrentViewModel = m_ProviderViewModel.GetVmForTab(tab.Name)!;
+            }
+        }
+
+        private async Task Command_BackstageMenuClick(RoutedEventArgs Args)
+        {
+            var menuItem = Args.Source as BackstageTabItem;
+            if (menuItem == null || menuItem.Name == null)
+            {
+                return;
+            }
+
+            //
+            // Switch the content view back to the settings form
+            //
+            if (menuItem.Name != "MainContentMenuItem")
+            {
+                var tabControl = menuItem.Parent as BackstageTabControl;
+                tabControl!.SelectedIndex = 0;
+            }
+
+            m_ProgressState.InitializeProgress(1);
+
+            switch (menuItem.Name)
+            {
+                case "LoadSettingsMenuItem":
+                    {
+                        var dialog = new System.Windows.Forms.OpenFileDialog();
+                        dialog.CheckFileExists = true;
+                        dialog.CheckPathExists = true;
+                        dialog.Multiselect = false;
+
+                        if (dialog.ShowDialog() != System.Windows.Forms.DialogResult.OK)
+                        {
+                            break;
+                        }
+
+                        try
+                        {
+                            m_SettingsFormViewModel.Load(dialog.FileName);
+                        }
+                        catch (Exception ex)
+                        {
+                            MessageBox.Show(
+                                $"Unable to load settings from {dialog.FileName}: {ex.Message}");
+                            break;
+                        }
+                        m_ProgressState.UpdateProgressMessage($"Successfully loaded settings from {dialog.FileName}");
+                        break;
+                    }
+                case "SaveSettingsMenuItem":
+                    {
+                        try
+                        {
+                            m_SettingsFormViewModel.Save();
+                        }
+                        catch (Exception ex)
+                        {
+                            MessageBox.Show($"Unable to save settings: {ex.Message}");
+                            break;
+                        }
+
+                        m_ProgressState.UpdateProgressMessage($"Successfully saved settings");
+                        break;
+                    }
+                case "SaveSettingsAsMenuItem":
+                    {
+                        var sfd = new System.Windows.Forms.SaveFileDialog();
+                        sfd.Filter = "json files (*.json)|*.json";
+                        sfd.RestoreDirectory = true;
+
+                        if (sfd.ShowDialog() != System.Windows.Forms.DialogResult.OK)
+                        {
+                            break;
+                        }
+
+                        try
+                        {
+                            m_SettingsFormViewModel.Save(sfd.FileName);
+                        }
+                        catch (Exception ex)
+                        {
+                            MessageBox.Show($"Unable to save settings: {ex.Message}");
+                            break;
+                        }
+                        m_ProgressState.UpdateProgressMessage($"Successfully saved settings to {sfd.FileName}");
+                        break;
+                    }
+                case "DebugLogsMenuItem":
+                    {
+                        var psi = new ProcessStartInfo();
+                        psi.FileName = Model.SettingsModel.DefaultWorkingDirectory;
+                        psi.UseShellExecute = true;
+                        Process.Start(psi);
+                        break;
+                    }
+                case "ExitMenuItem":
+                    {
+                        await OnWindowClosing(new CancelEventArgs());
+                        break;
+                    }
+                default:
+                    {
+                        break;
+                    }
+            }
+            m_ProgressState.FinalizeProgress();
+        }
+
+        private async Task OnWindowClosing(CancelEventArgs Args)
+        {
+            /*if (g_Sessions.ActiveSessionExists())
+            {
+                UpdateStatusBar("Please wait while active sessions are ended...");
+                e.Cancel = true;
+                await g_Sessions.FormClosing();
+                Close();
+            }*/
+        }
+
+        private List<ParsedEtwProvider>? GetSelectedProvidersFromVm()
+        {
+            var providers = m_ProviderViewModel.SelectedProviders;
+            if (providers == null || providers.Count == 0)
+            {
+                if (m_ProviderViewModel.Providers == null || m_ProviderViewModel.Providers.Count == 0)
+                {
+                    return null;
+                }
+                return m_ProviderViewModel.Providers.ToList();
+            }
+            return providers;
+        }
+
+        private List<ParsedEtwSession>? GetSelectedSessionsFromVm()
+        {
+            var sessions = m_SessionViewModel.SelectedSessions;
+            if (sessions == null || sessions.Count == 0)
+            {
+                if (m_SessionViewModel.Sessions == null || m_SessionViewModel.Sessions.Count == 0)
+                {
+                    return null;
+                }
+                return m_SessionViewModel.Sessions.ToList();
+            }
+            return sessions;
+        }
+
+        private bool CanExecute()
+        {
+            if (m_ProgressState.TaskInProgress())
+            {
+                return false;
+            }
+            return true;
         }
     }
 }

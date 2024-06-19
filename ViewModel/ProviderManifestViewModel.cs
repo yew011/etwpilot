@@ -17,14 +17,11 @@ specific language governing permissions and limitations
 under the License.
 */
 using etwlib;
-using EtwPilot.Model;
 
 namespace EtwPilot.ViewModel
 {
     class ProviderManifestViewModel : ViewModelBase
     {
-        private ProviderManifestModel Model;
-
         private ParsedEtwManifest _selectedProviderManifest;
         public ParsedEtwManifest SelectedProviderManifest
         {
@@ -39,16 +36,9 @@ namespace EtwPilot.ViewModel
             }
         }
 
-        public ProviderManifestViewModel(ProgressState ProgressState)
+        public ProviderManifestViewModel(ParsedEtwManifest Manifest)
         {
-            Model = new ProviderManifestModel(ProgressState);
-        }
-
-        public async Task<ParsedEtwManifest?> LoadProviderManifest(Guid Id)
-        {
-            var manifest = await Model.GetProviderManifest(Id);
-            _selectedProviderManifest = manifest!;
-            return manifest;
+            SelectedProviderManifest = Manifest;
         }
     }
 }

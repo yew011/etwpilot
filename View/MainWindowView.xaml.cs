@@ -16,58 +16,16 @@ KIND, either express or implied.  See the License for the
 specific language governing permissions and limitations
 under the License.
 */
-using System.Diagnostics;
 using EtwPilot.ViewModel;
-using System.Windows.Controls;
 using Fluent;
 
 namespace EtwPilot
 {
-    using static EtwPilot.Utilities.TraceLogger;
-
-    /// <summary>
-    /// Interaction logic for MainWindow.xaml
-    /// </summary>
     public partial class MainWindow : RibbonWindow
     {
         public MainWindow()
         {
             InitializeComponent();
-
-            //
-            // Always load settings first, to setup working dir.
-            //
-            /*g_Settings = Settings.LoadDefault();
-
-            //
-            // Initialize traces and set trace levels
-            //
-            etwlib.TraceLogger.Initialize();
-            etwlib.TraceLogger.SetLevel(g_Settings.TraceLevelEtwlib);
-            TraceLogger.Initialize();
-            TraceLogger.SetLevel(g_Settings.TraceLevelApp);
-            symbolresolver.TraceLogger.Initialize();
-            symbolresolver.TraceLogger.SetLevel(g_Settings.TraceLevelSymbolresolver);
-            */
-            Trace(TraceLoggerType.MainWindow,
-                  TraceEventType.Information,
-                  "MainWindow opened");
-        }
-
-        private void MainWindowRibbon_SelectedTabChanged(object sender, SelectionChangedEventArgs e)
-        {
-            var tab = sender as RibbonTabItem;
-            if (tab == null)
-            {
-                return;
-            }
-            
-            var vm = tab.DataContext as MainWindowViewModel;
-
-            if (tab.Name == "ProvidersTab")
-            {
-                vm!.ShowProviderViewModel();
-            }
         }
     }
 }

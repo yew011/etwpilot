@@ -7,14 +7,31 @@
                      xmlns:view="clr-namespace:EtwPilot.View"
                      xmlns:local="clr-namespace:EtwPilot"
                      xmlns:Fluent="urn:fluent-ribbon"
+                     xmlns:behaviours="http://schemas.microsoft.com/xaml/behaviors"
                      Title="ETW Pilot" 
                      mc:Ignorable="d"
-                     Width="1500" 
-                     Height="900"
                      Name="MainRibbonWindow"
                      Icon="{DynamicResource logo}"
-                     DataContext="{StaticResource g_MainWindowViewModel}">
-    <Fluent:RibbonWindow.Resources>        
+                     DataContext="{StaticResource g_MainWindowViewModel}" Height="800" Width="1500">
+    <!-- Use the interactions feature to redirect some UI events to commands -->
+    <behaviours:Interaction.Triggers>
+        <behaviours:EventTrigger EventName="Closing">
+            <behaviours:InvokeCommandAction 
+               Command="{Binding WindowClosingCommand}"
+               PassEventArgsToCommand="True"/>
+        </behaviours:EventTrigger>
+        <behaviours:EventTrigger EventName="Loaded">
+            <behaviours:InvokeCommandAction 
+               Command="{Binding WindowLoadedCommand}"
+               PassEventArgsToCommand="True"/>
+        </behaviours:EventTrigger>
+        <behaviours:EventTrigger EventName="MouseLeftButtonUp">
+            <behaviours:InvokeCommandAction 
+                Command="{Binding BackstageMenuClickCommand}"
+                PassEventArgsToCommand="True"/>
+        </behaviours:EventTrigger>
+    </behaviours:Interaction.Triggers>
+    <Fluent:RibbonWindow.Resources>
         <!-- DataTemplates for current content view model -->
         <DataTemplate DataType="{x:Type vm:ProviderViewModel}">
             <view:ProviderView/>
@@ -22,84 +39,206 @@
         <DataTemplate DataType="{x:Type vm:ProviderManifestViewModel}">
             <view:ProviderManifestView/>
         </DataTemplate>
+        <DataTemplate DataType="{x:Type vm:SessionViewModel}">
+            <view:SessionView/>
+        </DataTemplate>
+        <!-- DataTemplates for other UI forms -->
+        <DataTemplate DataType="{x:Type vm:SettingsFormViewModel}">
+            <view:SettingsFormView/>
+        </DataTemplate>
     </Fluent:RibbonWindow.Resources>
-    <Grid>
-        <Grid.RowDefinitions>
-            <RowDefinition Height="Auto" />
-            <RowDefinition Height="*" />
-            <RowDefinition Height="Auto" />
-        </Grid.RowDefinitions>
-
+    <DockPanel>
         <Fluent:Ribbon VerticalAlignment="Top"
                        IsDisplayOptionsButtonVisible="False"
                        Name="MainWindowRibbon"
-                       SelectedTabChanged="MainWindowRibbon_SelectedTabChanged">
+                       CanMinimize="False"
+                       DockPanel.Dock="Top">
+            <Fluent:Ribbon.Resources>
+                <!-- Template for dynamic contextual tabs. Some properties are set in code-behind. -->
+                <Style x:Key="ProviderContextTabStyle" TargetType="{x:Type Fluent:RibbonTabItem}">
+                    <Setter Property="Group" Value="{Binding Source={x:Reference manifestsContextualTabGroup}}"/>
+                    <Setter Property="Visibility" Value="{Binding ProviderManifestVisible}"/>
+                    <Setter Property="HeaderTemplate">
+                        <Setter.Value>
+                            <DataTemplate>
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Name="ProviderContextTabText"/>
+                                    <Separator Width="5"/>
+                                    <Button Name="ProviderContextTabCloseButton"
+                                            Content="{StaticResource red_x}"
+                                            BorderThickness="0"
+                                            Margin="0"
+                                            Padding="0"
+                                            Background="Transparent"/>
+                                </StackPanel>
+                            </DataTemplate>
+                        </Setter.Value>
+                    </Setter>
+                </Style>
+                <Style x:Key="SessionContextTabStyle" TargetType="{x:Type Fluent:RibbonTabItem}">
+                    <Setter Property="Group" Value="{Binding Source={x:Reference sessionsContextualTabGroup}}"/>
+                    <Setter Property="Visibility" Value="{Binding SessionsVisible}"/>
+                    <Setter Property="HeaderTemplate">
+                        <Setter.Value>
+                            <DataTemplate>
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Name="SessionContextTabText"/>
+                                    <Separator Width="5"/>
+                                    <Button Name="SessionContextTabCloseButton"
+                                            Content="{StaticResource red_x}"
+                                            BorderThickness="0"
+                                            Margin="0"
+                                            Padding="0"
+                                            Background="Transparent"/>
+                                </StackPanel>
+                            </DataTemplate>
+                        </Setter.Value>
+                    </Setter>
+                </Style>
+            </Fluent:Ribbon.Resources>
+            <behaviours:Interaction.Triggers>
+                <behaviours:EventTrigger EventName="SelectedTabChanged">
+                    <behaviours:InvokeCommandAction 
+                       Command="{Binding SwitchCurrentViewModelCommand}"
+                       PassEventArgsToCommand="True"/>
+                </behaviours:EventTrigger>
+            </behaviours:Interaction.Triggers>
             <!--Backstage-->
             <Fluent:Ribbon.Menu>
                 <Fluent:Backstage>
                     <Fluent:BackstageTabControl>
-                        <Fluent:BackstageTabItem Header="New" />
-                        <Fluent:BackstageTabItem Header="Print" />
-                        <Fluent:Button Header="Blue" />
+                        <Fluent:BackstageTabItem Header="Settings" Name="MainContentMenuItem">
+                            <ContentControl Content="{Binding m_SettingsFormViewModel}"/>
+                        </Fluent:BackstageTabItem>
+                        <Fluent:BackstageTabItem Header="Load settings..." Name="LoadSettingsMenuItem"/>
+                        <Fluent:BackstageTabItem Header="Save settings" Name="SaveSettingsMenuItem"/>
+                        <Fluent:BackstageTabItem Header="Save settings as..." Name="SaveSettingsAsMenuItem"/>
+                        <Fluent:BackstageTabItem Header="Debug logs" Name="DebugLogsMenuItem"/>
+                        <Fluent:BackstageTabItem Header="Exit" Name="ExitMenuItem"/>
                     </Fluent:BackstageTabControl>
                 </Fluent:Backstage>
             </Fluent:Ribbon.Menu>
 
             <!--Tabs-->
-            <Fluent:RibbonTabItem Header="Providers" Name="ProvidersTab">
-                <Fluent:RibbonGroupBox Header="Options" Width="120">
+            <Fluent:RibbonTabItem Header="Providers" Name="ProvidersTab" IsSelected="True">
+                <Fluent:RibbonGroupBox Header="Actions" Width="100">
                     <Fluent:Button Header="Refresh"
                                    Icon="{DynamicResource refresh}"
                                    Command="{Binding LoadProvidersCommand}"/>
+                    <Fluent:Button Header="New"
+                                   Icon="{DynamicResource session}"
+                                   Command="{Binding NewSessionFromProviderCommand}"/>
+                </Fluent:RibbonGroupBox>
+                <Fluent:RibbonGroupBox Header="Export" Width="Auto">
+                    <Fluent:Button Header="JSON"
+                                   Icon="{DynamicResource json}"
+                                   Command="{Binding ExportProvidersCommand}"
+                                   CommandParameter="{x:Static vm:MainWindowViewModel+ExportFormat.Json}"/>
+                    <Fluent:Button Header="CSV"
+                                   Icon="{DynamicResource csv}"
+                                   Command="{Binding ExportProvidersCommand}"
+                                   CommandParameter="{x:Static vm:MainWindowViewModel+ExportFormat.Csv}"/>
+                    <Fluent:Button Header="XML"
+                                   Icon="{DynamicResource xml}"
+                                   Command="{Binding ExportProvidersCommand}"
+                                   CommandParameter="{x:Static vm:MainWindowViewModel+ExportFormat.Xml}"/>
+                    <Fluent:GroupSeparatorMenuItem Height="50" Width="2" />
+                    <Fluent:Button Header="Clip"
+                                   Icon="{DynamicResource clipboard}"
+                                   Command="{Binding SaveProvidersToClipboardCommand}"/>
+                    <Fluent:GroupSeparatorMenuItem Height="50" Width="2" />
+                    <Fluent:Button Header="Manifest"
+                                   Icon="{DynamicResource export}"
+                                   Command="{Binding DumpProviderManifestsCommand}"/>
                 </Fluent:RibbonGroupBox>
             </Fluent:RibbonTabItem>
             <Fluent:RibbonTabItem Header="Sessions" Name="SessionsTab">
+                <Fluent:RibbonGroupBox Header="Actions" Width="75">
+                    <Fluent:Button Header="Refresh"
+                                   Icon="{DynamicResource refresh}"
+                                   Command="{Binding LoadSessionsCommand}"/>
+                </Fluent:RibbonGroupBox>
+                <Fluent:RibbonGroupBox Header="Export" Width="Auto">
+                    <Fluent:Button Header="JSON"
+                                   Icon="{DynamicResource json}"
+                                   Command="{Binding ExportSessionsCommand}"
+                                   CommandParameter="{x:Static vm:MainWindowViewModel+ExportFormat.Json}"/>
+                    <Fluent:Button Header="CSV"
+                                   Icon="{DynamicResource csv}"
+                                   Command="{Binding ExportSessionsCommand}"
+                                   CommandParameter="{x:Static vm:MainWindowViewModel+ExportFormat.Csv}"/>
+                    <Fluent:Button Header="XML"
+                                   Icon="{DynamicResource xml}"
+                                   Command="{Binding ExportSessionsCommand}"
+                                   CommandParameter="{x:Static vm:MainWindowViewModel+ExportFormat.Xml}"/>
+                    <Fluent:GroupSeparatorMenuItem Height="50" Width="2" />
+                    <Fluent:Button Header="Clip"
+                                   Icon="{DynamicResource clipboard}"
+                                   Command="{Binding SaveSessionsToClipboardCommand}"/>
+                </Fluent:RibbonGroupBox>
                 <Fluent:RibbonGroupBox Header="Control">
-                    <Fluent:Button Header="New"
-                                   Icon="{DynamicResource plus}"
-                                   />
+                    <Fluent:Button Header="New" Icon="{DynamicResource plus}" />
                 </Fluent:RibbonGroupBox>
             </Fluent:RibbonTabItem>
-            <Fluent:RibbonTabItem Header="Insights" />
+            <Fluent:RibbonTabItem Header="Insights" Name="InsightsTab"/>
 
-            <!-- Providers contextual tabs -->
-            <Fluent:RibbonTabItem Header="All" Name="ShowAllProvidersTab"
-                                  Group="{Binding Source={x:Reference providersContextualTabGroup}}"
-                                  Visibility="{Binding ProviderManifestVisible}"/>
-            <Fluent:RibbonTabItem Header="{Binding m_ProviderManifestViewModel.SelectedProviderManifest.Provider}"
-                                  Group="{Binding Source={x:Reference providersContextualTabGroup}}"
-                                  Visibility="{Binding ProviderManifestVisible}"/>
-            
             <!--Contextual Tab Groups-->
             <Fluent:Ribbon.ContextualGroups>
-                <Fluent:RibbonContextualTabGroup Name="providersContextualTabGroup"
-                                                 Header="Providers" 
+                <Fluent:RibbonContextualTabGroup Name="manifestsContextualTabGroup"
+                                                 Header="Provider Manifests" 
                                                  Visibility="{Binding ProviderManifestVisible}"
                                                  Background="Green" 
                                                  BorderBrush="Green"/>
+                <Fluent:RibbonContextualTabGroup Name="sessionsContextualTabGroup"
+                                 Header="Active Trace Sessions" 
+                                 Visibility="{Binding SessionsVisible}"
+                                 Background="Red" 
+                                 BorderBrush="Red"/>
             </Fluent:Ribbon.ContextualGroups>
-            
-        </Fluent:Ribbon>
-        <ContentControl Content="{Binding CurrentViewModel}" Grid.Row="1"/>
 
-        <Fluent:StatusBar Grid.Row="2"
-                          Name="MainWindowStatusBar"
-                          Visibility="{Binding m_ProgressState.Visible}">
-            <Fluent:StatusBarItem HorizontalAlignment="Left" Value="150">
-                <StackPanel Orientation="Horizontal">
-                    <TextBlock HorizontalAlignment="Left">
-                        <Run Text="Status:" />
-                        <Run Text="{Binding m_ProgressState.StatusText}"/>
-                    </TextBlock>
-                    <ProgressBar Minimum="0"
-                         Maximum="{Binding m_ProgressState.ProgressMax}"
-                         Value="{Binding m_ProgressState.ProgressValue}"
-                         VerticalAlignment="Top"
-                         HorizontalAlignment="Left"
-                         Width="125"
-                         Height="20"/>
-                </StackPanel>
-            </Fluent:StatusBarItem>
-        </Fluent:StatusBar>
-    </Grid>
+        </Fluent:Ribbon>
+
+        <StatusBar Name="MainWindowStatusBar"
+                   Background="DodgerBlue"
+                   DockPanel.Dock="Bottom">
+            <StatusBarItem HorizontalAlignment="Left">
+                <ProgressBar DockPanel.Dock="Left"
+                        Minimum="0"
+                        Maximum="{Binding m_ProgressState.ProgressMax}"
+                        Value="{Binding m_ProgressState.ProgressValue}"
+                        VerticalAlignment="Top"
+                        HorizontalAlignment="Left"
+                        Visibility="{Binding m_ProgressState.Visible}"
+                        Width="125"
+                        Height="20"/>
+            </StatusBarItem>
+            <StatusBarItem HorizontalAlignment="Left">
+                <Button DockPanel.Dock="Left"
+                        Background="Gray"
+                        BorderBrush="White"
+                        BorderThickness="2"
+                        Content="Cancel"
+                        Name="CancelCurrentCommandButton"
+                        Command="{Binding CancelCurrentCommandCommand}"                      
+                        HorizontalAlignment="Left"
+                        FontSize="10"
+                        VerticalAlignment="Top"
+                        Visibility="{Binding m_ProgressState.Visible}"
+                        Height="20"/>
+            </StatusBarItem>
+            <StatusBarItem>
+                <Fluent:GroupSeparatorMenuItem DockPanel.Dock="Left"
+                        Width="2"
+                        Height="25"
+                        Background="Black"/>
+            </StatusBarItem>
+            <StatusBarItem HorizontalAlignment="Stretch">
+                <TextBlock HorizontalAlignment="Left" VerticalAlignment="Center">
+                    <Run Text="{Binding m_ProgressState.StatusText}"
+                         Foreground="White"/>
+                </TextBlock>
+            </StatusBarItem>
+        </StatusBar>
+        <ContentControl Name="MainContentControl" Content="{Binding CurrentViewModel}"/>
+    </DockPanel>
 </Fluent:RibbonWindow>

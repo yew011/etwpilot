@@ -16,6 +16,9 @@ KIND, either express or implied.  See the License for the
 specific language governing permissions and limitations
 under the License.
 */
+using System.Diagnostics;
+using System.Windows;
+using System.Windows.Controls;
 using System.Windows.Data;
 
 namespace EtwPilot.Utilities.Converters
@@ -24,14 +27,11 @@ namespace EtwPilot.Utilities.Converters
     {
         public object Convert(object value, Type targetType, object parameter, System.Globalization.CultureInfo culture)
         {
-            var str = value as string;
-
-            if (string.IsNullOrEmpty(str))
+            if ((int)value <= 0)
             {
-                return false;
+                return Visibility.Collapsed;
             }
-
-            return int.Parse(str) > 0;
+            return Visibility.Visible;
         }
 
         public object ConvertBack(object value, Type targetType, object parameter, System.Globalization.CultureInfo culture)
@@ -51,6 +51,38 @@ namespace EtwPilot.Utilities.Converters
         public object ConvertBack(object value, Type targetType, object parameter, System.Globalization.CultureInfo culture)
         {
             throw new NotImplementedException();
+        }
+    }
+
+    public class TraceLevelToString : IValueConverter
+    {
+        public object Convert(object value, Type targetType, object parameter, System.Globalization.CultureInfo culture)
+        {
+            if (value == null)
+            {
+                return string.Empty;
+            }
+            return ((SourceLevels)value).ToString();
+        }
+
+        public object? ConvertBack(object value, Type targetType, object parameter, System.Globalization.CultureInfo culture)
+        {
+            var item = value as ComboBoxItem;
+            if (item == null || item.Content == null)
+            {
+                return null;
+            }
+            var content = item.Content as string;
+            if (content == null)
+            {
+                return null;
+            }
+            object? parsedLevel;
+            if (!Enum.TryParse(typeof(SourceLevels), content, out parsedLevel))
+            {
+                return null;
+            }
+            return (SourceLevels)parsedLevel;
         }
     }
 }

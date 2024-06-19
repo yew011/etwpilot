@@ -16,25 +16,39 @@ KIND, either express or implied.  See the License for the
 specific language governing permissions and limitations
 under the License.
 */
-using System.Windows.Controls;
 
-namespace EtwPilot.View
+namespace EtwPilot.Model
 {
-    public partial class ProviderManifestView : UserControl
+    using etwlib;
+    using EtwPilot.ViewModel;
+    using System.Diagnostics;
+    using static EtwPilot.Utilities.TraceLogger;
+
+    internal class SessionModel
     {
-        public ProviderManifestView()
+        private readonly StateManager StateManager;
+
+        public SessionModel(StateManager Manager)
         {
-            InitializeComponent();
+            StateManager = Manager;
         }
 
-        private void Expander_Expanded(object sender, System.Windows.RoutedEventArgs e)
+        public async Task<List<ParsedEtwSession>?> GetSessions()
         {
-            Utilities.UiHelper.Expander_Expanded(sender, e);
-        }
-
-        private void Expander_Collapsed(object sender, System.Windows.RoutedEventArgs e)
-        {
-            Utilities.UiHelper.Expander_Collapsed(sender, e);
+            try
+            {
+                return await Task.Run(() =>
+                {
+                    return SessionParser.GetSessions();
+                });
+            }
+            catch (Exception ex)
+            {
+                Trace(TraceLoggerType.Sessions,
+                      TraceEventType.Error,
+                      $"Failed to retrieve sessions: {ex.Message}");
+            }
+            return null;
         }
     }
 }

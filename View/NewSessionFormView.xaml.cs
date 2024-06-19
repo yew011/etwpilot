@@ -17,11 +17,30 @@ specific language governing permissions and limitations
 under the License.
 */
 using System.Windows;
+using System.Windows.Forms;
 
-namespace EtwPilot
+namespace EtwPilot.View
 {
-    public partial class App : Application
-    {
-    }
+    using UserControl = System.Windows.Controls.UserControl;
 
+    public partial class NewSessionFormView : UserControl
+    {
+        public NewSessionFormView()
+        {
+            InitializeComponent();
+        }
+
+        private void BrowseLogLocationButton_Click(object sender, RoutedEventArgs e)
+        {
+            var browser = new FolderBrowserDialog();
+            browser.Description = "Select a location";
+            browser.RootFolder = Environment.SpecialFolder.MyComputer;
+            var result = browser.ShowDialog();
+            if (result != DialogResult.OK)
+            {
+                return;
+            }
+            SaveTraceLogLocationTextbox.Text = browser.SelectedPath;
+        }
+    }
 }

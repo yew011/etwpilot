@@ -16,12 +16,21 @@ KIND, either express or implied.  See the License for the
 specific language governing permissions and limitations
 under the License.
 */
-using System.Windows;
 
-namespace EtwPilot
+using EtwPilot.Model;
+
+namespace EtwPilot.ViewModel
 {
-    public partial class App : Application
+    internal class NewSessionFormViewModel : ViewModelBase
     {
-    }
+        public LiveSessionModel Model { get; set; }
 
+        public NewSessionFormViewModel()
+        {
+            Model = new LiveSessionModel()
+            {
+                IsRealTime = true
+            };
+        }
+    }
 }

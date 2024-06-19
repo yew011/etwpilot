@@ -26,24 +26,20 @@ namespace EtwPilot.Model
 {
     using static EtwPilot.Utilities.TraceLogger;
 
-    public class ProviderModel
+    internal class ProviderModel
     {
-        private ProgressState ProgressState;
+        private readonly StateManager StateManager;
 
-        public ProviderModel(ProgressState Progress)
+        public ProviderModel(StateManager Manager)
         {
-            ProgressState = Progress;
+            StateManager = Manager;
         }
 
         public async Task<List<ParsedEtwProvider>?> GetProviders()
         {
-            ProgressState.InitializeProgress(2);
-
             try
             {
-                var result = await LoadFromCache(false);
-                ProgressState.FinalizeProgress();
-                return result;
+                return await LoadFromCache(false);
             }
             catch (Exception ex)
             {
@@ -51,33 +47,48 @@ namespace EtwPilot.Model
                       TraceEventType.Error,
                       $"Failed to retrieve providers: {ex.Message}");
             }
-            ProgressState.FinalizeProgress();
             return null;
+        }
+
+        public async Task<ParsedEtwManifest?> GetProviderManifest(Guid Id)
+        {
+            var result = await Task.Run(() =>
+            {
+                try
+                {
+                    return ProviderParser.GetManifest(Id);
+                }
+                catch (Exception ex)
+                {
+                    Trace(TraceLoggerType.Providers,
+                          TraceEventType.Error,
+                          $"Unable to retrieve manifest for {Id}: {ex.Message}");
+                }
+                return null;
+            });
+            return result;
         }
 
         private async Task<List<ParsedEtwProvider>?> LoadFromCache(bool ForceRefresh = false)
         {
-            //var cache = g_Settings.ProviderCacheLocation;
-            var cache = @"C:\Users\lilhoser\AppData\Roaming\EtwPilot\provider-cache.json";
+            var cache = StateManager.SettingsModel.ProviderCacheLocation;
             Debug.Assert(!string.IsNullOrEmpty(cache));
 
             if (!File.Exists(cache) || ForceRefresh)
             {
-                ProgressState.UpdateProgressMessage("Querying providers...");
+                StateManager.ProgressState.UpdateProgressMessage("Querying providers...");
                 var providers = await QueryProviders();
                 if (providers == null)
                 {
                     return null;
                 }
 
-                ProgressState.UpdateProgressValue();
-
                 //
                 // Write the cache now.
                 //
                 try
                 {
-                    ProgressState.UpdateProgressMessage("Writing cache...");
+                    StateManager.ProgressState.UpdateProgressMessage("Writing cache...");
                     var json = JsonConvert.SerializeObject(providers, Formatting.Indented);
                     File.WriteAllText(cache, json);
                 }
@@ -86,14 +97,11 @@ namespace EtwPilot.Model
                     throw new Exception($"Could not serialize the provider objects " +
                         $"to JSON: {ex.Message}");
                 }
-
-                ProgressState.UpdateProgressValue();
                 return providers;
             }
             else
             {
-                ProgressState.UpdateProgressValue();
-                ProgressState.UpdateProgressMessage("Reading cache...");
+                StateManager.ProgressState.UpdateProgressMessage("Reading cache...");
                 //
                 // Read from the cache
                 //
@@ -102,7 +110,6 @@ namespace EtwPilot.Model
                     var json = File.ReadAllText(cache);
                     var result = (List<ParsedEtwProvider>)JsonConvert.DeserializeObject(
                         json, typeof(List<ParsedEtwProvider>))!;
-                    ProgressState.ProgressValue++;
                     return result;
                 }
                 catch (Exception ex)

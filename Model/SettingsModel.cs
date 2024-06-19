@@ -16,36 +16,33 @@ KIND, either express or implied.  See the License for the
 specific language governing permissions and limitations
 under the License.
 */
+using System.Collections.ObjectModel;
 using System.Diagnostics;
 using System.IO;
-using EtwPilot.Utilities;
-using Newtonsoft.Json;
 
-namespace EtwPilot
+namespace EtwPilot.Model
 {
-    using static TraceLogger;
+    using static EtwPilot.Utilities.TraceLogger;
 
-    public class Settings : IEquatable<Settings>
+    internal class SettingsModel : IEquatable<SettingsModel>
     {
         public static readonly string DefaultWorkingDirectory = Path.Combine(
             new string[] { Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
-                "EtwPilot"});
+                "etwpilot"});
         public static string DefaultSettingsFileName = "settings.json";
         public static string DefaultSettingsFileLocation = Path.Combine(
             DefaultWorkingDirectory, DefaultSettingsFileName);
-        public string? DbghelpPath;
-        public string? SymbolPath;
-        public SourceLevels TraceLevelApp;
-        public SourceLevels TraceLevelEtwlib;
-        public SourceLevels TraceLevelSymbolresolver;
-        public Dictionary<string, Type> EtwEventColumns;
-        public bool HideProvidersWithoutManifest;
-        public string? ProviderCacheLocation;
+        public string? DbghelpPath { get; set; }
+        public string? SymbolPath { get; set; }
+        public SourceLevels TraceLevelApp { get; set; }
+        public SourceLevels TraceLevelEtwlib { get; set; }
+        public SourceLevels TraceLevelSymbolresolver { get; set; }
+        public ObservableCollection<EtwColumn> EtwEventColumns { get; set; }
+        public bool HideProvidersWithoutManifest { get; set; }
+        public string? ProviderCacheLocation { get; set; }
 
-        public Settings()
+        public SettingsModel()
         {
-            EtwEventColumns = new Dictionary<string, Type>();
-
             if (!Directory.Exists(DefaultWorkingDirectory))
             {
                 try
@@ -60,6 +57,14 @@ namespace EtwPilot
                           $"'{DefaultWorkingDirectory}': {ex.Message}");
                 }
             }
+
+            SymbolPath = @"srv*c:\symbols*https://msdl.microsoft.com/download/symbols";
+            DbghelpPath = @"C:\Program Files (x86)\Windows Kits\10\Debuggers\x64\dbghelp.dll";
+            ProviderCacheLocation = Path.Combine(DefaultWorkingDirectory, "provider-cache.json");
+            TraceLevelApp = SourceLevels.Verbose;
+            TraceLevelEtwlib = SourceLevels.Critical;
+            TraceLevelSymbolresolver = SourceLevels.Critical;
+            EtwEventColumns = new ObservableCollection<EtwColumn>();
         }
 
         public override bool Equals(object? Other)
@@ -68,11 +73,11 @@ namespace EtwPilot
             {
                 return false;
             }
-            var field = Other as Settings;
+            var field = Other as SettingsModel;
             return Equals(field);
         }
 
-        public bool Equals(Settings? Other)
+        public bool Equals(SettingsModel? Other)
         {
             if (Other == null)
             {
@@ -85,18 +90,18 @@ namespace EtwPilot
                 TraceLevelEtwlib == Other.TraceLevelEtwlib &&
                 TraceLevelSymbolresolver == Other.TraceLevelSymbolresolver &&
                 HideProvidersWithoutManifest == Other.HideProvidersWithoutManifest &&
-                (EtwEventColumns.Count == Other.EtwEventColumns.Count && 
+                (EtwEventColumns.Count == Other.EtwEventColumns.Count &&
                 !EtwEventColumns.Except(Other.EtwEventColumns).Any());
         }
 
-        public static bool operator ==(Settings? Settings1, Settings? Settings2)
+        public static bool operator ==(SettingsModel? Settings1, SettingsModel? Settings2)
         {
             if ((object)Settings1 == null || (object)Settings2 == null)
                 return Equals(Settings1, Settings2);
             return Settings1.Equals(Settings2);
         }
 
-        public static bool operator !=(Settings? Settings1, Settings? Settings2)
+        public static bool operator !=(SettingsModel? Settings1, SettingsModel? Settings2)
         {
             if ((object)Settings1 == null || (object)Settings2 == null)
                 return !Equals(Settings1, Settings2);
@@ -115,84 +120,29 @@ namespace EtwPilot
                 HideProvidersWithoutManifest).GetHashCode();
         }
 
-        public static void Validate(Settings Object)
+        public void Validate()
         {
-            if (string.IsNullOrEmpty(Object.SymbolPath))
+            if (string.IsNullOrEmpty(SymbolPath))
             {
                 throw new Exception("Symbol path is null");
             }
-            if (string.IsNullOrEmpty(Object.DbghelpPath))
+            if (string.IsNullOrEmpty(DbghelpPath))
             {
                 throw new Exception("Dbghelp DLL path is null");
             }
-            if (string.IsNullOrEmpty(Object.ProviderCacheLocation))
+            if (string.IsNullOrEmpty(ProviderCacheLocation))
             {
                 throw new Exception("Provider cache location is null");
             }
-        }
-
-        static public void Save(Settings Object, string Target = null)
-        {
-            string target = Target;
-
-            if (string.IsNullOrEmpty(target))
+            if (EtwEventColumns.Count == 0)
             {
-                target = DefaultSettingsFileLocation;
-            }
-
-            string json;
-            try
-            {
-                Validate(Object);
-                json = JsonConvert.SerializeObject(Object, Formatting.Indented);
-                File.WriteAllText(target, json);
-            }
-            catch (Exception ex)
-            {
-                throw new Exception($"Could not serialize the Settings object " +
-                    $"to JSON: {ex.Message}");
+                throw new Exception("At least one ETW column is required.");
             }
         }
 
-        static public Settings Load(string Location)
+        public void SetDefaultEtwColumns()
         {
-            if (!File.Exists(Location))
-            {
-                throw new Exception("File does not exist");
-            }
-
-            Settings settings;
-
-            try
-            {
-                var json = File.ReadAllText(Location);
-                settings = (Settings)JsonConvert.DeserializeObject(json, typeof(Settings))!;
-                Validate(settings);
-            }
-            catch (Exception ex)
-            {
-                throw new Exception($"Could not deserialize settings: {ex.Message}");
-            }
-            return settings;
-        }
-
-        static public Settings LoadDefault()
-        {
-            var target = Path.Combine(DefaultWorkingDirectory, DefaultSettingsFileName);
-            if (!File.Exists(target))
-            {
-                return new Settings()
-                {
-                    SymbolPath = @"srv*c:\symbols*https://msdl.microsoft.com/download/symbols",
-                    DbghelpPath = @"C:\Program Files (x86)\Windows Kits\10\Debuggers\x64\dbghelp.dll",
-                    ProviderCacheLocation = Path.Combine(DefaultWorkingDirectory, "provider-cache.json"),
-                    TraceLevelApp = SourceLevels.Verbose,
-                    TraceLevelEtwlib = SourceLevels.Critical,
-                    TraceLevelSymbolresolver = SourceLevels.Critical,
-                };
-            }
-            return Load(target);
+            EtwEventColumns = EtwColumn.GetDefaultColumns();
         }
     }
 }
-

@@ -14,7 +14,9 @@
                   IsReadOnly="true"
                   AutoGenerateColumns="false"
                   ItemsSource="{Binding m_ProviderViewModel.Providers}"
-                  MouseDoubleClick="ProvidersDataGrid_MouseDoubleClick">
+                  MouseDoubleClick="ProvidersDataGrid_MouseDoubleClick"
+                  SelectionMode="Extended"
+                  SelectionChanged="ProvidersDataGrid_SelectionChanged">
             <DataGrid.Columns>
                 <DataGridTextColumn Header="ID" Binding="{Binding Id}"/>
                 <DataGridTextColumn Header="Name" Binding="{Binding Name}" />

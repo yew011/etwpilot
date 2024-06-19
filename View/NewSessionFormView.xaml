@@ -1,0 +1,80 @@
+﻿<UserControl x:Class="EtwPilot.View.NewSessionFormView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:local="clr-namespace:EtwPilot.ViewModel"
+             xmlns:Fluent="urn:fluent-ribbon"
+             xmlns:System="clr-namespace:System;assembly=mscorlib"
+             xmlns:Diagnostics="clr-namespace:System.Diagnostics;assembly=System.Diagnostics.TraceSource"
+             xmlns:vm="clr-namespace:EtwPilot.ViewModel"
+             mc:Ignorable="d"
+             Name="NewSessionFormViewControl"
+             DataContext="{StaticResource g_MainWindowViewModel}">
+    <UserControl.Resources>
+        <ObjectDataProvider x:Key="SourceLevelsEnum" MethodName="GetValues"
+                            ObjectType="{x:Type System:Enum}">
+            <ObjectDataProvider.MethodParameters>
+                <x:Type TypeName="Diagnostics:SourceLevels"/>
+            </ObjectDataProvider.MethodParameters>
+        </ObjectDataProvider>
+    </UserControl.Resources>
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+        <GroupBox Header="Session Information">
+            <StackPanel Orientation="Vertical" Margin="5">
+                <StackPanel Orientation="Horizontal" Margin="5">
+                    <Label Width="150">Name:</Label>
+                    <TextBox Name="SessionName"
+                            Width="350" 
+                            Text="{Binding m_NewSessionFormViewModel.Model.Name, Mode=TwoWay}" />
+                </StackPanel>
+                <StackPanel Orientation="Horizontal" Margin="5">
+                    <Label Width="150">Enabled Providers:</Label>
+                    <ComboBox ItemsSource="{Binding m_ProviderViewModel.Providers}"
+                              IsEditable="False" StaysOpenOnEdit="True"
+                              SelectedIndex="0"/>
+                </StackPanel>
+                <StackPanel Orientation="Horizontal" Margin="5">
+                    <CheckBox Name="RealTimeCheckbox" 
+                            Padding="5"
+                            IsChecked="{Binding m_NewSessionFormViewModel.Model.IsRealTime, Mode=TwoWay}"/>
+                    <TextBlock TextWrapping="Wrap" Text="Real-time session" />
+                </StackPanel>
+                <StackPanel Orientation="Horizontal" Margin="5">
+                    <Label Width="150">Save log:</Label>
+                    <TextBox Name="SaveTraceLogLocationTextbox" 
+                         Width="350"
+                         Text="{Binding m_NewSessionFormViewModel.Model.LogLocation, Mode=TwoWay}">
+                        <TextBox.Style>
+                        <Style TargetType="TextBox">
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding IsChecked, ElementName=RealTimeCheckbox}"
+                                             Value="True">
+                                    <Setter Property="IsEnabled" Value="False"/>
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                        </TextBox.Style>
+                    </TextBox>
+                    <Button Name="BrowseLogLocationButton"
+                            Click="BrowseLogLocationButton_Click">
+                        <Button.Style>
+                        <Style TargetType="Button">
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding IsChecked, ElementName=RealTimeCheckbox}"
+                                             Value="True">
+                                    <Setter Property="IsEnabled" Value="False"/>
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                        </Button.Style>
+                        Browse...
+                    </Button>
+                </StackPanel>
+            </StackPanel>
+        </GroupBox>
+    </Grid>
+</UserControl>

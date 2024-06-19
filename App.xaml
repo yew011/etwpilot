@@ -6,16 +6,25 @@
              xmlns:vm="clr-namespace:EtwPilot.ViewModel"
              StartupUri="View/MainWindowView.xaml">
     <Application.Resources>
-        <ResourceDictionary>
-            <ResourceDictionary.MergedDictionaries>
-                <ResourceDictionary Source="pack://application:,,,/Fluent;Component/Themes/Generic.xaml" />
-            </ResourceDictionary.MergedDictionaries>
-            <BitmapImage x:Key="refresh"  UriSource="images/refresh.png"/>
-            <BitmapImage x:Key="plus"  UriSource="images/plus.png"/>
-            <BitmapImage x:Key="logo"  UriSource="images/logo.png"/>
-            <vm:MainWindowViewModel x:Key="g_MainWindowViewModel" />
-            <converters:IsGreaterThanZero x:Key="IsGreaterThanZero"/>
-            <converters:DecimalToHex x:Key="DecimalToHex"/>
-        </ResourceDictionary>
-    </Application.Resources>
+    <ResourceDictionary>
+        <ResourceDictionary.MergedDictionaries>
+            <ResourceDictionary Source="pack://application:,,,/Fluent;Component/Themes/Generic.xaml" />
+        </ResourceDictionary.MergedDictionaries>
+        <BitmapImage x:Key="refresh"  UriSource="images/refresh.png"/>
+        <BitmapImage x:Key="plus"  UriSource="images/plus.png"/>
+        <BitmapImage x:Key="logo"  UriSource="images/logo.png"/>
+        <BitmapImage x:Key="export"  UriSource="images/export.png"/>
+        <BitmapImage x:Key="diskette"  UriSource="images/diskette.png"/>
+        <BitmapImage x:Key="json"  UriSource="images/json.png"/>
+        <BitmapImage x:Key="xml"  UriSource="images/xml.png"/>
+        <BitmapImage x:Key="csv"  UriSource="images/csv.png"/>
+        <BitmapImage x:Key="clipboard"  UriSource="images/clipboard.png"/>
+        <BitmapImage x:Key="session"  UriSource="images/session.png"/>
+        <Image x:Key="red_x" x:Shared="false" Source="images/red_x.png" Width="15" Height="15"/>
+        <vm:MainWindowViewModel x:Key="g_MainWindowViewModel" />
+        <converters:IsGreaterThanZero x:Key="IsGreaterThanZero"/>
+        <converters:DecimalToHex x:Key="DecimalToHex"/>
+        <converters:TraceLevelToString x:Key="TraceLevelToString"/>
+    </ResourceDictionary>
+</Application.Resources>
 </Application>

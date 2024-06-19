@@ -16,15 +16,39 @@ KIND, either express or implied.  See the License for the
 specific language governing permissions and limitations
 under the License.
 */
+using etwlib;
+using EtwPilot.ViewModel;
 using System.Windows.Controls;
 
 namespace EtwPilot.View
 {
-    public partial class ProviderManifestView : UserControl
+    public partial class SessionView : UserControl
     {
-        public ProviderManifestView()
+        public SessionView()
         {
             InitializeComponent();
+        }
+
+        private void SessionsDataGrid_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            var vm = DataContext as MainWindowViewModel;
+            if (vm == null)
+            {
+                return;
+            }
+
+            //
+            // Keep VM in sync with the view
+            //
+            if (SessionsDataGrid.SelectedItems == null ||
+                SessionsDataGrid.SelectedItems.Count == 0)
+            {
+                vm.m_SessionViewModel.SelectedSessions.Clear();
+                return;
+            }
+
+            vm.m_SessionViewModel.SelectedSessions =
+                SessionsDataGrid.SelectedItems.Cast<ParsedEtwSession>().ToList();
         }
 
         private void Expander_Expanded(object sender, System.Windows.RoutedEventArgs e)

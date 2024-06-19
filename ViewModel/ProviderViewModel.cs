@@ -22,8 +22,9 @@ using System.Collections.ObjectModel;
 
 namespace EtwPilot.ViewModel
 {
-    class ProviderViewModel : ViewModelBase
+    internal class ProviderViewModel : ViewModelBase
     {
+        public List<ParsedEtwProvider> SelectedProviders;
         private ProviderModel Model;
         private ObservableCollection<ParsedEtwProvider> _providers;
         public ObservableCollection<ParsedEtwProvider> Providers
@@ -39,10 +40,14 @@ namespace EtwPilot.ViewModel
             }
         }
 
-        public ProviderViewModel(ProgressState ProgressState)
+        private Dictionary<string, ProviderManifestViewModel> m_ManifestCache;
+
+        public ProviderViewModel()
         {
-            _providers = new ObservableCollection<ParsedEtwProvider>();
-            Model = new ProviderModel(ProgressState);
+            Providers = new ObservableCollection<ParsedEtwProvider>();
+            Model = new ProviderModel(StateManager);
+            m_ManifestCache = new Dictionary<string, ProviderManifestViewModel>();
+            SelectedProviders = new List<ParsedEtwProvider>();
         }
 
         public async Task LoadProviders()
@@ -53,8 +58,8 @@ namespace EtwPilot.ViewModel
                 return;
             }
             Providers.Clear();
-            //if (g_Settings.HideProvidersWithoutManifest)
-            if (true)
+            m_ManifestCache.Clear();
+            if (StateManager.SettingsModel.HideProvidersWithoutManifest)
             {
                 var filtered = providers.Where(p => p.HasManifest).Cast<ParsedEtwProvider>().ToList();
                 filtered.ForEach(f => Providers.Add(f));
@@ -63,6 +68,41 @@ namespace EtwPilot.ViewModel
             {
                 providers.ForEach(f => Providers.Add(f));
             }
+        }
+
+        public async Task<ProviderManifestViewModel?> LoadProviderManifest(Guid Id)
+        {
+            var name = GetProviderManifestTabName(Id);
+            if (m_ManifestCache.ContainsKey(name))
+            {
+                //
+                // This manifest has already been loaded once and bound to an existing tab.
+                // The caller has to go find the tab.
+                //
+                return m_ManifestCache[name];
+            }
+            var manifest = await Model.GetProviderManifest(Id);
+            if (manifest == null)
+            {
+                return null;
+            }
+            var vm = new ProviderManifestViewModel(manifest);
+            m_ManifestCache.Add(name, vm);
+            return vm;
+        }
+
+        public ProviderManifestViewModel? GetVmForTab(string TabName)
+        {
+            if (m_ManifestCache.ContainsKey(TabName))
+            {
+                return m_ManifestCache[TabName];
+            }
+            return null;
+        }
+
+        public string GetProviderManifestTabName(Guid Id)
+        {
+            return $"Manifest_{Id}".Replace("-", "_");
         }
     }
 }

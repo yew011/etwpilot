@@ -21,12 +21,12 @@ using System.IO;
 
 namespace EtwPilot.Utilities
 {
-    using static Settings;
+    using static EtwPilot.Model.SettingsModel;
 
     public static class TraceLogger
     {
         public static readonly string m_TraceFileDir = Path.Combine(new string[] { DefaultWorkingDirectory, "Logs" });
-        private static string m_Location = Path.Combine(new string[] { m_TraceFileDir,
+        public static string m_Location = Path.Combine(new string[] { m_TraceFileDir,
                             $"EtwPilot-{DateTime.Now.ToString("yyyy-MM-dd-HHmmss")}.txt"});
         private static TextWriterTraceListener m_TraceListener =
             new TextWriterTraceListener(m_Location, "EtwPilotListener");
@@ -37,6 +37,7 @@ namespace EtwPilot.Utilities
             new TraceSource("LiveSession", SourceLevels.Verbose),
             new TraceSource("Settings", SourceLevels.Verbose),
             new TraceSource("Providers", SourceLevels.Verbose),
+            new TraceSource("Sessions", SourceLevels.Verbose),
         };
 
         public enum TraceLoggerType
@@ -45,6 +46,7 @@ namespace EtwPilot.Utilities
             LiveSession,
             Settings,
             Providers,
+            Sessions,
             Max
         }
 
