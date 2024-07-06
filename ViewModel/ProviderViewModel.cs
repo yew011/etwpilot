@@ -18,6 +18,7 @@ under the License.
 */
 using etwlib;
 using EtwPilot.Model;
+using EtwPilot.Utilities;
 using System.Collections.ObjectModel;
 
 namespace EtwPilot.ViewModel
@@ -72,7 +73,7 @@ namespace EtwPilot.ViewModel
 
         public async Task<ProviderManifestViewModel?> LoadProviderManifest(Guid Id)
         {
-            var name = GetProviderManifestTabName(Id);
+            var name = UiHelper.GetUniqueTabName(Id, "Manifest");
             if (m_ManifestCache.ContainsKey(name))
             {
                 //
@@ -100,9 +101,5 @@ namespace EtwPilot.ViewModel
             return null;
         }
 
-        public string GetProviderManifestTabName(Guid Id)
-        {
-            return $"Manifest_{Id}".Replace("-", "_");
-        }
     }
 }

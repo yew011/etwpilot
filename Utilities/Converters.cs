@@ -16,6 +16,7 @@ KIND, either express or implied.  See the License for the
 specific language governing permissions and limitations
 under the License.
 */
+using EtwPilot.Model;
 using System.Diagnostics;
 using System.Windows;
 using System.Windows.Controls;
@@ -46,6 +47,26 @@ namespace EtwPilot.Utilities.Converters
         {
             var val = System.Convert.ToInt64(value);
             return $"0x{val:X}";
+        }
+
+        public object ConvertBack(object value, Type targetType, object parameter, System.Globalization.CultureInfo culture)
+        {
+            throw new NotImplementedException();
+        }
+    }
+
+    public class RadioStopConditionToBool : IValueConverter
+    {
+        public object Convert(object value, Type targetType, object parameter, System.Globalization.CultureInfo culture)
+        {
+            var val = (StopCondition)value;
+            var compareStr = parameter as string;
+            object? parsedValue;
+            if (compareStr == null || !Enum.TryParse(typeof(StopCondition), compareStr, true, out parsedValue))
+            {
+                return false;
+            }
+            return (StopCondition)parsedValue == val;
         }
 
         public object ConvertBack(object value, Type targetType, object parameter, System.Globalization.CultureInfo culture)

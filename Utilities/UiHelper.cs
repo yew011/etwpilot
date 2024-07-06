@@ -153,5 +153,131 @@ namespace EtwPilot.Utilities
                 }
             }
         }
+
+        public static string GetUniqueTabName(Guid Id, string Prefix)
+        {
+            return $"{Prefix}_{Id}".Replace("-", "_");
+        }
+
+        public static void FixupDynamicTab(
+            TabControl TabControl,
+            TabItem NewTab,
+            string TabTitle,
+            string TabHeaderTextBlockName,
+            string TabCloseButtonName,
+            Action? TabClosedCallback)
+        {
+            var headerTextbox = FindChild<TextBlock>(NewTab, TabHeaderTextBlockName);
+            var headerCloseButton = FindChild<Button>(NewTab, TabCloseButtonName);
+            if (headerTextbox == null || headerCloseButton == null)
+            {
+                return;
+            }
+
+            //
+            // Add a handler for this tab close button and assign unique tag to the tab
+            // itself, so we can easily remove it.
+            //
+            headerCloseButton.Tag = NewTab.Name;
+            headerCloseButton.Click += (s, e) =>
+            {
+                //
+                // Locate the button, corresponding tab name, and the containing tab control.
+                //
+                var button = s as Button;
+                if (button == null)
+                {
+                    return;
+                }
+                var tabName = button.Tag as string;
+                if (tabName == null)
+                {
+                    return;
+                }
+
+                //
+                // Find and remove the tab, but keep the VM around in our cache to make
+                // it faster next time.
+                //
+                var existingTabs = TabControl.Items.Cast<TabItem>().ToList();
+                var tab = existingTabs.Where(t => t.Name == tabName).FirstOrDefault();
+                if (tab == null)
+                {
+                    return;
+                }
+                TabControl.Items.Remove(tab);
+                TabClosedCallback?.Invoke();
+            };
+
+            var title = $"{TabTitle}";
+            var header = title;
+            if (title.Length > 50)
+            {
+                int start = title.Length - 15;
+                header = $"{title.Substring(0, 15)}...{title.Substring(start - 1, 15)}";
+            }
+
+            headerTextbox.Text = header;
+        }
+
+        public static void FixupDynamicRibbonTab(
+            Fluent.Ribbon TabControl,
+            Fluent.RibbonTabItem NewTab,
+            string TabTitle,
+            string TabHeaderTextBlockName,
+            string TabCloseButtonName,
+            Action? TabClosedCallback)
+        {
+            var headerTextbox = FindChild<TextBlock>(NewTab, TabHeaderTextBlockName);
+            var headerCloseButton = FindChild<Button>(NewTab, TabCloseButtonName);
+            if (headerTextbox == null || headerCloseButton == null)
+            {
+                return;
+            }
+
+            //
+            // Add a handler for this tab close button and assign unique tag to the tab
+            // itself, so we can easily remove it.
+            //
+            headerCloseButton.Tag = NewTab.Name;
+            headerCloseButton.Click += (s, e) =>
+            {
+                //
+                // Locate the button, corresponding tab name, and the containing tab control.
+                //
+                var button = s as Button;
+                if (button == null)
+                {
+                    return;
+                }
+                var tabName = button.Tag as string;
+                if (tabName == null)
+                {
+                    return;
+                }
+
+                //
+                // Find and remove the tab, but keep the VM around in our cache to make
+                // it faster next time.
+                //
+                var tab = TabControl.Tabs.Where(t => t.Name == tabName).FirstOrDefault();
+                if (tab == null)
+                {
+                    return;
+                }
+                TabControl.Tabs.Remove(tab);
+                TabClosedCallback?.Invoke();
+            };
+
+            var title = $"{TabTitle}";
+            var header = title;
+            if (title.Length > 50)
+            {
+                int start = title.Length - 15;
+                header = $"{title.Substring(0, 15)}...{title.Substring(start - 1, 15)}";
+            }
+
+            headerTextbox.Text = header;
+        }
     }
 }

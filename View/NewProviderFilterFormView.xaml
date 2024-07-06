@@ -1,0 +1,67 @@
+﻿<UserControl x:Class="EtwPilot.View.NewProviderFilterFormView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" 
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008" 
+             xmlns:local="clr-namespace:EtwPilot.View"
+             mc:Ignorable="d" 
+             d:DesignHeight="450" d:DesignWidth="800"
+             DataContext="{StaticResource g_MainWindowViewModel}">
+    <Grid>
+        <TabControl>
+            <TabItem Header="Scope">
+                <StackPanel Orientation="Vertical" Margin="5">
+                    <StackPanel Orientation="Horizontal" Margin="5" VerticalAlignment="Top">
+                        <Label Width="150">Process ID:</Label>
+                        <ComboBox ItemsSource="{Binding m_NewSessionFormViewModel.ActiveProcessList}"
+                         SelectedIndex="0"
+                         Height="25">
+                            <ComboBox.ItemTemplate>
+                                <DataTemplate>
+                                    <TextBlock>
+                                        <TextBlock.Text>
+                                            <MultiBinding StringFormat="{}{0}({1})">
+                                                <Binding Path="Name"/>
+                                                <Binding Path="Pid"/>
+                                            </MultiBinding>
+                                        </TextBlock.Text>
+                                    </TextBlock>
+                                </DataTemplate>
+                            </ComboBox.ItemTemplate>
+                        </ComboBox>
+                    </StackPanel>
+                    <StackPanel Orientation="Horizontal" Margin="5" VerticalAlignment="Top">
+                        <Label Width="150">EXE Name:</Label>
+                        <ComboBox ItemsSource="{Binding m_NewSessionFormViewModel.UniqueExeNames}"
+                         SelectedIndex="0"
+                         Height="25"/>
+                    </StackPanel>
+                    <StackPanel Orientation="Horizontal" Margin="5" VerticalAlignment="Top">
+                        <Label Width="150">App ID:</Label>
+                        <ComboBox ItemsSource="{Binding m_NewSessionFormViewModel.UniqueAppIds}"
+                             SelectedIndex="0"
+                             Height="25" />
+                    </StackPanel>
+                    <StackPanel Orientation="Horizontal" Margin="5" VerticalAlignment="Top">
+                        <Label Width="150">Package ID:</Label>
+                        <ComboBox ItemsSource="{Binding m_NewSessionFormViewModel.UniquePackageIds}"
+                             SelectedIndex="0"
+                             Height="25"/>
+                    </StackPanel>
+                </StackPanel>
+            </TabItem>
+            <TabItem Header="Attribute" 
+                     Name="AttributeTab"
+                     DataContext="{Binding m_NewSessionFormViewModel.CurrentProviderFilterForm}">
+                <StackPanel Orientation="Horizontal" Margin="5">
+                    <Label Width="150">Events:</Label>
+                    <ListBox ItemsSource="{Binding Manifest.Events}"
+                             SelectionMode="Multiple"
+                             Width="450"/>
+                </StackPanel>
+            </TabItem>
+            <TabItem Header="Stackwalk"/>
+            <TabItem Header="Payload"/>
+        </TabControl>
+    </Grid>
+</UserControl>

@@ -17,6 +17,7 @@ specific language governing permissions and limitations
 under the License.
 */
 using etwlib;
+using EtwPilot.Utilities;
 using EtwPilot.ViewModel;
 using System.Windows;
 using System.Windows.Controls;
@@ -52,7 +53,7 @@ namespace EtwPilot.View
             //
             // This seems hacky, but we're doing it from code-behind so the WPF gods might smile.
             //
-            var ribbon = Utilities.UiHelper.FindChild<Fluent.Ribbon>(
+            var ribbon = UiHelper.FindChild<Fluent.Ribbon>(
                 Application.Current.MainWindow, "MainWindowRibbon");
             if (ribbon == null)
             {
@@ -68,6 +69,8 @@ namespace EtwPilot.View
             var manifestVm = await providerVm.LoadProviderManifest(provider.Id);
             if (manifestVm == null)
             {
+                providerVm.StateManager.ProgressState.UpdateProgressMessage(
+                    $"Provider {provider.Id} has no manifest registered on the system.");
                 return;
             }
 
@@ -75,7 +78,7 @@ namespace EtwPilot.View
             // If the tab already exists for this manifest, just select the tab, otherwise
             // we have to create the tab now.
             //
-            var tabName = providerVm.GetProviderManifestTabName(provider.Id);
+            var tabName = UiHelper.GetUniqueTabName(provider.Id, "Manifest");
             var tab = ribbon.Tabs.Where(tab => tab.Name == tabName).FirstOrDefault();
             if (tab == null)
             {
@@ -140,75 +143,32 @@ namespace EtwPilot.View
 
             newTab.Loaded += (s, e) =>
             {
-                var headerTextbox = Utilities.UiHelper.FindChild<TextBlock>(
-                    newTab, "ProviderContextTabText");
-                var headerCloseButton = Utilities.UiHelper.FindChild<Button>(
-                    newTab, "ProviderContextTabCloseButton");
-                if (headerTextbox == null || headerCloseButton == null)
+                var ribbon = UiHelper.FindChild<Fluent.Ribbon>(
+                                Application.Current.MainWindow, "MainWindowRibbon");
+                if (ribbon == null)
                 {
                     return;
                 }
-
-                //
-                // Add a handler for this tab close button and assign unique tag to the tab
-                // itself, so we can easily remove it.
-                //
-                headerCloseButton.Tag = TabName;
-                headerCloseButton.Click += (s, e) =>
-                {
-                    //
-                    // Locate the button, corresponding tab name, and the containing tab control.
-                    //
-                    var button = s as Button;
-                    if (button == null)
+                UiHelper.FixupDynamicRibbonTab(ribbon,
+                    newTab,
+                    Provider.Name!,
+                    "ProviderContextTabText",
+                    "ProviderContextTabCloseButton",
+                    () =>
                     {
-                        return;
-                    }
-                    var tabName = button.Tag as string;
-                    if (tabName == null)
-                    {
-                        return;
-                    }
-                    var ribbon = Utilities.UiHelper.FindChild<Fluent.Ribbon>(Application.Current.MainWindow, "MainWindowRibbon");
-                    if (ribbon == null)
-                    {
-                        return;
-                    }
-                    var vm = DataContext as MainWindowViewModel;
-                    if (vm == null)
-                    {
-                        return;
-                    }
-
-                    //
-                    // Find and remove the tab, but keep the VM around in our cache to make
-                    // it faster next time.
-                    //
-                    var tab = ribbon.Tabs.Where(t => t.Name == tabName).FirstOrDefault();
-                    if (tab == null)
-                    {
-                        return;
-                    }
-                    ribbon.Tabs.Remove(tab);
-                    if (ribbon.Tabs.Count == 3)
-                    {
-                        vm.ProviderManifestVisible = Visibility.Hidden;
-                        ribbon.SelectedTabIndex = 0;
-                        ProvidersDataGrid.SelectedItems.Clear();
-                    }
-                };
-
-                var providerStringified = $"{Provider.Name}";
-                var header = providerStringified;
-                if (providerStringified.Length > 50)
-                {
-                    int start = providerStringified.Length - 15;
-                    header = $"{providerStringified.Substring(0, 15)}...{providerStringified.Substring(start - 1, 15)}";
-                }
-
-                headerTextbox.Text = header;
+                        var vm = DataContext as MainWindowViewModel;
+                        if (vm == null)
+                        {
+                            return;
+                        }
+                        if (ribbon.Tabs.Count == 3)
+                        {
+                            vm.ProviderManifestVisible = Visibility.Hidden;
+                            ribbon.SelectedTabIndex = 0;
+                            ProvidersDataGrid.SelectedItems.Clear();
+                        }
+                    });
             };
-
             Ribbon.Tabs.Add(newTab);
             return true;
         }

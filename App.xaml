@@ -25,6 +25,7 @@
         <converters:IsGreaterThanZero x:Key="IsGreaterThanZero"/>
         <converters:DecimalToHex x:Key="DecimalToHex"/>
         <converters:TraceLevelToString x:Key="TraceLevelToString"/>
+        <converters:RadioStopConditionToBool x:Key="RadioStopConditionToBool"/>
     </ResourceDictionary>
 </Application.Resources>
 </Application>

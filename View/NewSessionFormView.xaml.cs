@@ -16,9 +16,12 @@ KIND, either express or implied.  See the License for the
 specific language governing permissions and limitations
 under the License.
 */
+using etwlib;
+using EtwPilot.Utilities;
+using EtwPilot.ViewModel;
 using System.Windows;
+using System.Windows.Controls;
 using System.Windows.Forms;
-
 namespace EtwPilot.View
 {
     using UserControl = System.Windows.Controls.UserControl;
@@ -41,6 +44,81 @@ namespace EtwPilot.View
                 return;
             }
             SaveTraceLogLocationTextbox.Text = browser.SelectedPath;
+        }
+
+        private async void AddProviderFilterButton_Click(object sender, RoutedEventArgs e)
+        {
+            var vm = DataContext as MainWindowViewModel;
+            if (vm == null)
+            {
+                return;
+            }
+
+            var provider = SelectedProvider.SelectedItem as ParsedEtwProvider;
+            if (provider == null)
+            {
+                return;
+            }
+
+            //
+            // If the provider has never been loaded, parse and load its manifest.
+            // If it has been accessed before, pull the VM from the cache. Each entry in
+            // the cache points to a NewProviderFilterFormViewModel.
+            //
+            var newSessionFormVm = vm.m_NewSessionFormViewModel;
+            var providerFilterVm = await newSessionFormVm.LoadProviderFilterForm(provider.Id);
+            if (providerFilterVm == null)
+            {
+                return;
+            }
+
+            //
+            // If the tab already exists for this manifest, just select the tab, otherwise
+            // we have to create the tab now.
+            //
+            var existingTabs = ProviderFiltersTabControl.Items.Cast<TabItem>().ToList();
+            var tabName = UiHelper.GetUniqueTabName(provider.Id, "ProviderFilter");
+            var tab = existingTabs.Where(tab => tab.Name == tabName).FirstOrDefault();
+            if (tab == null)
+            {
+                if (!CreateProviderFiltersTab(tabName, provider, providerFilterVm.Manifest))
+                {
+                    return;
+                }
+            }
+            else
+            {
+                tab.IsSelected = true;
+            }
+        }
+
+        private bool CreateProviderFiltersTab(string TabName, ParsedEtwProvider Provider, ParsedEtwManifest Manifest)
+        {
+            var style = ProviderFiltersTabControl.FindResource("ProviderFilterContextTabStyle") as Style;
+            if (style == null)
+            {
+                return false;
+            }
+            var newTab = new TabItem
+            {
+                Name = TabName,
+                Style = style,
+                IsSelected = true,
+                Content = new NewProviderFilterFormViewModel(Manifest)
+            };
+
+            newTab.Loaded += (s, e) =>
+            {
+                UiHelper.FixupDynamicTab(ProviderFiltersTabControl,
+                    newTab,
+                    Provider.Name!,
+                    "ProviderFilterContextTabText",
+                    "ProviderFilterContextTabCloseButton",
+                    null);
+            };
+
+            ProviderFiltersTabControl.Items.Add(newTab);
+            return true;
         }
     }
 }

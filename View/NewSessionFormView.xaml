@@ -8,6 +8,7 @@
              xmlns:System="clr-namespace:System;assembly=mscorlib"
              xmlns:Diagnostics="clr-namespace:System.Diagnostics;assembly=System.Diagnostics.TraceSource"
              xmlns:vm="clr-namespace:EtwPilot.ViewModel"
+             xmlns:view="clr-namespace:EtwPilot.View"
              mc:Ignorable="d"
              Name="NewSessionFormViewControl"
              DataContext="{StaticResource g_MainWindowViewModel}">
@@ -18,12 +19,35 @@
                 <x:Type TypeName="Diagnostics:SourceLevels"/>
             </ObjectDataProvider.MethodParameters>
         </ObjectDataProvider>
+        <!-- Template for dynamic "add provider to trace session" tabs. Some properties are set in code-behind. -->
+        <Style x:Key="ProviderFilterContextTabStyle" TargetType="{x:Type TabItem}">
+            <Setter Property="HeaderTemplate">
+                <Setter.Value>
+                    <DataTemplate>
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Name="ProviderFilterContextTabText"/>
+                            <Separator Width="5"/>
+                            <Button Name="ProviderFilterContextTabCloseButton"
+                            Content="{StaticResource red_x}"
+                            BorderThickness="0"
+                            Margin="0"
+                            Padding="0"
+                            Background="Transparent"/>
+                        </StackPanel>
+                    </DataTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+        <DataTemplate DataType="{x:Type vm:NewProviderFilterFormViewModel}">
+            <view:NewProviderFilterFormView/>
+        </DataTemplate>
     </UserControl.Resources>
     <Grid>
         <Grid.RowDefinitions>
             <RowDefinition Height="*" />
+            <RowDefinition Height="*" />
         </Grid.RowDefinitions>
-        <GroupBox Header="Session Information">
+        <GroupBox Header="Session Information" Grid.Row="0">
             <StackPanel Orientation="Vertical" Margin="5">
                 <StackPanel Orientation="Horizontal" Margin="5">
                     <Label Width="150">Name:</Label>
@@ -34,8 +58,11 @@
                 <StackPanel Orientation="Horizontal" Margin="5">
                     <Label Width="150">Enabled Providers:</Label>
                     <ComboBox ItemsSource="{Binding m_ProviderViewModel.Providers}"
-                              IsEditable="False" StaysOpenOnEdit="True"
+                              Name="SelectedProvider"
                               SelectedIndex="0"/>
+                    <Button Name="AddProviderFilterButton"
+                            Click="AddProviderFilterButton_Click">Add
+                    </Button>
                 </StackPanel>
                 <StackPanel Orientation="Horizontal" Margin="5">
                     <CheckBox Name="RealTimeCheckbox" 
@@ -74,7 +101,25 @@
                         Browse...
                     </Button>
                 </StackPanel>
+                <StackPanel Orientation="Horizontal" Margin="5">
+                    <Label Width="150">Stop condition:</Label>
+                    <TextBox Name="StopConditionTextbox"
+                        Width="30" 
+                        Text="{Binding m_NewSessionFormViewModel.Model.StopConditionValue, Mode=TwoWay}" />
+                    <StackPanel Width="80">
+                        <RadioButton GroupName="StopConditionGroup" 
+                                     Content="MB" 
+                                     IsChecked="{Binding Path=m_NewSessionFormViewModel.Model.StopCondition, 
+                            Converter={StaticResource RadioStopConditionToBool}, ConverterParameter=MB}"/>
+                        <RadioButton GroupName="StopConditionGroup"
+                                     Content="Seconds" Width="80" />
+                    </StackPanel>
+                </StackPanel>
             </StackPanel>
+        </GroupBox>
+        <GroupBox Header="Provider Filters" Grid.Row="1">
+            <TabControl Name="ProviderFiltersTabControl">
+            </TabControl>
         </GroupBox>
     </Grid>
 </UserControl>

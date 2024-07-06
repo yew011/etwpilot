@@ -22,16 +22,11 @@ using Fluent;
 using System.ComponentModel;
 using System.Diagnostics;
 using System.Windows;
-using System.Windows.Input;
 using System.IO;
 using System.Windows.Controls;
 using MessageBox = System.Windows.MessageBox;
 using System.Windows.Forms;
-using Newtonsoft.Json;
-using System.Data;
 using System.Text;
-using System.Xml;
-using System.Xml.Serialization;
 using EtwPilot.Utilities;
 
 namespace EtwPilot.ViewModel
@@ -234,7 +229,7 @@ namespace EtwPilot.ViewModel
             m_SettingsFormViewModel.LoadDefault();
             m_ProviderViewModel = new ProviderViewModel();
             m_SessionViewModel = new SessionViewModel();
-            m_NewSessionFormViewModel = new NewSessionFormViewModel();
+            m_NewSessionFormViewModel = new NewSessionFormViewModel(); // lazy init
 
             //
             // Set current viewmodel
@@ -489,6 +484,10 @@ namespace EtwPilot.ViewModel
                         if (m_SessionViewModel.Sessions.Count == 0)
                         {
                             await Command_LoadSessions();
+                            //
+                            // Lazy init the new sessions form
+                            //
+                            m_NewSessionFormViewModel.Initialize();
                         }
                         else
                         {
