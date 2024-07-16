@@ -5,19 +5,9 @@
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              xmlns:local="clr-namespace:EtwPilot.ViewModel"
              xmlns:Fluent="urn:fluent-ribbon"
-             xmlns:System="clr-namespace:System;assembly=mscorlib"
-             xmlns:Diagnostics="clr-namespace:System.Diagnostics;assembly=System.Diagnostics.TraceSource"
              mc:Ignorable="d"
              Name="SettingsFormViewControl"
              DataContext="{StaticResource g_MainWindowViewModel}">
-    <UserControl.Resources>
-        <ObjectDataProvider x:Key="SourceLevelsEnum" MethodName="GetValues"
-                            ObjectType="{x:Type System:Enum}">
-            <ObjectDataProvider.MethodParameters>
-                <x:Type TypeName="Diagnostics:SourceLevels"/>
-            </ObjectDataProvider.MethodParameters>
-        </ObjectDataProvider>
-    </UserControl.Resources>
     <Grid>
         <Grid.RowDefinitions>
             <RowDefinition Height="*" />

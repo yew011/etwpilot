@@ -11,12 +11,13 @@
              xmlns:view="clr-namespace:EtwPilot.View"
              mc:Ignorable="d" 
              d:DesignHeight="450" d:DesignWidth="800"
-             Name="SessionViewControl"
-             DataContext="{StaticResource g_MainWindowViewModel}">
+             DataContext="{StaticResource g_MainWindowViewModel}"
+             Name="SessionViewControl">
     <UserControl.Resources>
-        <DataTemplate DataType="{x:Type vm:NewSessionFormViewModel}">
-            <view:NewSessionFormView/>
-        </DataTemplate>        
+        <view:SessionFormView x:Key="Form"/>
+        <DataTemplate DataType="{x:Type vm:SessionFormViewModel}">
+            <ContentControl Content="{StaticResource Form}" />
+        </DataTemplate>
     </UserControl.Resources>
     <DockPanel LastChildFill="True">
         <DataGrid Name="SessionsDataGrid"
@@ -57,6 +58,8 @@
                 </DataTemplate>
             </DataGrid.RowDetailsTemplate>
         </DataGrid>
-        <ContentControl Name="NewSessionFormContentControl" Content="{Binding m_NewSessionFormViewModel}" DockPanel.Dock="Left"/>
+        <ContentControl Name="SessionFormContentControl"
+                        Content="{Binding m_SessionFormViewModel,ValidatesOnNotifyDataErrors=False}" 
+                        DockPanel.Dock="Left"/>
     </DockPanel>
 </UserControl>

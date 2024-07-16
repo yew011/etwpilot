@@ -145,4 +145,30 @@ namespace EtwPilot.Model
             EtwEventColumns = EtwColumn.GetDefaultColumns();
         }
     }
+
+    public class EtwColumn
+    {
+        public bool Visible { get; set; }
+        public string Name { get; set; }
+        public Type Type { get; set; }
+
+        public static ObservableCollection<EtwColumn> GetDefaultColumns()
+        {
+            return new ObservableCollection<EtwColumn> {
+            new EtwColumn() { Visible=true, Name="Provider", Type=typeof(string) },
+            new EtwColumn() { Visible=true, Name="EventId", Type=typeof(int) },
+            new EtwColumn() { Visible=true, Name="Version", Type=typeof(int) },
+            new EtwColumn() { Visible=true, Name="Level", Type=typeof(string) },
+            new EtwColumn() { Visible=true, Name="Channel", Type=typeof(string) },
+            new EtwColumn() { Visible=true, Name="Keywords", Type=typeof(string) },
+            new EtwColumn() { Visible=true, Name="Task", Type=typeof(string) },
+            new EtwColumn() { Visible=true, Name="Opcode", Type=typeof(string) },
+            new EtwColumn() { Visible=true, Name="ProcessId", Type=typeof(int) },
+            new EtwColumn() { Visible=true, Name="ThreadId", Type=typeof(string) },
+            new EtwColumn() { Visible=true, Name="UserSid", Type=typeof(string) },
+            new EtwColumn() { Visible=true, Name="ActivityId", Type=typeof(Guid) },
+            new EtwColumn() { Visible=true, Name="Timestamp", Type=typeof(string) },
+        };
+        }
+    }
 }

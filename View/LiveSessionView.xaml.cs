@@ -17,17 +17,25 @@ specific language governing permissions and limitations
 under the License.
 */
 
-using etwlib;
+using System.Windows.Controls;
 
-namespace EtwPilot.ViewModel
+namespace EtwPilot.View
 {
-    internal class NewProviderFilterFormViewModel : ViewModelBase
+    public partial class LiveSessionView : UserControl
     {
-        public ParsedEtwManifest Manifest { get; set; }
-
-        public NewProviderFilterFormViewModel(ParsedEtwManifest Manifest2)
+        public LiveSessionView()
         {
-            Manifest = Manifest2;
+            InitializeComponent();
+        }
+
+        private void Expander_Expanded(object sender, System.Windows.RoutedEventArgs e)
+        {
+            Utilities.UiHelper.Expander_Expanded(sender, e);
+        }
+
+        private void Expander_Collapsed(object sender, System.Windows.RoutedEventArgs e)
+        {
+            Utilities.UiHelper.Expander_Collapsed(sender, e);
         }
     }
 }

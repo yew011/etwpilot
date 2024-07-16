@@ -19,12 +19,19 @@ under the License.
 using System.ComponentModel;
 using System.Runtime.CompilerServices;
 using System.Windows;
+using System.Windows.Controls;
 
 namespace EtwPilot.ViewModel
 {
-    internal abstract class ViewModelBase : INotifyPropertyChanged
+    internal abstract class ViewModelBase : INotifyPropertyChanged, INotifyDataErrorInfo
     {
         public event PropertyChangedEventHandler PropertyChanged;
+
+        public ViewModelBase()
+        {
+            Errors = new Dictionary<string, IList<object>>();
+            ValidationRules = new Dictionary<string, HashSet<ValidationRule>>();
+        }
 
         private static StateManager _stateManager = new StateManager();
         public StateManager StateManager
@@ -34,7 +41,7 @@ namespace EtwPilot.ViewModel
 
         protected void OnPropertyChanged(string propertyName)
         {
-            this.OnPropertyChanged(new PropertyChangedEventArgs(propertyName));
+            OnPropertyChanged(new PropertyChangedEventArgs(propertyName));
         }
 
         protected virtual void OnPropertyChanged(PropertyChangedEventArgs e)
@@ -45,12 +52,98 @@ namespace EtwPilot.ViewModel
                 handler(this, e);
             }
         }
+
+        protected void AddError(string propertyName, object newError)
+        {
+            if (!Errors.TryGetValue(propertyName, out IList<object> propertyErrors))
+            {
+                propertyErrors = new List<object>();
+                Errors.Add(propertyName, propertyErrors);
+            }
+            propertyErrors.Insert(0, newError);
+            OnErrorsChanged(propertyName);
+        }
+
+        protected void AddErrorRange(string propertyName, IEnumerable<object> newErrors, bool isWarning = false)
+        {
+            if (!newErrors.Any())
+            {
+                return;
+            }
+
+            if (!Errors.TryGetValue(propertyName, out IList<object> propertyErrors))
+            {
+                propertyErrors = new List<object>();
+                Errors.Add(propertyName, propertyErrors);
+            }
+
+            if (isWarning)
+            {
+                foreach (object error in newErrors)
+                {
+                    propertyErrors.Add(error);
+                }
+            }
+            else
+            {
+                foreach (object error in newErrors)
+                {
+                    propertyErrors.Insert(0, error);
+                }
+            }
+
+            OnErrorsChanged(propertyName);
+        }
+
+        protected bool ClearErrors(string propertyName = "")
+        {
+            if (string.IsNullOrEmpty(propertyName))
+            {
+                Errors.Clear();
+                OnErrorsChanged(propertyName);
+                return true;
+            }
+            if (Errors.Remove(propertyName))
+            {
+                OnErrorsChanged(propertyName);
+                return true;
+            }
+            return false;
+        }
+
+        public bool PropertyHasErrors(string propertyName) =>
+            Errors.TryGetValue(propertyName, out IList<object> propertyErrors) && propertyErrors.Any();
+
+        #region INotifyDataErrorInfo implementation
+
+        public event EventHandler<DataErrorsChangedEventArgs> ErrorsChanged;
+
+        public System.Collections.IEnumerable GetErrors(string propertyName)
+          => string.IsNullOrWhiteSpace(propertyName)
+            ? Errors.SelectMany(entry => entry.Value)
+            : Errors.TryGetValue(propertyName, out IList<object> errors)
+              ? (IEnumerable<object>)errors
+              : new List<object>();
+
+        public bool HasErrors => Errors.Any();
+
+        public bool IsValidForm => !Errors.Any();
+
+        #endregion
+
+        protected virtual void OnErrorsChanged(string propertyName)
+        {
+            ErrorsChanged?.Invoke(this, new DataErrorsChangedEventArgs(propertyName));
+        }
+
+        private Dictionary<string, IList<object>> Errors { get; }
+        private Dictionary<string, HashSet<ValidationRule>> ValidationRules { get; }
     }
 
     internal class StateManager
     {
         public ProgressState ProgressState { get; set; }
-        public EtwPilot.Model.SettingsModel SettingsModel { get; set; }
+        public Model.SettingsModel SettingsModel { get; set; }
         public StateManager() { }
     }
 

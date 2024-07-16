@@ -17,9 +17,7 @@ specific language governing permissions and limitations
 under the License.
 */
 using EtwPilot.Model;
-using System.Diagnostics;
 using System.Windows;
-using System.Windows.Controls;
 using System.Windows.Data;
 
 namespace EtwPilot.Utilities.Converters
@@ -55,27 +53,48 @@ namespace EtwPilot.Utilities.Converters
         }
     }
 
-    public class RadioStopConditionToBool : IValueConverter
+    public class StopConditionToBool : IValueConverter
     {
         public object Convert(object value, Type targetType, object parameter, System.Globalization.CultureInfo culture)
         {
-            var val = (StopCondition)value;
-            var compareStr = parameter as string;
-            object? parsedValue;
-            if (compareStr == null || !Enum.TryParse(typeof(StopCondition), compareStr, true, out parsedValue))
+            if (value == null || parameter == null)
             {
                 return false;
             }
-            return (StopCondition)parsedValue == val;
+            var str = parameter as string;
+            if (str == null)
+            {
+                return StopCondition.None;
+            }
+            if (!Enum.TryParse(typeof(StopCondition), str, true, out var parsedValue))
+            {
+                return StopCondition.None;
+            }
+            var val = (StopCondition)value;
+            return val.Equals(parsedValue);
         }
 
         public object ConvertBack(object value, Type targetType, object parameter, System.Globalization.CultureInfo culture)
         {
-            throw new NotImplementedException();
+            var val = (bool)value;
+            if (!val)
+            {
+                return Binding.DoNothing;
+            }
+            var str = parameter as string;
+            if (str == null)
+            {
+                return StopCondition.None;
+            }
+            if (!Enum.TryParse(typeof(StopCondition), str, true, out var parsedValue))
+            {
+                return StopCondition.None;
+            }
+            return parsedValue;
         }
     }
 
-    public class TraceLevelToString : IValueConverter
+    public class IntegerToString : IValueConverter
     {
         public object Convert(object value, Type targetType, object parameter, System.Globalization.CultureInfo culture)
         {
@@ -83,27 +102,43 @@ namespace EtwPilot.Utilities.Converters
             {
                 return string.Empty;
             }
-            return ((SourceLevels)value).ToString();
+            return ((int)value).ToString();
         }
 
-        public object? ConvertBack(object value, Type targetType, object parameter, System.Globalization.CultureInfo culture)
+        public object ConvertBack(object value, Type targetType, object parameter, System.Globalization.CultureInfo culture)
         {
-            var item = value as ComboBoxItem;
-            if (item == null || item.Content == null)
+            var str = value as string;
+            if (string.IsNullOrEmpty(str))
             {
-                return null;
+                return 0;
             }
-            var content = item.Content as string;
-            if (content == null)
+            if (!int.TryParse(str, out int result))
             {
-                return null;
+                return 0;
             }
-            object? parsedLevel;
-            if (!Enum.TryParse(typeof(SourceLevels), content, out parsedLevel))
+            return value;
+        }
+    }
+
+    public class NullableBoolConverter : IValueConverter
+    {
+        public object Convert(object value, Type targetType, object parameter, System.Globalization.CultureInfo culture)
+        {
+            var test = (bool?)value;
+            var result = bool.Parse((string)parameter);
+
+            if (test == result)
             {
-                return null;
+                return true;
             }
-            return (SourceLevels)parsedLevel;
+
+            return false;
+        }
+
+        public object ConvertBack(object value, Type targetType, object parameter, System.Globalization.CultureInfo culture)
+        {
+            var result = bool.Parse((string)parameter);
+            return result;
         }
     }
 }

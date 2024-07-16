@@ -17,9 +17,29 @@ specific language governing permissions and limitations
 under the License.
 */
 
+using EtwPilot.Model;
+
 namespace EtwPilot.ViewModel
 {
     internal class LiveSessionViewModel : ViewModelBase
     {
+        private LiveSessionModel _Model;
+        public LiveSessionModel Model
+        {
+            get => _Model;
+            set
+            {
+                if (_Model != value)
+                {
+                    _Model = value;
+                    OnPropertyChanged("Model");
+                }
+            }
+        }
+
+        public LiveSessionViewModel()
+        {
+
+        }
     }
 }

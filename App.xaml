@@ -4,12 +4,27 @@
              xmlns:local="clr-namespace:EtwPilot"
              xmlns:converters="clr-namespace:EtwPilot.Utilities.Converters"
              xmlns:vm="clr-namespace:EtwPilot.ViewModel"
+             xmlns:System="clr-namespace:System;assembly=mscorlib"
+             xmlns:Diagnostics="clr-namespace:System.Diagnostics;assembly=System.Diagnostics.TraceSource"
+             xmlns:etw="clr-namespace:etwlib;assembly=etwlib"
              StartupUri="View/MainWindowView.xaml">
     <Application.Resources>
     <ResourceDictionary>
         <ResourceDictionary.MergedDictionaries>
             <ResourceDictionary Source="pack://application:,,,/Fluent;Component/Themes/Generic.xaml" />
         </ResourceDictionary.MergedDictionaries>
+        <ObjectDataProvider x:Key="SourceLevelsEnum" MethodName="GetValues"
+                    ObjectType="{x:Type System:Enum}">
+            <ObjectDataProvider.MethodParameters>
+                <x:Type TypeName="Diagnostics:SourceLevels"/>
+            </ObjectDataProvider.MethodParameters>
+        </ObjectDataProvider>
+        <ObjectDataProvider x:Key="PayloadFilterPredicateOperatorsEnum" MethodName="GetValues"
+            ObjectType="{x:Type System:Enum}">
+            <ObjectDataProvider.MethodParameters>
+                <x:Type TypeName="etw:NativeTraceConsumer+PAYLOAD_OPERATOR"/>
+            </ObjectDataProvider.MethodParameters>
+        </ObjectDataProvider>
         <BitmapImage x:Key="refresh"  UriSource="images/refresh.png"/>
         <BitmapImage x:Key="plus"  UriSource="images/plus.png"/>
         <BitmapImage x:Key="logo"  UriSource="images/logo.png"/>
@@ -20,12 +35,41 @@
         <BitmapImage x:Key="csv"  UriSource="images/csv.png"/>
         <BitmapImage x:Key="clipboard"  UriSource="images/clipboard.png"/>
         <BitmapImage x:Key="session"  UriSource="images/session.png"/>
+        <BitmapImage x:Key="start"  UriSource="images/play.png"/>
+        <BitmapImage x:Key="stop"  UriSource="images/stop.png"/>
+        <BitmapImage x:Key="red_x_bmp"  UriSource="images/stop.png"/>
         <Image x:Key="red_x" x:Shared="false" Source="images/red_x.png" Width="15" Height="15"/>
         <vm:MainWindowViewModel x:Key="g_MainWindowViewModel" />
         <converters:IsGreaterThanZero x:Key="IsGreaterThanZero"/>
         <converters:DecimalToHex x:Key="DecimalToHex"/>
-        <converters:TraceLevelToString x:Key="TraceLevelToString"/>
-        <converters:RadioStopConditionToBool x:Key="RadioStopConditionToBool"/>
+        <converters:StopConditionToBool x:Key="StopConditionToBool"/>
+        <converters:IntegerToString x:Key="IntegerToString"/>
+        <converters:NullableBoolConverter x:Key="NullableBoolConverter"/>
+        <!-- template for adorning errors onto input form controls -->
+        <ControlTemplate x:Key="ValidationErrorTemplate">
+            <DockPanel LastChildFill="True">
+            <Border BorderBrush="Red" BorderThickness="1">
+                <AdornedElementPlaceholder x:Name="AdornedElement"/>
+            </Border>
+            <Border Background="White" 
+                    BorderBrush="Red" 
+                    Padding="4"
+                    BorderThickness="1,0,1,1" 
+                    HorizontalAlignment="Left">
+                <ItemsControl ItemsSource="{Binding}"
+                                HorizontalAlignment="Left"
+                                DockPanel.Dock="Right">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate>
+                        <TextBlock Text="{Binding ErrorContent}" 
+                                    Foreground="Red"
+                                    DockPanel.Dock="Right"/>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </Border>
+            </DockPanel>
+        </ControlTemplate>
     </ResourceDictionary>
 </Application.Resources>
 </Application>

@@ -5,14 +5,14 @@
                      xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
                      xmlns:vm="clr-namespace:EtwPilot.ViewModel"
                      xmlns:view="clr-namespace:EtwPilot.View"
-                     xmlns:local="clr-namespace:EtwPilot"
                      xmlns:Fluent="urn:fluent-ribbon"
                      xmlns:behaviours="http://schemas.microsoft.com/xaml/behaviors"
                      Title="ETW Pilot" 
                      mc:Ignorable="d"
                      Name="MainRibbonWindow"
                      Icon="{DynamicResource logo}"
-                     DataContext="{StaticResource g_MainWindowViewModel}" Height="800" Width="1500">
+                     DataContext="{StaticResource g_MainWindowViewModel}"
+                     Height="900" Width="1500">
     <!-- Use the interactions feature to redirect some UI events to commands -->
     <behaviours:Interaction.Triggers>
         <behaviours:EventTrigger EventName="Closing">
@@ -32,19 +32,26 @@
         </behaviours:EventTrigger>
     </behaviours:Interaction.Triggers>
     <Fluent:RibbonWindow.Resources>
+        <!-- Instantiate first-level views as resources so they're not
+        recreated every time tabs are switched - see
+            https://stackoverflow.com/questions/38468786/mvvm-datatemplate-creates-a-new-view
+        -->
+        <view:ProviderView x:Key="StaticProviderView"/>
+        <view:ProviderManifestView x:Key="StaticProviderManifestView"/>
+        <view:SessionView x:Key="StaticSessionView"/>
+        <view:SettingsFormView x:Key="StaticSettingsFormView"/>
         <!-- DataTemplates for current content view model -->
         <DataTemplate DataType="{x:Type vm:ProviderViewModel}">
-            <view:ProviderView/>
+            <ContentControl Content="{StaticResource StaticProviderView}" />
         </DataTemplate>
         <DataTemplate DataType="{x:Type vm:ProviderManifestViewModel}">
-            <view:ProviderManifestView/>
+            <ContentControl Content="{StaticResource StaticProviderManifestView}" />
         </DataTemplate>
         <DataTemplate DataType="{x:Type vm:SessionViewModel}">
-            <view:SessionView/>
+            <ContentControl Content="{StaticResource StaticSessionView}" />
         </DataTemplate>
-        <!-- DataTemplates for other UI forms -->
         <DataTemplate DataType="{x:Type vm:SettingsFormViewModel}">
-            <view:SettingsFormView/>
+            <ContentControl Content="{StaticResource StaticSettingsFormView}" />
         </DataTemplate>
     </Fluent:RibbonWindow.Resources>
     <DockPanel>
@@ -52,7 +59,8 @@
                        IsDisplayOptionsButtonVisible="False"
                        Name="MainWindowRibbon"
                        CanMinimize="False"
-                       DockPanel.Dock="Top">
+                       DockPanel.Dock="Top"
+                       SelectedTabIndex="{Binding RibbonTabControlSelectedIndex,Mode=TwoWay}">
             <Fluent:Ribbon.Resources>
                 <!-- Template for dynamic contextual tabs. Some properties are set in code-behind. -->
                 <Style x:Key="ProviderContextTabStyle" TargetType="{x:Type Fluent:RibbonTabItem}">
@@ -103,6 +111,7 @@
                        PassEventArgsToCommand="True"/>
                 </behaviours:EventTrigger>
             </behaviours:Interaction.Triggers>
+
             <!--Backstage-->
             <Fluent:Ribbon.Menu>
                 <Fluent:Backstage>
@@ -177,7 +186,15 @@
                                    Command="{Binding SaveSessionsToClipboardCommand}"/>
                 </Fluent:RibbonGroupBox>
                 <Fluent:RibbonGroupBox Header="Control">
-                    <Fluent:Button Header="New" Icon="{DynamicResource plus}" />
+                    <Fluent:Button Header="New"
+                                   Icon="{DynamicResource plus}"
+                                   Command="{Binding NewSessionCommand}"/>
+                    <Fluent:Button Header="Start"
+                                   Icon="{DynamicResource start}"
+                                   Command="{Binding StartSessionCommand}"/>
+                    <Fluent:Button Header="Stop"
+                                   Icon="{DynamicResource stop}"
+                                   Command="{Binding StopSessionCommand}"/>
                 </Fluent:RibbonGroupBox>
             </Fluent:RibbonTabItem>
             <Fluent:RibbonTabItem Header="Insights" Name="InsightsTab"/>

@@ -16,15 +16,25 @@ KIND, either express or implied.  See the License for the
 specific language governing permissions and limitations
 under the License.
 */
-using System.Windows.Controls;
 
-namespace EtwPilot.View
+using etwlib;
+
+namespace EtwPilot.Model
 {
-    public partial class NewProviderFilterFormView : UserControl
+    internal class SessionFormModel
     {
-        public NewProviderFilterFormView()
+        public string Name { get; set; }
+        public bool IsRealTime { get; set; }
+        public string LogLocation { get; set; }
+        public StopCondition StopCondition { get; set; }
+        public int StopConditionValue { get; set; }
+        public List<EnabledProvider> EnabledProviders { get; set; }
+        public Dictionary<string, Type> Columns { get; set; }
+
+        public SessionFormModel()
         {
-            InitializeComponent();
+            EnabledProviders = new List<EnabledProvider>();
+            Columns = new Dictionary<string, Type>();
         }
     }
 }

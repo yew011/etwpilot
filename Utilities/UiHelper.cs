@@ -206,6 +206,7 @@ namespace EtwPilot.Utilities
                     return;
                 }
                 TabControl.Items.Remove(tab);
+                tab.Template = null; // see https://github.com/dotnet/wpf/issues/6440
                 TabClosedCallback?.Invoke();
             };
 
@@ -266,6 +267,7 @@ namespace EtwPilot.Utilities
                     return;
                 }
                 TabControl.Tabs.Remove(tab);
+                tab.Template = null; // see https://github.com/dotnet/wpf/issues/6440
                 TabClosedCallback?.Invoke();
             };
 

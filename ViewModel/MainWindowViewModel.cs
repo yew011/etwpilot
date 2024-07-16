@@ -115,16 +115,16 @@ namespace EtwPilot.ViewModel
             }
         }
 
-        private NewSessionFormViewModel _m_NewSessionFormViewModel;
-        public NewSessionFormViewModel m_NewSessionFormViewModel
+        private SessionFormViewModel _m_SessionFormViewModel;
+        public SessionFormViewModel m_SessionFormViewModel
         {
-            get => _m_NewSessionFormViewModel;
+            get => _m_SessionFormViewModel;
             set
             {
-                if (_m_NewSessionFormViewModel != value)
+                if (_m_SessionFormViewModel != value)
                 {
-                    _m_NewSessionFormViewModel = value;
-                    OnPropertyChanged("_m_NewSessionFormViewModel");
+                    _m_SessionFormViewModel = value;
+                    OnPropertyChanged("_m_SessionFormViewModel");
                 }
             }
         }
@@ -175,10 +175,27 @@ namespace EtwPilot.ViewModel
         public AsyncRelayCommand<RoutedEventArgs> WindowLoadedCommand { get; set; }
         public AsyncRelayCommand CancelCurrentCommandCommand { get; set; }
         public AsyncRelayCommand NewSessionFromProviderCommand { get; set; }
+        public AsyncRelayCommand NewSessionCommand { get; set; }
+        public AsyncRelayCommand StartSessionCommand { get; set; }
+        public AsyncRelayCommand StopSessionCommand { get; set; }
 
         #endregion
 
         private AsyncRelayCommand m_CurrentCommand = null;
+
+        private int m_RibbonTabControlSelectedIndex;
+        public int RibbonTabControlSelectedIndex
+        {
+            get => m_RibbonTabControlSelectedIndex;
+            set
+            {
+                if (m_RibbonTabControlSelectedIndex != value)
+                {
+                    m_RibbonTabControlSelectedIndex = value;
+                    OnPropertyChanged("RibbonTabControlSelectedIndex");
+                }
+            }
+        }
 
         public MainWindowViewModel()
         {
@@ -210,6 +227,12 @@ namespace EtwPilot.ViewModel
             CancelCurrentCommandCommand = new AsyncRelayCommand(Command_CancelCurrentCommand);
             NewSessionFromProviderCommand = new AsyncRelayCommand(
                 Command_NewSessionFromProvider, CanExecute);
+            NewSessionCommand = new AsyncRelayCommand(
+                Command_NewSession, CanExecute);
+            StartSessionCommand = new AsyncRelayCommand(
+                Command_StartSession, CanExecuteStartSession);
+            StopSessionCommand = new AsyncRelayCommand(
+                Command_StopSession, CanExecuteStopSession);
 
             //
             // Our progress state is tied to statemanager.
@@ -229,7 +252,16 @@ namespace EtwPilot.ViewModel
             m_SettingsFormViewModel.LoadDefault();
             m_ProviderViewModel = new ProviderViewModel();
             m_SessionViewModel = new SessionViewModel();
-            m_NewSessionFormViewModel = new NewSessionFormViewModel(); // lazy init
+            m_SessionFormViewModel = new SessionFormViewModel(); // lazy init
+
+            //
+            // Subscribe to property change events in session form, so when the form becomes valid,
+            // the session control buttons and associated commands are available.
+            //
+            m_SessionFormViewModel.PropertyChanged += delegate (object? sender, PropertyChangedEventArgs args)
+            {
+                StartSessionCommand.NotifyCanExecuteChanged();
+            };
 
             //
             // Set current viewmodel
@@ -306,6 +338,11 @@ namespace EtwPilot.ViewModel
             m_ProgressState.FinalizeProgress();
         }
 
+        private async Task Command_NewSession()
+        {
+            RibbonTabControlSelectedIndex = 1;
+        }
+
         private async Task Command_NewSessionFromProvider()
         {
             var providers = GetSelectedProvidersFromVm();
@@ -313,10 +350,22 @@ namespace EtwPilot.ViewModel
             {
                 return;
             }
+            m_SessionFormViewModel.InitialProviders = providers;
+            RibbonTabControlSelectedIndex = 1;
+        }
 
-            //
-            // Launch sessions tab
-            //
+        private async Task Command_StartSession()
+        {
+            var model = m_SessionFormViewModel.GetFormData();
+            if (model == null)
+            {
+                return;
+            }
+        }
+
+        private async Task Command_StopSession()
+        {
+            
         }
 
         private async Task Command_ExportProviders(ExportFormat Format)
@@ -477,17 +526,18 @@ namespace EtwPilot.ViewModel
                         {
                             CurrentViewModel = m_ProviderViewModel;
                         }
+                        if (m_ProviderViewModel.SelectedProviders.Count > 0)
+                        {
+                            ProviderManifestVisible = Visibility.Visible;
+                        }
                         break;
                     }
                 case "SessionsTab":
                     {
+                        ProviderManifestVisible = Visibility.Hidden;
                         if (m_SessionViewModel.Sessions.Count == 0)
                         {
                             await Command_LoadSessions();
-                            //
-                            // Lazy init the new sessions form
-                            //
-                            m_NewSessionFormViewModel.Initialize();
                         }
                         else
                         {
@@ -497,11 +547,13 @@ namespace EtwPilot.ViewModel
                     }
                 case "InsightsTab":
                     {
+                        ProviderManifestVisible = Visibility.Hidden;
                         CurrentViewModel = null;
                         break;
                     }
                 default:
                     {
+                        ProviderManifestVisible = Visibility.Hidden;
                         break;
                     }
             }
@@ -513,6 +565,7 @@ namespace EtwPilot.ViewModel
             //
             if (tab.Name.StartsWith("Manifest_"))
             {
+                ProviderManifestVisible = Visibility.Visible;
                 CurrentViewModel = m_ProviderViewModel.GetVmForTab(tab.Name)!;
             }
         }
@@ -662,6 +715,24 @@ namespace EtwPilot.ViewModel
         }
 
         private bool CanExecute()
+        {
+            if (m_ProgressState.TaskInProgress())
+            {
+                return false;
+            }
+            return true;
+        }
+
+        private bool CanExecuteStartSession()
+        {
+            if (m_ProgressState.TaskInProgress())
+            {
+                return false;
+            }
+            return m_SessionFormViewModel.IsValidForm;
+        }
+
+        private bool CanExecuteStopSession()
         {
             if (m_ProgressState.TaskInProgress())
             {
