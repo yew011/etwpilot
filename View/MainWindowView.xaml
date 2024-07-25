@@ -40,6 +40,7 @@
         <view:ProviderManifestView x:Key="StaticProviderManifestView"/>
         <view:SessionView x:Key="StaticSessionView"/>
         <view:SettingsFormView x:Key="StaticSettingsFormView"/>
+        <view:LiveSessionView x:Key="StaticLiveSessionView"/>
         <!-- DataTemplates for current content view model -->
         <DataTemplate DataType="{x:Type vm:ProviderViewModel}">
             <ContentControl Content="{StaticResource StaticProviderView}" />
@@ -52,6 +53,9 @@
         </DataTemplate>
         <DataTemplate DataType="{x:Type vm:SettingsFormViewModel}">
             <ContentControl Content="{StaticResource StaticSettingsFormView}" />
+        </DataTemplate>
+        <DataTemplate DataType="{x:Type vm:LiveSessionViewModel}">
+            <ContentControl Content="{StaticResource StaticLiveSessionView}" />
         </DataTemplate>
     </Fluent:RibbonWindow.Resources>
     <DockPanel>
@@ -85,7 +89,7 @@
                 </Style>
                 <Style x:Key="SessionContextTabStyle" TargetType="{x:Type Fluent:RibbonTabItem}">
                     <Setter Property="Group" Value="{Binding Source={x:Reference sessionsContextualTabGroup}}"/>
-                    <Setter Property="Visibility" Value="{Binding SessionsVisible}"/>
+                    <Setter Property="Visibility" Value="{Binding LiveSessionsVisible}"/>
                     <Setter Property="HeaderTemplate">
                         <Setter.Value>
                             <DataTemplate>
@@ -192,25 +196,24 @@
                     <Fluent:Button Header="Start"
                                    Icon="{DynamicResource start}"
                                    Command="{Binding StartSessionCommand}"/>
-                    <Fluent:Button Header="Stop"
-                                   Icon="{DynamicResource stop}"
-                                   Command="{Binding StopSessionCommand}"/>
                 </Fluent:RibbonGroupBox>
             </Fluent:RibbonTabItem>
             <Fluent:RibbonTabItem Header="Insights" Name="InsightsTab"/>
 
             <!--Contextual Tab Groups-->
             <Fluent:Ribbon.ContextualGroups>
-                <Fluent:RibbonContextualTabGroup Name="manifestsContextualTabGroup"
-                                                 Header="Provider Manifests" 
-                                                 Visibility="{Binding ProviderManifestVisible}"
-                                                 Background="Green" 
-                                                 BorderBrush="Green"/>
-                <Fluent:RibbonContextualTabGroup Name="sessionsContextualTabGroup"
-                                 Header="Active Trace Sessions" 
-                                 Visibility="{Binding SessionsVisible}"
-                                 Background="Red" 
-                                 BorderBrush="Red"/>
+                <Fluent:RibbonContextualTabGroup 
+                    Name="manifestsContextualTabGroup"
+                    Header="Provider Manifests" 
+                    Visibility="{Binding ProviderManifestVisible}"
+                    Background="Green" 
+                    BorderBrush="Green"/>
+                <Fluent:RibbonContextualTabGroup
+                    Name="sessionsContextualTabGroup"
+                    Header="Live Trace Sessions" 
+                    Visibility="{Binding LiveSessionsVisible}"
+                    Background="Red" 
+                    BorderBrush="Red"/>
             </Fluent:Ribbon.ContextualGroups>
 
         </Fluent:Ribbon>
@@ -240,7 +243,7 @@
                         HorizontalAlignment="Left"
                         FontSize="10"
                         VerticalAlignment="Top"
-                        Visibility="{Binding m_ProgressState.Visible}"
+                        Visibility="{Binding CancelCommandButtonVisibility}"
                         Height="20"/>
             </StatusBarItem>
             <StatusBarItem>

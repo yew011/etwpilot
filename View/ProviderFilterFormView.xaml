@@ -75,53 +75,49 @@
                                  MaxWidth="600"
                                  MaxHeight="250"
                                  SelectionChanged="AttributeFilterEvents_SelectionChanged"
-                                 SelectedItem="{Binding Events,ValidatesOnNotifyDataErrors=True,UpdateSourceTrigger=PropertyChanged}"
-                                 Validation.ValidationAdornerSite="{Binding ElementName=EventsErrorAdornerSite}"/>
-                        <StackPanel Width="125" Orientation="Horizontal">
-                            <RadioButton GroupName="EnableDisableGroup"
-                                         Name="EnableButton"
-                                         Content="Enable"
-                                         Validation.ErrorTemplate="{x:Null}"
-                                         IsChecked="{Binding AttributeFilter.IsEnable,ValidatesOnNotifyDataErrors=True,Converter={StaticResource NullableBoolConverter},ConverterParameter='true'}"
-                                         Validation.ValidationAdornerSite="{Binding ElementName=EventsErrorAdornerSite}"/>
-                            <Separator Opacity="0" Width="10"/>
-                            <RadioButton GroupName="EnableDisableGroup" 
-                                         Name="DisableButton"
-                                         Content="Disable"
-                                         Validation.ErrorTemplate="{x:Null}"
-                                         IsChecked="{Binding AttributeFilter.IsEnable,ValidatesOnNotifyDataErrors=True,Converter={StaticResource NullableBoolConverter},ConverterParameter='false'}"
-                                         Validation.ValidationAdornerSite="{Binding ElementName=EventsErrorAdornerSite}"/>
-                        </StackPanel>
-                        <Separator Opacity="0" Width="5"/>
-                        <Label Name="EventsErrorAdornerSite"
-                               Width="125"
-                               VerticalAlignment="Top"
-                               Margin="0" Padding="0"
-                               Validation.ErrorTemplate="{DynamicResource ValidationErrorTemplate}"/>
+                                 Style="{StaticResource ErrorStyle}"
+                                 Tag="{Binding AttributeFilter.Events,Mode=TwoWay,UpdateSourceTrigger=PropertyChanged}"/>
+                        <RadioButton GroupName="EnableDisableGroup"
+                                     Name="EnableButton"
+                                     Content="Enable"
+                                     Style="{StaticResource ErrorStyle}"
+                                     IsChecked="{Binding AttributeFilter.IsEnable,Mode=TwoWay,Converter={StaticResource NullableBoolConverter},ConverterParameter='true'}"/>
+                        <Separator Opacity="0" Width="10"/>
+                        <RadioButton GroupName="EnableDisableGroup" 
+                                     Name="DisableButton"
+                                     Content="Disable"
+                                     IsChecked="{Binding AttributeFilter.IsEnable,Mode=TwoWay,Converter={StaticResource NullableBoolConverter},ConverterParameter='false'}"/>
                     </StackPanel>
                     <StackPanel Orientation="Horizontal" Margin="5">
                         <Label Width="150">Level:</Label>
                         <ComboBox Width="150" Name="AttributeFilterLevel"
                                   ItemsSource="{Binding Source={StaticResource SourceLevelsEnum}}"
-                                  SelectedIndex="0"
-                                  SelectedItem="{Binding AttributeFilter.Level}"
+                                  SelectedItem="{Binding AttributeFilter.Level,Mode=TwoWay}"
                                   IsSynchronizedWithCurrentItem="false"/>
                     </StackPanel>
                     <StackPanel Orientation="Horizontal" Margin="5">
                         <Label Width="150">Any keywords:</Label>
-                        <ListBox ItemsSource="{Binding Manifest.Keywords}" Name="AttributeFilterAnyKeywords"
+                        <ListBox ItemsSource="{Binding Manifest.Keywords,Mode=TwoWay}"
+                                 Name="AttributeFilterAnyKeywords"
                                  SelectionChanged="AttributeFilterAnyKeywords_SelectionChanged"
                                  SelectionMode="Multiple"
+                                 Width="Auto"
                                  MaxWidth="600"
-                                 MaxHeight="250"/>
+                                 MaxHeight="250"
+                                 Style="{StaticResource ErrorStyle}"
+                                 Tag="{Binding AttributeFilter.AnyKeywords,UpdateSourceTrigger=PropertyChanged}"/>
                     </StackPanel>
                     <StackPanel Orientation="Horizontal" Margin="5">
                         <Label Width="150">All keywords:</Label>
-                        <ListBox ItemsSource="{Binding Manifest.Keywords}" Name="AttributeFilterAllKeywords"
+                        <ListBox ItemsSource="{Binding Manifest.Keywords,Mode=TwoWay}"
+                                 Name="AttributeFilterAllKeywords"
                                  SelectionMode="Multiple"
                                  SelectionChanged="AttributeFilterAllKeywords_SelectionChanged"
+                                 Width="Auto"
                                  MaxWidth="600"
-                                 MaxHeight="250"/>
+                                 MaxHeight="250"
+                                 Style="{StaticResource ErrorStyle}"
+                                 Tag="{Binding AttributeFilter.AllKeywords,Mode=TwoWay,UpdateSourceTrigger=PropertyChanged}"/>
                     </StackPanel>
                 </StackPanel>
             </TabItem>
@@ -130,18 +126,23 @@
                 <StackPanel Orientation="Vertical" Margin="5">
                     <StackPanel Orientation="Horizontal" Margin="5">
                         <Label Width="150">Events:</Label>
-                        <ListBox ItemsSource="{Binding Manifest.Events}" Name="StackwalkFilterEvents"
+                        <ListBox ItemsSource="{Binding Manifest.Events}"
+                                 Name="StackwalkFilterEvents"
                                  SelectionMode="Multiple"
-                                 SelectionChanged="StackwalkFilterEvents_SelectionChanged"
+                                 Width="Auto"
                                  MaxWidth="600"
-                                 MaxHeight="250"/>
-                        <StackPanel Width="125" Orientation="Horizontal">
-                            <RadioButton GroupName="EnableDisableGroup" 
-                                         Content="Enable"
-                                         IsChecked="{Binding StackwalkFilter.IsEnable,Mode=OneWayToSource}"/>
-                            <Separator Opacity="0" Width="10"/>
-                            <RadioButton GroupName="EnableDisableGroup" Content="Disable"/>
-                        </StackPanel>
+                                 MaxHeight="250"
+                                 SelectionChanged="StackwalkFilterEvents_SelectionChanged"
+                                 Style="{StaticResource ErrorStyle}"
+                                 Tag="{Binding StackwalkFilter.Events,Mode=TwoWay,UpdateSourceTrigger=PropertyChanged}"/>
+                        <RadioButton GroupName="EnableDisableGroup1"
+                                     Content="Enable"
+                                     Style="{StaticResource ErrorStyle}"
+                                     IsChecked="{Binding StackwalkFilter.IsEnable,Mode=TwoWay,Converter={StaticResource NullableBoolConverter},ConverterParameter='true'}"/>
+                        <Separator Opacity="0" Width="10"/>
+                        <RadioButton GroupName="EnableDisableGroup1" 
+                                     Content="Disable"
+                                     IsChecked="{Binding StackwalkFilter.IsEnable,Mode=TwoWay,Converter={StaticResource NullableBoolConverter},ConverterParameter='false'}"/>
                     </StackPanel>
                     <StackPanel Orientation="Vertical">
                         <GroupBox Header="Level/Keyword Filter">
@@ -150,33 +151,43 @@
                                     <Label Width="150">Level:</Label>
                                     <ComboBox Width="150" Name="StackwalkLevelKeywordFilterLevel"
                                               ItemsSource="{Binding Source={StaticResource SourceLevelsEnum}}"
-                                              SelectedIndex="0"
                                               IsSynchronizedWithCurrentItem="false"
-                                              SelectedItem="{Binding StackwalkFilter.LevelKeywordFilterLevel,Mode=OneWayToSource}"/>
+                                              SelectedItem="{Binding StackwalkFilter.LevelKeywordFilterLevel,Mode=TwoWay}"/>
                                     <Separator Opacity="0" Width="75"/>
                                     <StackPanel Width="125" Orientation="Horizontal">
-                                        <RadioButton GroupName="EnableDisableGroup" 
+                                        <RadioButton GroupName="EnableDisableGroup2"
                                                      Content="Enable"
-                                                     IsChecked="{Binding StackwalkFilter.LevelKeywordFilterIsEnable,Mode=OneWayToSource}"/>
+                                                     Style="{StaticResource ErrorStyle}"
+                                                     IsChecked="{Binding StackwalkFilter.LevelKeywordFilterIsEnable,Mode=TwoWay,Converter={StaticResource NullableBoolConverter},ConverterParameter='true'}"/>
                                         <Separator Opacity="0" Width="10"/>
-                                        <RadioButton GroupName="EnableDisableGroup" Content="Disable"/>
+                                        <RadioButton GroupName="EnableDisableGroup2" 
+                                                     Content="Disable"
+                                                     IsChecked="{Binding StackwalkFilter.LevelKeywordFilterIsEnable,Mode=TwoWay,Converter={StaticResource NullableBoolConverter},ConverterParameter='false'}"/>
                                     </StackPanel>
                                 </StackPanel>
                                 <StackPanel Orientation="Horizontal" Margin="5">
                                     <Label Width="150">Any keywords:</Label>
-                                    <ListBox ItemsSource="{Binding Manifest.Keywords}" Name="StackwalkLevelKeywordFilterAnyKeywords"
+                                    <ListBox ItemsSource="{Binding Manifest.Keywords}"
+                                             Name="StackwalkLevelKeywordFilterAnyKeywords"
                                              SelectionMode="Multiple"
+                                             Width="Auto"
                                              MaxWidth="600"
                                              MaxHeight="250"
-                                             SelectionChanged="StackwalkLevelKeywordFilterAnyKeywords_SelectionChanged"/>
+                                             SelectionChanged="StackwalkLevelKeywordFilterAnyKeywords_SelectionChanged"
+                                             Style="{StaticResource ErrorStyle}"
+                                             Tag="{Binding StackwalkFilter.LevelKeywordFilterAnyKeywords,Mode=TwoWay,UpdateSourceTrigger=PropertyChanged}"/>
                                 </StackPanel>
                                 <StackPanel Orientation="Horizontal" Margin="5">
                                     <Label Width="150">All keywords:</Label>
-                                    <ListBox ItemsSource="{Binding Manifest.Keywords}" Name="StackwalkLevelKeywordFilterAllKeywords"
+                                    <ListBox ItemsSource="{Binding Manifest.Keywords}"
+                                             Name="StackwalkLevelKeywordFilterAllKeywords"
                                              SelectionMode="Multiple"
+                                             Width="Auto"
                                              MaxWidth="600"
                                              MaxHeight="250"
-                                             SelectionChanged="StackwalkLevelKeywordFilterAllKeywords_SelectionChanged"/>
+                                             SelectionChanged="StackwalkLevelKeywordFilterAllKeywords_SelectionChanged"
+                                             Style="{StaticResource ErrorStyle}"
+                                             Tag="{Binding StackwalkFilter.LevelKeywordFilterAllKeywords,Mode=TwoWay,UpdateSourceTrigger=PropertyChanged}"/>
                                 </StackPanel>
                             </StackPanel>
                         </GroupBox>
@@ -189,12 +200,24 @@
                     <StackPanel Orientation="Horizontal">
                         <Label Width="100">Event:</Label>
                         <ListBox ItemsSource="{Binding EventsWithTemplates}" Name="PayloadFilterEvents"
-                                 SelectedItem="{Binding SelectedPredicate.Event}"
+                                 SelectedItem="{Binding SelectedPredicate.Event,Mode=TwoWay,UpdateSourceTrigger=PropertyChanged}"
                                  SelectionMode="Single"
                                  MaxWidth="500"
                                  MaxHeight="250"
-                                 SelectionChanged="PayloadFilterEvents_SelectionChanged"
-                                 IsEnabled="{Binding ElementName=AddPredicateButton,Path=IsEnabled}"/>
+                                 SelectionChanged="PayloadFilterEvents_SelectionChanged">
+                            <ListBox.Style>
+                                <Style TargetType="ListBox" BasedOn="{StaticResource ErrorStyle}">
+                                    <Style.Triggers>
+                                        <MultiDataTrigger>
+                                            <MultiDataTrigger.Conditions>
+                                              <Condition Binding="{Binding SelectedPredicate.IsUpdateMode,Mode=TwoWay,UpdateSourceTrigger=PropertyChanged}" Value="False" />
+                                            </MultiDataTrigger.Conditions>
+                                            <Setter Property="IsEnabled" Value="True"/>
+                                          </MultiDataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </ListBox.Style>
+                        </ListBox>
                         <Separator Width="5" Opacity="0"/>
                         <DataGrid Name="PayloadFilterPredicates"
                                   IsReadOnly="true"
@@ -202,6 +225,7 @@
                                   ItemsSource="{Binding PayloadFilterPredicates}"
                                   SelectionMode="Extended"
                                   MouseDoubleClick="PayloadFilterPredicates_MouseDoubleClick"
+                                  SelectionChanged="PayloadFilterPredicates_SelectionChanged"
                                   MinWidth="450"
                                   MaxHeight="220"
                                   VerticalAlignment="Top">
@@ -215,21 +239,11 @@
                         </DataGrid>
                         <Separator Width="5" Opacity="0"/>
                         <Button Name="RemovePredicateButton"
-                                Click="RemovePredicateButton_Click"
+                                Command="{Binding RemovePredicateCommand}"
+                                CommandParameter="{Binding ElementName=PayloadFilterPredicates,Path=SelectedItems}"
                                 Height="25"
-                                VerticalAlignment="Top">
-                            <Button.Style>
-                                <Style TargetType="Button">
-                                    <Style.Triggers>
-                                        <DataTrigger Binding="{Binding SelectedItems.Count,ElementName=PayloadFilterPredicates}"
-                                                        Value="0">
-                                            <Setter Property="IsEnabled" Value="False" />
-                                        </DataTrigger>
-                                    </Style.Triggers>
-                                </Style>
-                            </Button.Style>
-                            Remove Predicate
-                        </Button>
+                                Content="Remove Predicate"
+                                VerticalAlignment="Top" />
                     </StackPanel>
                     <Separator Opacity="0" Height="5"/>
                     <StackPanel Orientation="Horizontal">
@@ -237,35 +251,25 @@
                         <ComboBox Name="PredicateFieldName" 
                                   Width="150" 
                                   IsSynchronizedWithCurrentItem="false"
-                                  SelectedItem="{Binding SelectedPredicate.Field,UpdateSourceTrigger=Explicit}"/>
+                                  Style="{StaticResource ErrorStyle}"
+                                  SelectedItem="{Binding SelectedPredicate.Field,Mode=TwoWay,UpdateSourceTrigger=PropertyChanged}"/>
                         <Separator Opacity="0" Width="5"/>
                         <Button Name="AddPredicateButton" 
-                                Click="AddPredicateButton_Click">
-                            <Button.Style>
-                                <Style TargetType="Button">
-                                    <Style.Triggers>
-                                        <DataTrigger Binding="{Binding IsUpdateMode}" Value="True">
-                                            <Setter Property="IsEnabled" Value="False"/>
-                                        </DataTrigger>
-                                    </Style.Triggers>
-                                </Style>
-                            </Button.Style>
-                            Add Predicate
-                        </Button>
+                                Content="Add Predicate"
+                                Command="{Binding AddPredicateCommand}"/>
                         <Separator Opacity="0" Width="5"/>
                         <Button Name="UpdatePredicateButton"
-                                Click="UpdatePredicateButton_Click"
-                                IsEnabled="{Binding IsUpdateMode}">Update Predicate</Button>
+                                Content="Update Predicate"
+                                Command="{Binding UpdatePredicateCommand}"/>
                         <Separator Opacity="0" Width="5"/>
                         <Button Name="CancelUpdatePredicateButton"
-                                Click="CancelUpdatePredicateButton_Click"
-                                IsEnabled="False" Visibility="Hidden">
+                                Command="{Binding CancelUpdatePredicateCommand}"
+                                Visibility="Hidden">
                             <Button.Style>
                                 <Style TargetType="Button">
                                     <Style.Triggers>
-                                        <DataTrigger Binding="{Binding IsUpdateMode}" Value="True">
+                                        <DataTrigger Binding="{Binding SelectedPredicate.IsUpdateMode,Mode=TwoWay,UpdateSourceTrigger=PropertyChanged}" Value="True">
                                             <Setter Property="Visibility" Value="Visible"/>
-                                            <Setter Property="IsEnabled" Value="True"/>
                                         </DataTrigger>
                                     </Style.Triggers>
                                 </Style>
@@ -279,17 +283,19 @@
                         <ComboBox Width="150" Name="PredicateOperator"
                                   ItemsSource="{Binding Source={StaticResource PayloadFilterPredicateOperatorsEnum}}"
                                   IsSynchronizedWithCurrentItem="false"
-                                  SelectedItem="{Binding SelectedPredicate.Operator,UpdateSourceTrigger=Explicit}"/>
+                                  Style="{StaticResource ErrorStyle}"
+                                  SelectedItem="{Binding SelectedPredicate.Operator,Mode=TwoWay,UpdateSourceTrigger=PropertyChanged}"/>
                         <Separator Opacity="0" Width="5"/>
                         <CheckBox Name="MatchAnyPredicateCheckbox" Padding="2"
-                                  IsChecked="{Binding MatchAnyPredicate}"/>
+                                  IsChecked="{Binding MatchAnyPredicate,Mode=TwoWay}"/>
                         <TextBlock TextWrapping="Wrap" Text="Match any predicate" />
                     </StackPanel>
                     <Separator Opacity="0" Height="5"/>
                     <StackPanel Orientation="Horizontal">
                         <Label Width="100">Value:</Label>
                         <TextBox Name="PredicateValue" Width="150"
-                                 Text="{Binding SelectedPredicate.FieldValue,UpdateSourceTrigger=Explicit}"/>
+                                 Style="{StaticResource ErrorStyle}"
+                                 Text="{Binding SelectedPredicate.FieldValue,Mode=TwoWay,UpdateSourceTrigger=PropertyChanged}"/>
                     </StackPanel>
                 </StackPanel>
             </TabItem>

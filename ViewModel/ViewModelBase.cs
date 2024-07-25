@@ -127,8 +127,6 @@ namespace EtwPilot.ViewModel
 
         public bool HasErrors => Errors.Any();
 
-        public bool IsValidForm => !Errors.Any();
-
         #endregion
 
         protected virtual void OnErrorsChanged(string propertyName)

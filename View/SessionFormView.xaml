@@ -139,8 +139,14 @@ Mode=TwoWay,Converter={StaticResource StopConditionToBool}, ConverterParameter=T
                     <TextBlock FontWeight="Bold" Text="Provider Filters"/>
                 </GroupBox.Header>
                 <TabControl Name="ProviderFiltersTabControl"
-                            SelectionChanged="ProviderFiltersTabControl_SelectionChanged">
-                </TabControl>
+                            SelectionChanged="ProviderFiltersTabControl_SelectionChanged"/>
+                <!-- note: tab pages are added dynamically by clicking the AddProvider
+                button from the parent form (SessionFormView.xaml). As part of the tab
+                creation process, its Content property is set to the corresponding instance
+                of ProviderFilterFormViewModel, which triggers the DataTemplate defined in
+                the resources of this control (top of this page). This trigger loads the
+                singleton ProviderFilterFormView instance, bound to the view model of the
+                newly created tab. -->
             </GroupBox>
         </ScrollViewer>
     </Grid>

@@ -16,13 +16,15 @@ KIND, either express or implied.  See the License for the
 specific language governing permissions and limitations
 under the License.
 */
-
 using etwlib;
 
 namespace EtwPilot.Model
 {
+    using StopCondition = ViewModel.LiveSessionViewModel.StopCondition;
+
     internal class SessionFormModel
     {
+        public Guid Id { get; set; }
         public string Name { get; set; }
         public bool IsRealTime { get; set; }
         public string LogLocation { get; set; }
@@ -35,6 +37,7 @@ namespace EtwPilot.Model
         {
             EnabledProviders = new List<EnabledProvider>();
             Columns = new Dictionary<string, Type>();
+            Id = Guid.NewGuid();
         }
     }
 }

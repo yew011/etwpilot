@@ -19,9 +19,16 @@ under the License.
 using System.Windows.Media;
 using System.Windows;
 using System.Windows.Controls;
+using Fluent;
+using System.Diagnostics;
+
 
 namespace EtwPilot.Utilities
 {
+    using static TraceLogger;
+    using Ribbon = Fluent.Ribbon;
+    using Button = System.Windows.Controls.Button;
+
     public static class UiHelper
     {
         public static T? GetGlobalResource<T>(string Name)
@@ -159,80 +166,169 @@ namespace EtwPilot.Utilities
             return $"{Prefix}_{Id}".Replace("-", "_");
         }
 
-        public static void FixupDynamicTab(
-            TabControl TabControl,
-            TabItem NewTab,
-            string TabTitle,
+        public static RibbonTabItem? CreateRibbonContextualTab(
+            string TabName,
+            string TabText,
+            string TabStyleTemplateName,
             string TabHeaderTextBlockName,
             string TabCloseButtonName,
-            Action? TabClosedCallback)
+            Action TabClosedCallback)
         {
-            var headerTextbox = FindChild<TextBlock>(NewTab, TabHeaderTextBlockName);
-            var headerCloseButton = FindChild<Button>(NewTab, TabCloseButtonName);
-            if (headerTextbox == null || headerCloseButton == null)
+            var ribbon = FindChild<Ribbon>(
+                    Application.Current.MainWindow, "MainWindowRibbon");
+            if (ribbon == null)
             {
-                return;
+                Trace(TraceLoggerType.UiHelper,
+                      TraceEventType.Error,
+                      $"Unable to locate MainWindowRibbon");
+                return null;
+            }
+            var tab = ribbon.Tabs.Where(tab => tab.Name == TabName).FirstOrDefault();
+            if (tab != null)
+            {
+                tab.IsSelected = true;
+                return tab;
             }
 
             //
-            // Add a handler for this tab close button and assign unique tag to the tab
-            // itself, so we can easily remove it.
+            // Locate the style template to apply to the tab.
             //
-            headerCloseButton.Tag = NewTab.Name;
-            headerCloseButton.Click += (s, e) =>
+            var style = ribbon.FindResource(TabStyleTemplateName) as Style;
+            if (style == null)
             {
-                //
-                // Locate the button, corresponding tab name, and the containing tab control.
-                //
-                var button = s as Button;
-                if (button == null)
-                {
-                    return;
-                }
-                var tabName = button.Tag as string;
-                if (tabName == null)
-                {
-                    return;
-                }
+                Trace(TraceLoggerType.UiHelper,
+                      TraceEventType.Error,
+                      $"Unable to locate tab style {TabStyleTemplateName}");
+                return null;
+            }
 
+            var newTab = new RibbonTabItem
+            {
+                Name = TabName,
+                Style = style,
+                IsSelected = true,
                 //
-                // Find and remove the tab, but keep the VM around in our cache to make
-                // it faster next time.
+                // Important: Ribbon tab controls contain no content.
                 //
-                var existingTabs = TabControl.Items.Cast<TabItem>().ToList();
-                var tab = existingTabs.Where(t => t.Name == tabName).FirstOrDefault();
-                if (tab == null)
-                {
-                    return;
-                }
-                TabControl.Items.Remove(tab);
-                tab.Template = null; // see https://github.com/dotnet/wpf/issues/6440
-                TabClosedCallback?.Invoke();
             };
 
-            var title = $"{TabTitle}";
-            var header = title;
-            if (title.Length > 50)
+            //
+            // Note: we're not done, we need to override parts of the HeaderTemplate for
+            // the tab title and plumb up the "X" close button, but these are UI element
+            // operations that cannot be done until the template is applied. These are
+            // handled from within the tab's Loaded callback.
+            //
+            newTab.Loaded += (s, e) =>
             {
-                int start = title.Length - 15;
-                header = $"{title.Substring(0, 15)}...{title.Substring(start - 1, 15)}";
-            }
+                FixupDynamicTab(ribbon,
+                    newTab,
+                    TabText,
+                    TabHeaderTextBlockName,
+                    TabCloseButtonName,
+                    TabClosedCallback);
+            };
 
-            headerTextbox.Text = header;
+            ribbon.Tabs.Add(newTab);
+            return newTab;
         }
 
-        public static void FixupDynamicRibbonTab(
-            Fluent.Ribbon TabControl,
-            Fluent.RibbonTabItem NewTab,
+        public static bool CreateTabControlContextualTab(
+            TabControl TabControl,
+            dynamic TabContent,
+            string TabName,
+            string TabText,
+            string TabStyleTemplateName,
+            string TabHeaderTextBlockName,
+            string TabCloseButtonName,
+            Action TabClosedCallback)
+        {
+            var existingTabs = TabControl.Items.Cast<TabItem>().ToList();
+            var tab = existingTabs.Where(tab => tab.Name == TabName).FirstOrDefault();
+            if (tab != null)
+            {
+                tab.IsSelected = true;
+                return true;
+            }
+
+            //
+            // Locate the style template to apply to the tab.
+            //
+            var style = TabControl.FindResource(TabStyleTemplateName) as Style;
+            if (style == null)
+            {
+                Trace(TraceLoggerType.UiHelper,
+                      TraceEventType.Error,
+                      $"Unable to locate tab style {TabStyleTemplateName}");
+                return false;
+            }
+
+            var newTab = new TabItem
+            {
+                Name = TabName,
+                Style = style,
+                IsSelected = true,
+                Content = TabContent // likely a viewmodel
+            };
+
+            //
+            // Note: we're not done, we need to override parts of the HeaderTemplate for
+            // the tab title and plumb up the "X" close button, but these are UI element
+            // operations that cannot be done until the template is applied. These are
+            // handled from within the tab's Loaded callback.
+            //
+            newTab.Loaded += (s, e) =>
+            {
+                FixupDynamicTab(TabControl,
+                    newTab,
+                    TabText,
+                    TabHeaderTextBlockName,
+                    TabCloseButtonName,
+                    TabClosedCallback);
+            };
+
+            TabControl.Items.Add(newTab);
+            return true;
+        }
+
+        private static void FixupDynamicTab(
+            dynamic TabControl,
+            dynamic NewTab,
             string TabTitle,
             string TabHeaderTextBlockName,
             string TabCloseButtonName,
             Action? TabClosedCallback)
         {
-            var headerTextbox = FindChild<TextBlock>(NewTab, TabHeaderTextBlockName);
-            var headerCloseButton = FindChild<Button>(NewTab, TabCloseButtonName);
-            if (headerTextbox == null || headerCloseButton == null)
+            //
+            // In order to find the tab's close button and textblock, we need to pick
+            // the correct UI element/control to start searching from. For a ribbon
+            // tab item, it's the ribbon control. For a traditional tabcontrol tab item,
+            // it's the actual tab page (since this routine is called from the tab's
+            // Loaded callback, the controls are instantiated at this point).
+            //
+            DependencyObject control;
+            if (TabControl is Ribbon)
             {
+                control = (Ribbon)TabControl;
+            }
+            else if (TabControl is TabControl)
+            {
+                control = (TabItem)NewTab;
+            }
+            else
+            {
+                Trace(TraceLoggerType.UiHelper,
+                      TraceEventType.Error,
+                      $"Unrecognized control type");
+                return;
+            }
+
+            var headerTextblock = FindChild<TextBlock>(control, TabHeaderTextBlockName);
+            var headerCloseButton = FindChild<Button>(control, TabCloseButtonName);
+            if (headerTextblock == null || headerCloseButton == null)
+            {
+                Trace(TraceLoggerType.UiHelper,
+                      TraceEventType.Error,
+                      $"Unable to locate headertextblock or closeButton");
                 return;
             }
 
@@ -249,25 +345,52 @@ namespace EtwPilot.Utilities
                 var button = s as Button;
                 if (button == null)
                 {
-                    return;
-                }
-                var tabName = button.Tag as string;
-                if (tabName == null)
-                {
+                    Trace(TraceLoggerType.UiHelper,
+                          TraceEventType.Error,
+                          $"Unable to locate button");
                     return;
                 }
 
-                //
-                // Find and remove the tab, but keep the VM around in our cache to make
-                // it faster next time.
-                //
-                var tab = TabControl.Tabs.Where(t => t.Name == tabName).FirstOrDefault();
-                if (tab == null)
+                var tabName = button.Tag as string;
+                if (tabName == null)
                 {
+                    Trace(TraceLoggerType.UiHelper,
+                          TraceEventType.Error,
+                          $"Unable to locate tab name from tag");
                     return;
                 }
-                TabControl.Tabs.Remove(tab);
-                tab.Template = null; // see https://github.com/dotnet/wpf/issues/6440
+
+                if (TabControl is Ribbon)
+                {
+                    var ribbon = TabControl as Ribbon;
+                    var existingTab = ribbon!.Tabs.Where(
+                        tab => tab.Name == tabName).FirstOrDefault();
+                    if (existingTab == null)
+                    {
+                        Trace(TraceLoggerType.UiHelper,
+                              TraceEventType.Error,
+                              $"Tab {tabName} not found!");
+                        return;
+                    }
+
+                    existingTab.Template = null; // see https://github.com/dotnet/wpf/issues/6440
+                    ribbon.Tabs.Remove(existingTab);
+                }
+                else if (TabControl is TabControl)
+                {
+                    var tc = TabControl as TabControl;
+                    var existingTab = tc!.Items.Cast<TabItem>().ToList().Where(
+                        tab => tab.Name == tabName).FirstOrDefault();
+                    if (existingTab == null)
+                    {
+                        Trace(TraceLoggerType.UiHelper,
+                              TraceEventType.Error,
+                              $"Tab {tabName} not found!");
+                        return;
+                    }
+                    existingTab.Template = null; // see https://github.com/dotnet/wpf/issues/6440
+                    tc.Items.Remove(existingTab);
+                }
                 TabClosedCallback?.Invoke();
             };
 
@@ -279,7 +402,7 @@ namespace EtwPilot.Utilities
                 header = $"{title.Substring(0, 15)}...{title.Substring(start - 1, 15)}";
             }
 
-            headerTextbox.Text = header;
+            headerTextblock.Text = header;
         }
     }
 }

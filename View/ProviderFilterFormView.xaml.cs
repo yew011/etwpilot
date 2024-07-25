@@ -22,7 +22,6 @@ using System.Data;
 using System.Diagnostics;
 using System.Windows;
 using System.Windows.Controls;
-using System.Windows.Data;
 
 namespace EtwPilot.View
 {
@@ -85,8 +84,9 @@ namespace EtwPilot.View
             {
                 return;
             }
-            vm.AttributeFilter.Events = AttributeFilterEvents.SelectedItems.Cast<
-                ParsedEtwManifestEvent>().ToList();
+            vm.AttributeFilter.Events.Clear();
+            AttributeFilterEvents.SelectedItems.Cast<
+                ParsedEtwManifestEvent>().ToList().ForEach(e => vm.AttributeFilter.Events.Add(e));
         }
 
         private void AttributeFilterAnyKeywords_SelectionChanged(object sender, SelectionChangedEventArgs e)
@@ -96,8 +96,9 @@ namespace EtwPilot.View
             {
                 return;
             }
-            //vm.AttributeFilter.AnyKeywords = AttributeFilterAnyKeywords.SelectedItems.Cast<
-            //    ParsedEtwManifestField>().ToList();
+            vm.AttributeFilter.AnyKeywords.Clear();
+            AttributeFilterAnyKeywords.SelectedItems.Cast<
+                ParsedEtwManifestField>().ToList().ForEach(k => vm.AttributeFilter.AnyKeywords.Add(k));
         }
 
         private void AttributeFilterAllKeywords_SelectionChanged(object sender, SelectionChangedEventArgs e)
@@ -107,8 +108,9 @@ namespace EtwPilot.View
             {
                 return;
             }
-            //vm.AttributeFilter.AllKeywords = AttributeFilterAllKeywords.SelectedItems.Cast<
-            //    ParsedEtwManifestField>().ToList();
+            vm.AttributeFilter.AllKeywords.Clear();
+            AttributeFilterAllKeywords.SelectedItems.Cast<
+                ParsedEtwManifestField>().ToList().ForEach(k => vm.AttributeFilter.AllKeywords.Add(k));
         }
         #endregion
 
@@ -120,9 +122,9 @@ namespace EtwPilot.View
             {
                 return;
             }
-            
-            vm.StackwalkFilter.Events = StackwalkFilterEvents.SelectedItems.Cast<
-                ParsedEtwManifestEvent>().ToList();
+            vm.StackwalkFilter.Events.Clear();
+            StackwalkFilterEvents.SelectedItems.Cast<
+                ParsedEtwManifestEvent>().ToList().ForEach(e => vm.StackwalkFilter.Events.Add(e));
         }
 
         private void StackwalkLevelKeywordFilterAnyKeywords_SelectionChanged(object sender, SelectionChangedEventArgs e)
@@ -132,9 +134,9 @@ namespace EtwPilot.View
             {
                 return;
             }
-
-            vm.StackwalkFilter.LevelKewyordFilterAnyKeywords = StackwalkLevelKeywordFilterAnyKeywords.SelectedItems.Cast<
-                ParsedEtwManifestField>().ToList();
+            vm.StackwalkFilter.LevelKeywordFilterAnyKeywords.Clear();
+            StackwalkLevelKeywordFilterAnyKeywords.SelectedItems.Cast<
+                ParsedEtwManifestField>().ToList().ForEach(k => vm.StackwalkFilter.LevelKeywordFilterAnyKeywords.Add(k));
         }
 
         private void StackwalkLevelKeywordFilterAllKeywords_SelectionChanged(object sender, SelectionChangedEventArgs e)
@@ -144,9 +146,9 @@ namespace EtwPilot.View
             {
                 return;
             }
-
-            vm.StackwalkFilter.LevelKeywordFilterAllKeywords = StackwalkLevelKeywordFilterAllKeywords.SelectedItems.Cast<
-                ParsedEtwManifestField>().ToList();
+            vm.StackwalkFilter.LevelKeywordFilterAllKeywords.Clear();
+            StackwalkLevelKeywordFilterAllKeywords.SelectedItems.Cast<
+                ParsedEtwManifestField>().ToList().ForEach(k => vm.StackwalkFilter.LevelKeywordFilterAllKeywords.Add(k));
         }
         #endregion
 
@@ -155,9 +157,14 @@ namespace EtwPilot.View
         private void PayloadFilterEvents_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
             var vm = GetVm(sender);
-            var evt = PayloadFilterEvents.SelectedItem as ParsedEtwManifestEvent;
-            if (evt == null || vm == null)
+            if (vm == null)
             {
+                return;
+            }
+            var evt = PayloadFilterEvents.SelectedItem as ParsedEtwManifestEvent;
+            if (evt == null)
+            {
+                PredicateFieldName.ItemsSource = new List<ParsedEtwManifestField>();
                 return;
             }
 
@@ -189,70 +196,20 @@ namespace EtwPilot.View
             {
                 return;
             }
-            vm.IsUpdateMode = true;
             vm.SelectedPredicate = filter;
+            vm.SelectedPredicate.IsUpdateMode = true;
         }
 
-        private void AddPredicateButton_Click(object sender, RoutedEventArgs e)
-        {
-            var vm = GetVm(sender);
-            var evt = PayloadFilterEvents.SelectedItem as ParsedEtwManifestEvent;
-            var field = PredicateFieldName.SelectedItem as ParsedEtwTemplateItem;
-            var op = PredicateOperator.SelectedItem;
-            if (evt == null || vm == null || field == null || op == null)
-            {
-                return;
-            }
-            vm.AddPredicate(evt,
-                field,
-                (NativeTraceConsumer.PAYLOAD_OPERATOR)op,
-                PredicateValue.Text);
-        }
-
-        private void UpdatePredicateButton_Click(object sender, RoutedEventArgs e)
-        {
-            var vm = GetVm(sender);
-            if (vm == null || vm.SelectedPredicate == null)
-            {
-                return;
-            }
-            if (!vm.PayloadFilterPredicates.Contains(vm.SelectedPredicate))
-            {
-                return;
-            }
-            BindingOperations.GetBindingExpression(PredicateFieldName, ComboBox.SelectedItemProperty).UpdateSource();
-            BindingOperations.GetBindingExpression(PredicateOperator, ComboBox.SelectedItemProperty).UpdateSource();
-            BindingOperations.GetBindingExpression(PredicateValue, TextBox.TextProperty).UpdateSource();
-            vm.SelectedPredicate = null;
-            vm.IsUpdateMode = false;
-        }
-
-        private void CancelUpdatePredicateButton_Click(object sender, RoutedEventArgs e)
+        private void PayloadFilterPredicates_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
             var vm = GetVm(sender);
             if (vm == null)
             {
                 return;
             }
-            PayloadFilterPredicates.SelectedItem = null;
-            vm.IsUpdateMode = false;
+            vm.RemovePredicateCommand.NotifyCanExecuteChanged();
         }
 
-        private void RemovePredicateButton_Click(object sender, RoutedEventArgs e)
-        {
-            var vm = GetVm(sender);
-            if (PayloadFilterPredicates.SelectedItems == null || vm == null)
-            {
-                return;
-            }
-            var selected = PayloadFilterPredicates.SelectedItems.Cast<
-                PayloadFilterPredicateViewModel>().ToList();
-            if (selected == null || selected.Count == 0)
-            {
-                return;
-            }
-            selected.ForEach(s => vm.PayloadFilterPredicates.Remove(s));
-        }
         #endregion
 
         private ProviderFilterFormViewModel? GetVm(object sender)

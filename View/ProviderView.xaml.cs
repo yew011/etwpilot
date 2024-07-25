@@ -25,6 +25,8 @@ using System.Windows.Input;
 
 namespace EtwPilot.View
 {
+    using static EtwPilot.Utilities.TraceLogger;
+
     public partial class ProviderView : UserControl
     {
         public ProviderView()
@@ -47,20 +49,6 @@ namespace EtwPilot.View
             }
 
             //
-            // Whenever a provider is double-clicked in our grid, we need to add a new contextual
-            // tab to the MainWindow ribbon control. To do that, we need to find the tab control,
-            // which is a visualtree child of our Fluent:Ribbon.
-            //
-            // This seems hacky, but we're doing it from code-behind so the WPF gods might smile.
-            //
-            var ribbon = UiHelper.FindChild<Fluent.Ribbon>(
-                Application.Current.MainWindow, "MainWindowRibbon");
-            if (ribbon == null)
-            {
-                return;
-            }
-
-            //
             // If the provider has never been double-clicked, parse and load its manifest.
             // If it has been accessed before, pull the VM from the cache. Each entry in
             // the cache points to a ProviderManifestViewModel.
@@ -75,28 +63,43 @@ namespace EtwPilot.View
             }
 
             //
-            // If the tab already exists for this manifest, just select the tab, otherwise
-            // we have to create the tab now.
+            // Create the tab if it doesn't exist; otherwise simply switch to it.
             //
             var tabName = UiHelper.GetUniqueTabName(provider.Id, "Manifest");
-            var tab = ribbon.Tabs.Where(tab => tab.Name == tabName).FirstOrDefault();
-            if (tab == null)
+            Action tabClosedCallback = () =>
             {
-                if (!CreateNewManifestTab(ribbon, tabName, provider))
+                var vm = DataContext as MainWindowViewModel;
+                if (vm == null)
                 {
                     return;
                 }
+                var ribbon = UiHelper.FindChild<Fluent.Ribbon>(
+                    Application.Current.MainWindow, "MainWindowRibbon");
+                if (ribbon == null)
+                {
+                    return;
+                }
+                if (ribbon.Tabs.Count == 3)
+                {
+                    vm.ProviderManifestVisible = Visibility.Hidden;
+                    ribbon.SelectedTabIndex = 0;
+                    ProvidersDataGrid.SelectedItems.Clear();
+                }
+            };
 
-                //
-                // Note: we're not done, we need to override parts of the HeaderTemplate for
-                // the tab title and plumb up the "X" close button, but these are UI element
-                // operations that cannot be done until the template is applied. These are
-                // handled from within the tab's Loaded callback.
-                //
-            }
-            else
+            var tab = UiHelper.CreateRibbonContextualTab(
+                    tabName,
+                    provider.Name!,
+                    "ProviderContextTabStyle",
+                    "ProviderContextTabText",
+                    "ProviderContextTabCloseButton",
+                    tabClosedCallback);
+            if (tab == null)
             {
-                tab.IsSelected = true;
+                Trace(TraceLoggerType.MainWindow,
+                      System.Diagnostics.TraceEventType.Error,
+                      $"Unable to create contextual tab {tabName}");
+                return;
             }
 
             //
@@ -125,52 +128,6 @@ namespace EtwPilot.View
 
             vm.m_ProviderViewModel.SelectedProviders =
                 ProvidersDataGrid.SelectedItems.Cast<ParsedEtwProvider>().ToList();
-        }
-
-        private bool CreateNewManifestTab(Fluent.Ribbon Ribbon, string TabName, ParsedEtwProvider Provider)
-        {
-            var style = Ribbon.FindResource("ProviderContextTabStyle") as Style;
-            if (style == null)
-            {
-                return false;
-            }
-            var newTab = new Fluent.RibbonTabItem
-            {
-                Name = TabName,
-                Style = style,
-                IsSelected = true,
-            };
-
-            newTab.Loaded += (s, e) =>
-            {
-                var ribbon = UiHelper.FindChild<Fluent.Ribbon>(
-                                Application.Current.MainWindow, "MainWindowRibbon");
-                if (ribbon == null)
-                {
-                    return;
-                }
-                UiHelper.FixupDynamicRibbonTab(ribbon,
-                    newTab,
-                    Provider.Name!,
-                    "ProviderContextTabText",
-                    "ProviderContextTabCloseButton",
-                    () =>
-                    {
-                        var vm = DataContext as MainWindowViewModel;
-                        if (vm == null)
-                        {
-                            return;
-                        }
-                        if (ribbon.Tabs.Count == 3)
-                        {
-                            vm.ProviderManifestVisible = Visibility.Hidden;
-                            ribbon.SelectedTabIndex = 0;
-                            ProvidersDataGrid.SelectedItems.Clear();
-                        }
-                    });
-            };
-            Ribbon.Tabs.Add(newTab);
-            return true;
         }
     }
 }

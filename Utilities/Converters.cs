@@ -16,12 +16,14 @@ KIND, either express or implied.  See the License for the
 specific language governing permissions and limitations
 under the License.
 */
-using EtwPilot.Model;
 using System.Windows;
 using System.Windows.Data;
+using etwlib;
 
 namespace EtwPilot.Utilities.Converters
 {
+    using StopCondition = ViewModel.LiveSessionViewModel.StopCondition;
+
     public class IsGreaterThanZero :IValueConverter
     {
         public object Convert(object value, Type targetType, object parameter, System.Globalization.CultureInfo culture)
@@ -45,6 +47,34 @@ namespace EtwPilot.Utilities.Converters
         {
             var val = System.Convert.ToInt64(value);
             return $"0x{val:X}";
+        }
+
+        public object ConvertBack(object value, Type targetType, object parameter, System.Globalization.CultureInfo culture)
+        {
+            throw new NotImplementedException();
+        }
+    }
+
+    public class MillisecondToSecond : IValueConverter
+    {
+        public object Convert(object value, Type targetType, object parameter, System.Globalization.CultureInfo culture)
+        {
+            decimal d = (long)value;
+            var elapsedSec = (int)Math.Floor(d / 1000);
+            return $"{elapsedSec}s";
+        }
+
+        public object ConvertBack(object value, Type targetType, object parameter, System.Globalization.CultureInfo culture)
+        {
+            throw new NotImplementedException();
+        }
+    }
+
+    public class ByteSizeToFriendlyString : IValueConverter
+    {
+        public object Convert(object value, Type targetType, object parameter, System.Globalization.CultureInfo culture)
+        {
+            return FriendlyByteSize.Format(value);
         }
 
         public object ConvertBack(object value, Type targetType, object parameter, System.Globalization.CultureInfo culture)
@@ -94,6 +124,34 @@ namespace EtwPilot.Utilities.Converters
         }
     }
 
+    public class ParsedEtwManifestEventToString : IValueConverter
+    {
+        public object Convert(object value, Type targetType, object parameter, System.Globalization.CultureInfo culture)
+        {
+            var evt = value as ParsedEtwManifestEvent;
+            if (evt == null)
+            {
+                return Binding.DoNothing;
+            }
+            return evt.ToString();
+        }
+
+        public object ConvertBack(object value, Type targetType, object parameter, System.Globalization.CultureInfo culture)
+        {
+            var str = value as string;
+            if (string.IsNullOrEmpty(str))
+            {
+                return Binding.DoNothing;
+            }
+            var obj = ParsedEtwManifestEvent.FromString(str);
+            if (obj == null)
+            {
+                return Binding.DoNothing;
+            }
+            return obj;
+        }
+    }
+
     public class IntegerToString : IValueConverter
     {
         public object Convert(object value, Type targetType, object parameter, System.Globalization.CultureInfo culture)
@@ -139,6 +197,37 @@ namespace EtwPilot.Utilities.Converters
         {
             var result = bool.Parse((string)parameter);
             return result;
+        }
+    }
+
+    internal static class FriendlyByteSize
+    {
+        static readonly string[] SizeSuffixes = { "B", "KB", "MB", "GB" };
+
+        public static string Format(dynamic Value, int DecimalPlaces = 2)
+        {
+            if (!decimal.TryParse(Value.ToString(), out decimal value))
+            {
+                return "NaN!";
+            }
+
+            if (value > int.MaxValue)
+            {
+                return "NaN!";
+            }
+            else if (value < 0)
+            {
+                return "-" + Format(-value, DecimalPlaces);
+            }
+
+            int i = 0;
+            while (Math.Round(value, DecimalPlaces) >= 1000)
+            {
+                value /= 1024;
+                i++;
+            }
+
+            return string.Format("{0:n" + DecimalPlaces + "} {1}", value, SizeSuffixes[i]);
         }
     }
 }

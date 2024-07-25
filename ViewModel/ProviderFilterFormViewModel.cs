@@ -16,11 +16,13 @@ KIND, either express or implied.  See the License for the
 specific language governing permissions and limitations
 under the License.
 */
+using CommunityToolkit.Mvvm.Input;
 using etwlib;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Data;
 using System.Diagnostics;
+using static etwlib.NativeTraceConsumer;
 
 namespace EtwPilot.ViewModel
 {
@@ -33,6 +35,7 @@ namespace EtwPilot.ViewModel
         public List<ParsedEtwManifestEvent> EventsWithTemplates { get; set; }
         public bool MatchAnyPredicate {get; set; }
 
+        #region observable properties
         private ObservableCollection<PayloadFilterPredicateViewModel> _PayloadFilterPredicates;
         public ObservableCollection<PayloadFilterPredicateViewModel> PayloadFilterPredicates
         {
@@ -47,20 +50,6 @@ namespace EtwPilot.ViewModel
             }
         }
 
-        private bool _IsUpdateMode;
-        public bool IsUpdateMode
-        {
-            get => _IsUpdateMode;
-            set
-            {
-                if (_IsUpdateMode != value)
-                {
-                    _IsUpdateMode = value;
-                    OnPropertyChanged("IsUpdateMode");
-                }
-            }
-        }
-
         private PayloadFilterPredicateViewModel _SelectedPredicate;
         public PayloadFilterPredicateViewModel SelectedPredicate
         {
@@ -71,9 +60,31 @@ namespace EtwPilot.ViewModel
                 {
                     _SelectedPredicate = value;
                     OnPropertyChanged("SelectedPredicate");
+
+                    //
+                    // Subscribe to property change events in selected predicate form, so when the form becomes valid,
+                    // the control buttons and associated commands are available.
+                    //
+                    _SelectedPredicate.PropertyChanged += (object? sender, PropertyChangedEventArgs Args) =>
+                    {
+                        AddPredicateCommand.NotifyCanExecuteChanged();
+                        UpdatePredicateCommand.NotifyCanExecuteChanged();
+                        CancelUpdatePredicateCommand.NotifyCanExecuteChanged();
+                        RemovePredicateCommand.NotifyCanExecuteChanged();
+                    };
                 }
             }
         }
+        #endregion
+
+        #region commands
+
+        public AsyncRelayCommand AddPredicateCommand { get; set; }
+        public AsyncRelayCommand UpdatePredicateCommand { get; set; }
+        public AsyncRelayCommand CancelUpdatePredicateCommand { get; set; }
+        public AsyncRelayCommand<IEnumerable<object>?> RemovePredicateCommand { get; set; }
+
+        #endregion
 
         public ProviderFilterFormViewModel(ParsedEtwManifest Manifest2)
         {
@@ -85,28 +96,48 @@ namespace EtwPilot.ViewModel
             EventsWithTemplates = new List<ParsedEtwManifestEvent>();
             EventsWithTemplates.AddRange(Manifest2.Events.Where(
                 e => !string.IsNullOrEmpty(e.Template)));
+            SelectedPredicate = new PayloadFilterPredicateViewModel();
+            AddPredicateCommand = new AsyncRelayCommand(
+                Command_AddPredicate, () => { return !SelectedPredicate.HasErrors && !SelectedPredicate.IsUpdateMode; });
+            UpdatePredicateCommand = new AsyncRelayCommand(
+                Command_UpdatePredicate, () => { return !SelectedPredicate.HasErrors && SelectedPredicate.IsUpdateMode; });
+            CancelUpdatePredicateCommand = new AsyncRelayCommand(
+                Command_CancelUpdatePredicate, () => { return !SelectedPredicate.HasErrors && SelectedPredicate.IsUpdateMode; });
+            RemovePredicateCommand = new AsyncRelayCommand<IEnumerable<object>?>(
+                Command_RemovePredicate, (predicates) => { return predicates != null && predicates.Count() > 0; });
         }
 
-        public void AddPredicate(ParsedEtwManifestEvent Event,
-            ParsedEtwTemplateItem Field,
-            NativeTraceConsumer.PAYLOAD_OPERATOR Operator,
-            string Value)
+        private async Task Command_AddPredicate()
         {
-            var predicate = new PayloadFilterPredicateViewModel
-            {
-                Event = Event,
-                Field = Field,
-                Operator = Operator,
-                FieldValue = Value
-            };
-            //
-            // Bubble up all errors
-            //
-            predicate.ErrorsChanged += delegate (object? sender, DataErrorsChangedEventArgs args)
-            {
-                OnErrorsChanged(args.PropertyName!);
-            };
-            PayloadFilterPredicates.Add(predicate);
+            Debug.Assert(!SelectedPredicate.HasErrors);
+            Debug.Assert(SelectedPredicate.Event != null);
+            Debug.Assert(SelectedPredicate.Operator != null);
+            Debug.Assert(SelectedPredicate.Field != null);
+            Debug.Assert(SelectedPredicate.FieldValue != null);
+            PayloadFilterPredicates.Add(SelectedPredicate);
+            SelectedPredicate = new PayloadFilterPredicateViewModel();
+        }
+
+        private async Task Command_UpdatePredicate()
+        {
+            Debug.Assert(SelectedPredicate.IsUpdateMode);
+            SelectedPredicate.IsUpdateMode = false;
+            SelectedPredicate = new PayloadFilterPredicateViewModel();
+        }
+
+        private async Task Command_CancelUpdatePredicate()
+        {
+            Debug.Assert(SelectedPredicate.IsUpdateMode);
+            SelectedPredicate.IsUpdateMode = false;
+            SelectedPredicate = new PayloadFilterPredicateViewModel();
+        }
+
+        private async Task Command_RemovePredicate(IEnumerable<object> Predicates)
+        {
+            Debug.Assert(Predicates != null && Predicates.Count() > 0);
+            var items = Predicates.OfType<PayloadFilterPredicateViewModel>().ToList();
+            items.ForEach(s => PayloadFilterPredicates.Remove(s));
+            SelectedPredicate = new PayloadFilterPredicateViewModel();
         }
     }
 
@@ -144,29 +175,68 @@ namespace EtwPilot.ViewModel
     {
         public AttributeFilterViewModel()
         {
+            Events = new ObservableCollection<ParsedEtwManifestEvent>();
+            Events.CollectionChanged += (sender, args) =>
+            {
+                switch (args.Action)
+                {
+                    case System.Collections.Specialized.NotifyCollectionChangedAction.Add:
+                    case System.Collections.Specialized.NotifyCollectionChangedAction.Reset:
+                    case System.Collections.Specialized.NotifyCollectionChangedAction.Remove:
+                        {
+                            ValidateEvents(nameof(Events));
+                            break;
+                        }
+                    default:
+                        {
+                            break;
+                        }
+                }
+            };
 
+            AnyKeywords = new ObservableCollection<ParsedEtwManifestField>();
+            AnyKeywords.CollectionChanged += (sender, args) =>
+            {
+                switch (args.Action)
+                {
+                    case System.Collections.Specialized.NotifyCollectionChangedAction.Add:
+                    case System.Collections.Specialized.NotifyCollectionChangedAction.Reset:
+                    case System.Collections.Specialized.NotifyCollectionChangedAction.Remove:
+                        {
+                            break;
+                        }
+                    default:
+                        {
+                            break;
+                        }
+                }
+            };
+
+            AllKeywords = new ObservableCollection<ParsedEtwManifestField>();
+            AllKeywords.CollectionChanged += (sender, args) =>
+            {
+                switch (args.Action)
+                {
+                    case System.Collections.Specialized.NotifyCollectionChangedAction.Add:
+                    case System.Collections.Specialized.NotifyCollectionChangedAction.Reset:
+                    case System.Collections.Specialized.NotifyCollectionChangedAction.Remove:
+                        {
+                            break;
+                        }
+                    default:
+                        {
+                            break;
+                        }
+                }
+            };
         }
 
-        private List<ParsedEtwManifestEvent> _Events;
-        public List<ParsedEtwManifestEvent> Events
+        private ObservableCollection<ParsedEtwManifestEvent> _Events;
+        public ObservableCollection<ParsedEtwManifestEvent> Events
         {
             get => _Events;
             set
             {
-                ClearErrors(nameof(Events));
-                if (value != null && value.Count > 0)
-                {
-                    if (IsEnable == null)
-                    {
-                        AddError(nameof(Events), $"Select enable or disable.");
-                    }
-                }
-                else if (IsEnable.HasValue)
-                {
-                    AddError(nameof(Events),
-                        $"When enable/disable is selected, select at least one event.");
-                }
-
                 if (_Events != value)
                 {
                     _Events = value;
@@ -181,16 +251,9 @@ namespace EtwPilot.ViewModel
             get => _IsEnable;
             set
             {
-                ClearErrors(nameof(IsEnable));
-                if (Events == null || Events.Count == 0)
-                {
-                    AddError(nameof(IsEnable), $"Select at least one event.");
-                }
-                if (_IsEnable != value)
-                {
-                    _IsEnable = value;
-                    OnPropertyChanged("IsEnable");
-                }
+                _IsEnable = value;
+                ValidateEvents(nameof(IsEnable));
+                OnPropertyChanged("IsEnable");
             }
         }
 
@@ -208,9 +271,8 @@ namespace EtwPilot.ViewModel
             }
         }
 
-
-        private ObservableCollection<ParsedEtwManifestField>? _AnyKeywords;
-        public ObservableCollection<ParsedEtwManifestField>? AnyKeywords
+        private ObservableCollection<ParsedEtwManifestField> _AnyKeywords;
+        public ObservableCollection<ParsedEtwManifestField> AnyKeywords
         {
             get => _AnyKeywords;
             set
@@ -223,8 +285,8 @@ namespace EtwPilot.ViewModel
             }
         }
 
-        private ObservableCollection<ParsedEtwManifestField>? _AllKeywords;
-        public ObservableCollection<ParsedEtwManifestField>? AllKeywords
+        private ObservableCollection<ParsedEtwManifestField> _AllKeywords;
+        public ObservableCollection<ParsedEtwManifestField> AllKeywords
         {
             get => _AllKeywords;
             set
@@ -236,31 +298,298 @@ namespace EtwPilot.ViewModel
                 }
             }
         }
+
+        private void ValidateEvents(string PropertyName)
+        {
+            ClearErrors(nameof(Events));
+            ClearErrors(nameof(IsEnable));
+            if (Events.Count > 0)
+            {
+                if (IsEnable == null || !IsEnable.HasValue)
+                {
+                    AddError(PropertyName, $"Select enable or disable.");
+                }
+            }
+            else if (IsEnable != null && IsEnable.HasValue)
+            {
+                AddError(PropertyName,
+                    $"When enable/disable is selected, select at least one event.");
+            }
+        }
     }
 
     internal class StackwalkFilterViewModel : ViewModelBase
     {
         public StackwalkFilterViewModel() 
         {
-            Events = new List<ParsedEtwManifestEvent>();
-            LevelKewyordFilterAnyKeywords = new List<ParsedEtwManifestField>();
-            LevelKeywordFilterAllKeywords = new List<ParsedEtwManifestField>();
+            Events = new ObservableCollection<ParsedEtwManifestEvent>();
+            Events.CollectionChanged += (sender, args) =>
+            {
+                switch (args.Action)
+                {
+                    case System.Collections.Specialized.NotifyCollectionChangedAction.Add:
+                    case System.Collections.Specialized.NotifyCollectionChangedAction.Reset:
+                    case System.Collections.Specialized.NotifyCollectionChangedAction.Remove:
+                        {
+                            ValidateEvents(nameof(Events));
+                            break;
+                        }
+                    default:
+                        {
+                            break;
+                        }
+                }
+            };
+
+            LevelKeywordFilterAnyKeywords = new ObservableCollection<ParsedEtwManifestField>();
+            LevelKeywordFilterAnyKeywords.CollectionChanged += (sender, args) =>
+            {
+                switch (args.Action)
+                {
+                    case System.Collections.Specialized.NotifyCollectionChangedAction.Add:
+                    case System.Collections.Specialized.NotifyCollectionChangedAction.Reset:
+                    case System.Collections.Specialized.NotifyCollectionChangedAction.Remove:
+                        {
+                            break;
+                        }
+                    default:
+                        {
+                            break;
+                        }
+                }
+            };
+
+            LevelKeywordFilterAllKeywords = new ObservableCollection<ParsedEtwManifestField>();
+            LevelKeywordFilterAllKeywords.CollectionChanged += (sender, args) =>
+            {
+                switch (args.Action)
+                {
+                    case System.Collections.Specialized.NotifyCollectionChangedAction.Add:
+                    case System.Collections.Specialized.NotifyCollectionChangedAction.Reset:
+                    case System.Collections.Specialized.NotifyCollectionChangedAction.Remove:
+                        {
+                            break;
+                        }
+                    default:
+                        {
+                            break;
+                        }
+                }
+            };
         }
-        public List<ParsedEtwManifestEvent> Events { get; set; }
-        public bool IsEnable { get; set; }
-        public SourceLevels LevelKeywordFilterLevel { get; set; }
-        public bool LevelKeywordFilterIsEnable { get; set; }
-        public List<ParsedEtwManifestField> LevelKewyordFilterAnyKeywords { get; set; }
-        public List<ParsedEtwManifestField> LevelKeywordFilterAllKeywords { get; set; }
+
+        private ObservableCollection<ParsedEtwManifestEvent> _Events;
+        public ObservableCollection<ParsedEtwManifestEvent> Events
+        {
+            get => _Events;
+            set
+            {
+                if (_Events != value)
+                {
+                    _Events = value;
+                    OnPropertyChanged("Events");
+                }
+            }
+        }
+
+        private bool? _IsEnable;
+        public bool? IsEnable
+        {
+            get => _IsEnable;
+            set
+            {
+                _IsEnable = value;
+                ValidateEvents(nameof(IsEnable));
+                OnPropertyChanged("IsEnable");
+            }
+        }
+
+        private SourceLevels _LevelKeywordFilterLevel;
+        public SourceLevels LevelKeywordFilterLevel
+        {
+            get => _LevelKeywordFilterLevel;
+            set
+            {
+                _LevelKeywordFilterLevel = value;
+                ValidateLevel(nameof(LevelKeywordFilterLevel));
+                OnPropertyChanged("LevelKeywordFilterLevel");
+            }
+        }
+
+        private bool? _LevelKeywordFilterIsEnable;
+        public bool? LevelKeywordFilterIsEnable
+        {
+            get => _LevelKeywordFilterIsEnable;
+            set
+            {
+                _LevelKeywordFilterIsEnable = value;
+                ValidateLevel(nameof(LevelKeywordFilterIsEnable));
+                OnPropertyChanged("LevelKeywordFilterIsEnable");
+            }
+        }
+
+        private ObservableCollection<ParsedEtwManifestField> _LevelKeywordFilterAnyKeywords;
+        public ObservableCollection<ParsedEtwManifestField> LevelKeywordFilterAnyKeywords
+        {
+            get => _LevelKeywordFilterAnyKeywords;
+            set
+            {
+                if (_LevelKeywordFilterAnyKeywords != value)
+                {
+                    _LevelKeywordFilterAnyKeywords = value;
+                    OnPropertyChanged("LevelKeywordFilterAnyKeywords");
+                }
+            }
+        }
+
+        private ObservableCollection<ParsedEtwManifestField> _LevelKeywordFilterAllKeywords;
+        public ObservableCollection<ParsedEtwManifestField> LevelKeywordFilterAllKeywords
+        {
+            get => _LevelKeywordFilterAllKeywords;
+            set
+            {
+                if (_LevelKeywordFilterAllKeywords != value)
+                {
+                    _LevelKeywordFilterAllKeywords = value;
+                    OnPropertyChanged("LevelKeywordFilterAllKeywords");
+                }
+            }
+        }
+
+        private void ValidateEvents(string PropertyName)
+        {
+            ClearErrors(nameof(Events));
+            ClearErrors(nameof(IsEnable));
+            if (Events.Count > 0)
+            {
+                if (IsEnable == null || !IsEnable.HasValue)
+                {
+                    AddError(PropertyName, $"Select enable or disable.");
+                }
+            }
+            else if (IsEnable != null && IsEnable.HasValue)
+            {
+                AddError(PropertyName,
+                    $"When enable/disable is selected, select at least one event.");
+            }
+        }
+
+        private void ValidateLevel(string PropertyName)
+        {
+            ClearErrors(nameof(LevelKeywordFilterLevel));
+            ClearErrors(nameof(LevelKeywordFilterIsEnable));
+            if (LevelKeywordFilterLevel != SourceLevels.Off)
+            {
+                if (LevelKeywordFilterIsEnable == null || !LevelKeywordFilterIsEnable.HasValue)
+                {
+                    AddError(PropertyName, $"Select enable or disable.");
+                }
+            }
+            else if (LevelKeywordFilterIsEnable != null && LevelKeywordFilterIsEnable.HasValue)
+            {
+                AddError(PropertyName,
+                    $"When enable/disable is selected, select a level.");
+            }
+        }
     }
 
     internal class PayloadFilterPredicateViewModel : ViewModelBase
     {
-        public PayloadFilterPredicateViewModel() {}
-        public ParsedEtwManifestEvent? Event { get; set; }
-        public ParsedEtwTemplateItem? Field { get; set; }
-        public NativeTraceConsumer.PAYLOAD_OPERATOR Operator { get; set; }
-        public string? FieldValue { get; set; }
+        public PayloadFilterPredicateViewModel() {
+            Event = null; // force initial error state
+        }
+
+        private ParsedEtwManifestEvent _Event;
+        public ParsedEtwManifestEvent Event
+        {
+            get => _Event;
+            set
+            {
+                _Event = value;
+                ValidatePredicate();
+                OnPropertyChanged("Event");
+            }
+        }
+
+        private ParsedEtwTemplateItem _Field;
+        public ParsedEtwTemplateItem Field
+        {
+            get => _Field;
+            set
+            {
+                _Field = value;
+                ValidatePredicate();
+                OnPropertyChanged("Field");
+            }
+        }
+
+        private PAYLOAD_OPERATOR? _Operator;
+        public PAYLOAD_OPERATOR? Operator
+        {
+            get => _Operator;
+            set
+            {
+                _Operator = value;
+                ValidatePredicate();
+                OnPropertyChanged("Operator");
+            }
+        }
+
+        private string? _FieldValue;
+        public string? FieldValue
+        {
+            get => _FieldValue;
+            set
+            {
+                _FieldValue = value;
+                ValidatePredicate();
+                OnPropertyChanged("FieldValue");
+            }
+        }
+
+        private bool _IsUpdateMode;
+        public bool IsUpdateMode
+        {
+            get => _IsUpdateMode;
+            set
+            {
+                if (_IsUpdateMode != value)
+                {
+                    _IsUpdateMode = value;
+                    OnPropertyChanged("IsUpdateMode");
+                }
+            }
+        }
+
+        private void ValidatePredicate()
+        {
+            ClearErrors(nameof(Field));
+            ClearErrors(nameof(FieldValue));
+            ClearErrors(nameof(Operator));
+            if (Field == null)
+            {
+                AddError(nameof(Field), $"Select a field");
+                return;
+            }
+            if (Operator == null || !Operator.HasValue)
+            {
+                AddError(nameof(Operator), $"Select an operator");
+                return;
+            }
+            if (string.IsNullOrEmpty(FieldValue))
+            {
+                AddError(nameof(FieldValue), $"Specify a field value");
+                return;
+            }
+            try
+            {
+                PayloadFilter.ValidatePredicate(Field.Name, Operator.Value, FieldValue);
+            }
+            catch (Exception ex)
+            {
+                AddError(nameof(Operator), ex.Message);
+            }
+        }
     }
 
 }

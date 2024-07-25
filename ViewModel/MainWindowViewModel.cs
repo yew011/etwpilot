@@ -28,6 +28,8 @@ using MessageBox = System.Windows.MessageBox;
 using System.Windows.Forms;
 using System.Text;
 using EtwPilot.Utilities;
+using System.Drawing;
+using System.Windows.Media.Imaging;
 
 namespace EtwPilot.ViewModel
 {
@@ -143,16 +145,30 @@ namespace EtwPilot.ViewModel
             }
         }
 
-        private Visibility _SessionsVisible;
-        public Visibility SessionsVisible
+        private Visibility _LiveSessionsVisible;
+        public Visibility LiveSessionsVisible
         {
-            get => _SessionsVisible;
+            get => _LiveSessionsVisible;
             set
             {
-                if (_SessionsVisible != value)
+                if (_LiveSessionsVisible != value)
                 {
-                    _SessionsVisible = value;
-                    OnPropertyChanged("SessionsVisible");
+                    _LiveSessionsVisible = value;
+                    OnPropertyChanged("LiveSessionsVisible");
+                }
+            }
+        }
+
+        private Visibility _CancelCommandButtonVisibility;
+        public Visibility CancelCommandButtonVisibility
+        {
+            get => _CancelCommandButtonVisibility;
+            set
+            {
+                if (_CancelCommandButtonVisibility != value)
+                {
+                    _CancelCommandButtonVisibility = value;
+                    OnPropertyChanged("CancelCommandButtonVisibility");
                 }
             }
         }
@@ -181,7 +197,7 @@ namespace EtwPilot.ViewModel
 
         #endregion
 
-        private AsyncRelayCommand m_CurrentCommand = null;
+        public AsyncRelayCommand m_CurrentCommand { get; private set; }
 
         private int m_RibbonTabControlSelectedIndex;
         public int RibbonTabControlSelectedIndex
@@ -268,6 +284,8 @@ namespace EtwPilot.ViewModel
             //
             CurrentViewModel = m_ProviderViewModel;
             ProviderManifestVisible = Visibility.Hidden;
+            LiveSessionsVisible = Visibility.Hidden;
+            CancelCommandButtonVisibility = Visibility.Hidden;
 
             //
             // Initialize traces and set trace levels
@@ -356,16 +374,109 @@ namespace EtwPilot.ViewModel
 
         private async Task Command_StartSession()
         {
+            RibbonTabControlSelectedIndex = 1;
+
+            //
+            // Load the form data into a model object
+            //
             var model = m_SessionFormViewModel.GetFormData();
             if (model == null)
             {
                 return;
             }
+
+            //
+            // Create a new live session tab
+            //
+            var tabName = UiHelper.GetUniqueTabName(model.Id, "LiveSession");
+            var vm = m_SessionViewModel.CreateLiveSession(model, tabName);
+            Action tabClosedCallback = async () =>
+            {
+                //
+                // If the last tab was closed, the ribbon's tabcontrol automatically
+                // switches to the prior tab, which invokes Command_SwitchCurrentViewModel,
+                // which could restore another view's VM. Set it back manually now for
+                // the stop command.
+                //
+                CurrentViewModel = vm;
+
+                //
+                // Stop the live session and cleanup
+                //
+                await Command_StopSession();
+
+                //
+                // Hide the context tab group if no more tabs available
+                //
+                var ribbon = UiHelper.FindChild<Fluent.Ribbon>(
+                    System.Windows.Application.Current.MainWindow, "MainWindowRibbon");
+                if (ribbon == null)
+                {
+                    return;
+                }
+                if (ribbon.Tabs.Count == 3)
+                {
+                    LiveSessionsVisible = Visibility.Hidden;
+                    ribbon.SelectedTabIndex = 1;
+                }
+            };
+            //
+            // Create a cache entry for the new live session and its tab.
+            //
+            var tab = UiHelper.CreateRibbonContextualTab(
+                    tabName,
+                    model.Name,
+                    "SessionContextTabStyle",
+                    "SessionContextTabText",
+                    "SessionContextTabCloseButton",
+                    tabClosedCallback);
+            if (tab == null)
+            {
+                Trace(TraceLoggerType.MainWindow,
+                      TraceEventType.Error,
+                      $"Unable to create contextual tab {tabName}");
+                return;
+            }
+
+            //
+            // Add a stop button to the contextual tab, if it's a new tab.
+            //
+            if (!tab.Groups.Any(g => g.Name == "ControlGroup"))
+            {
+                var group = new RibbonGroupBox
+                {
+                    Name = "ControlGroup"
+                };
+                var icon = UiHelper.GetGlobalResource<BitmapImage>("stop");
+                group.Items.Add(new Fluent.Button()
+                {
+                    Name = "StopTraceButton",
+                    Icon = icon,
+                    Command = StopSessionCommand,
+                    Header = "Stop"
+                });
+                tab.Groups.Add(group);
+            }
+
+            //
+            // Switch to and start the live session.
+            //
+            CurrentViewModel = vm;
+            m_CurrentCommand = StartSessionCommand;
+            await vm.Start();
+            m_ProgressState.FinalizeProgress();
         }
 
         private async Task Command_StopSession()
         {
-            
+            var vm = CurrentViewModel as LiveSessionViewModel;
+            if (vm == null)
+            {
+                return;
+            }
+            m_ProgressState.UpdateProgressMessage($"Live session stop requested...");
+            await vm.Stop();
+            m_ProgressState.UpdateProgressMessage($"Live session stopped");
         }
 
         private async Task Command_ExportProviders(ExportFormat Format)
@@ -440,6 +551,7 @@ namespace EtwPilot.ViewModel
             }
 
             m_CurrentCommand = DumpProviderManifestsCommand;
+            CancelCommandButtonVisibility = Visibility.Visible;
             m_ProgressState.InitializeProgress(providers.Count);
 
             var numErrors = 0;
@@ -449,6 +561,7 @@ namespace EtwPilot.ViewModel
                 if (Token.IsCancellationRequested)
                 {
                     m_ProgressState.UpdateProgressMessage($"Operation cancelled");
+                    CancelCommandButtonVisibility = Visibility.Hidden;
                     m_ProgressState.FinalizeProgress();
                     return;
                 }
@@ -466,7 +579,8 @@ namespace EtwPilot.ViewModel
                 File.WriteAllText(target, manifest.SelectedProviderManifest.ToXml());
                 m_ProgressState.UpdateProgressValue();
             }
-            m_ProgressState.UpdateProgressMessage($"Exported {providers.Count} manifests to {root} ({numErrors} errors)");            
+            m_ProgressState.UpdateProgressMessage($"Exported {providers.Count} manifests to {root} ({numErrors} errors)");
+            CancelCommandButtonVisibility = Visibility.Hidden;
             m_ProgressState.FinalizeProgress();
         }
 
@@ -518,6 +632,7 @@ namespace EtwPilot.ViewModel
             {
                 case "ProvidersTab":
                     {
+                        LiveSessionsVisible = Visibility.Hidden;
                         if (m_ProviderViewModel.Providers.Count == 0)
                         {
                             await Command_LoadProviders();
@@ -543,30 +658,43 @@ namespace EtwPilot.ViewModel
                         {
                             CurrentViewModel = m_SessionViewModel;
                         }
+                        if (m_SessionViewModel.HasLiveSessions())
+                        {
+                            LiveSessionsVisible = Visibility.Visible;
+                        }
+                        StartSessionCommand.NotifyCanExecuteChanged();
                         break;
                     }
                 case "InsightsTab":
                     {
+                        LiveSessionsVisible = Visibility.Hidden;
                         ProviderManifestVisible = Visibility.Hidden;
                         CurrentViewModel = null;
                         break;
                     }
                 default:
                     {
+                        LiveSessionsVisible = Visibility.Hidden;
                         ProviderManifestVisible = Visibility.Hidden;
                         break;
                     }
             }
 
             //
-            // For provider manifest contextual tabs, we want to simply
-            // retrieve the correct manifest VM from the manifest cache
-            // inside provider VM.
+            // For provider manifest and live session contextual tabs,
+            // we want to simply retrieve the correct underlying VM from
+            // the cache inside the owning viewmodel.
             //
             if (tab.Name.StartsWith("Manifest_"))
             {
                 ProviderManifestVisible = Visibility.Visible;
                 CurrentViewModel = m_ProviderViewModel.GetVmForTab(tab.Name)!;
+            }
+            else if (tab.Name.StartsWith("LiveSession_"))
+            {
+                LiveSessionsVisible = Visibility.Visible;
+                CurrentViewModel = m_SessionViewModel.GetVmForTab(tab.Name)!;
+                Debug.Assert(CurrentViewModel != null);
             }
         }
 
@@ -677,13 +805,7 @@ namespace EtwPilot.ViewModel
 
         private async Task OnWindowClosing(CancelEventArgs Args)
         {
-            /*if (g_Sessions.ActiveSessionExists())
-            {
-                UpdateStatusBar("Please wait while active sessions are ended...");
-                e.Cancel = true;
-                await g_Sessions.FormClosing();
-                Close();
-            }*/
+            await m_SessionViewModel.StopAllLiveSessions();
         }
 
         private List<ParsedEtwProvider>? GetSelectedProvidersFromVm()
@@ -725,16 +847,14 @@ namespace EtwPilot.ViewModel
 
         private bool CanExecuteStartSession()
         {
-            if (m_ProgressState.TaskInProgress())
-            {
-                return false;
-            }
-            return m_SessionFormViewModel.IsValidForm;
+            return !m_SessionFormViewModel.HasErrors;
         }
 
         private bool CanExecuteStopSession()
         {
-            if (m_ProgressState.TaskInProgress())
+            if (m_CurrentCommand == null ||
+                !m_CurrentCommand.IsRunning ||
+                m_CurrentCommand != StartSessionCommand)
             {
                 return false;
             }

@@ -19,17 +19,16 @@ under the License.
 using etwlib;
 using EtwPilot.Utilities;
 using EtwPilot.ViewModel;
-using System.ComponentModel;
 using System.Diagnostics;
 using System.Windows;
 using System.Windows.Controls;
-using System.Windows.Data;
 using System.Windows.Forms;
 
 namespace EtwPilot.View
 {
     using UserControl = System.Windows.Controls.UserControl;
     using TabControl = System.Windows.Controls.TabControl;
+    using static EtwPilot.Utilities.TraceLogger;
 
     public partial class SessionFormView : UserControl
     {
@@ -121,57 +120,32 @@ namespace EtwPilot.View
             // If the tab already exists for this manifest, just select the tab, otherwise
             // we have to create the tab now.
             //
-            var existingTabs = ProviderFiltersTabControl.Items.Cast<TabItem>().ToList();
-            var tab = existingTabs.Where(tab => tab.Name == tabName).FirstOrDefault();
-            if (tab == null)
+            Action tabClosedCallback = () =>
             {
-                if (!CreateProviderFiltersTab(tabName, Provider, providerFilterVm))
+                var vm = DataContext as MainWindowViewModel;
+                if (vm == null)
                 {
                     return;
                 }
-            }
-            else
-            {
-                tab.IsSelected = true;
-            }
-        }
-
-        private bool CreateProviderFiltersTab(string TabName, ParsedEtwProvider Provider, ProviderFilterFormViewModel Vm)
-        {
-            var style = ProviderFiltersTabControl.FindResource("ProviderFilterContextTabStyle") as Style;
-            if (style == null)
-            {
-                return false;
-            }
-            var newTab = new TabItem
-            {
-                Name = TabName,
-                Style = style,
-                IsSelected = true,
-                Content = Vm
+                var newSessionFormVm = vm.m_SessionFormViewModel;
+                newSessionFormVm.RemoveProviderFilterForm(tabName);
             };
 
-            newTab.Loaded += (s, e) =>
-            {
-                UiHelper.FixupDynamicTab(ProviderFiltersTabControl,
-                    newTab,
+            if (!UiHelper.CreateTabControlContextualTab(
+                    ProviderFiltersTabControl,
+                    providerFilterVm,
+                    tabName,
                     Provider.Name!,
+                    "ProviderFilterContextTabStyle",
                     "ProviderFilterContextTabText",
                     "ProviderFilterContextTabCloseButton",
-                    () =>
-                    {
-                        var vm = DataContext as MainWindowViewModel;
-                        if (vm == null)
-                        {
-                            return;
-                        }
-                        var newSessionFormVm = vm.m_SessionFormViewModel;
-                        newSessionFormVm.RemoveProviderFilterForm(newTab.Name);
-                    });
-            };
-
-            ProviderFiltersTabControl.Items.Add(newTab);
-            return true;
+                    tabClosedCallback))
+            {
+                Trace(TraceLoggerType.MainWindow,
+                      TraceEventType.Error,
+                      $"Unable to create contextual tab {tabName}");
+                return;
+            }
         }
 
         private async void ProviderFiltersTabControl_SelectionChanged(object sender, SelectionChangedEventArgs e)

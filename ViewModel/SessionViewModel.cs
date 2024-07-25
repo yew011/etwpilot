@@ -19,7 +19,9 @@ under the License.
 
 using etwlib;
 using EtwPilot.Model;
+using EtwPilot.Utilities;
 using System.Collections.ObjectModel;
+using System.Diagnostics;
 
 namespace EtwPilot.ViewModel
 {
@@ -41,11 +43,14 @@ namespace EtwPilot.ViewModel
             }
         }
 
+        private Dictionary<string, LiveSessionViewModel> LiveSessionCache;
+
         public SessionViewModel()
         {
             Sessions = new ObservableCollection<ParsedEtwSession>();
             Model = new SessionModel(StateManager);
             SelectedSessions = new List<ParsedEtwSession>();
+            LiveSessionCache = new Dictionary<string, LiveSessionViewModel>();
         }
 
         public async Task LoadSessions()
@@ -57,6 +62,42 @@ namespace EtwPilot.ViewModel
             }
             Sessions.Clear();
             sessions.ForEach(s => Sessions.Add(s));
+        }
+
+        public bool HasLiveSessions()
+        {
+            return LiveSessionCache.Count > 0;
+        }
+
+        public LiveSessionViewModel CreateLiveSession(SessionFormModel Model, string TabName)
+        {
+            var vm = new LiveSessionViewModel(Model);
+            Debug.Assert(!LiveSessionCache.ContainsKey(TabName));
+            LiveSessionCache.Add(TabName, vm);
+            return vm;
+        }
+
+        public async Task StopAllLiveSessions()
+        {
+            var total = LiveSessionCache.Count;
+            var i = 1;
+            foreach (var kvp in LiveSessionCache)
+            {
+                var vm = kvp.Value;
+                StateManager.ProgressState.UpdateProgressMessage(
+                    $"Please wait, stopping live session {i++} of {total}...");
+                await vm.Stop();
+            }
+        }
+
+        public LiveSessionViewModel? GetVmForTab(string TabName)
+        {
+            Debug.Assert(LiveSessionCache.ContainsKey(TabName));
+            if (LiveSessionCache.ContainsKey(TabName))
+            {
+                return LiveSessionCache[TabName];
+            }
+            return null;
         }
     }
 }

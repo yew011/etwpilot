@@ -23,9 +23,12 @@ using EtwPilot.Model;
 using etwlib;
 using EtwPilot.Utilities;
 using System.IO;
+using static etwlib.NativeTraceConsumer;
 
 namespace EtwPilot.ViewModel
 {
+    using StopCondition = LiveSessionViewModel.StopCondition;
+
     internal class SessionFormViewModel : ViewModelBase
     {
         #region Properties - input form
@@ -430,6 +433,7 @@ namespace EtwPilot.ViewModel
             {
                 NumProviderFilterForms--;
                 m_ProviderFilterForms.Remove(TabName);
+                CurrentProviderFilterForm = null;
             }
         }
 
@@ -483,7 +487,7 @@ namespace EtwPilot.ViewModel
                     var eventIdIntegers = eventIds.Select(int.Parse).ToList();
                     var enable = form.AttributeFilter.IsEnable;
                     Debug.Assert(enable.HasValue);
-                    enabledProvider.SetEventIdsFilter(eventIdIntegers, form.AttributeFilter.IsEnable ?? false);
+                    enabledProvider.SetEventIdsFilter(eventIdIntegers, enable ?? false);
                 }
                 if (form.AttributeFilter.Level != SourceLevels.Off)
                 {
@@ -492,13 +496,13 @@ namespace EtwPilot.ViewModel
                 if (form.AttributeFilter.AnyKeywords.Count > 0)
                 {
                     ulong anyKeywords = 0;
-                    //form.AttributeFilter.AnyKeywords.ForEach(k => { anyKeywords |= k.Value; });
+                    form.AttributeFilter.AnyKeywords.ToList().ForEach(k => { anyKeywords |= k.Value; });
                     enabledProvider.AnyKeywords = anyKeywords;
                 }
                 if (form.AttributeFilter.AllKeywords.Count > 0)
                 {
                     ulong allKeywords = 0;
-                    //form.AttributeFilter.AllKeywords.ForEach(k => { allKeywords |= k.Value; });
+                    form.AttributeFilter.AllKeywords.ToList().ForEach(k => { allKeywords |= k.Value; });
                     enabledProvider.AllKeywords = allKeywords;
                 }
                 //
@@ -508,25 +512,63 @@ namespace EtwPilot.ViewModel
                 {
                     var eventIds = form.StackwalkFilter.Events.Select(e => e.Id).ToList();
                     var eventIdIntegers = eventIds.Select(int.Parse).ToList();
-                    enabledProvider.SetStackwalkEventIdsFilter(eventIdIntegers, form.StackwalkFilter.IsEnable);
+                    var enable = form.StackwalkFilter.IsEnable;
+                    Debug.Assert(enable.HasValue);
+                    enabledProvider.SetStackwalkEventIdsFilter(eventIdIntegers, enable ?? false);
                 }
                 if (form.StackwalkFilter.LevelKeywordFilterLevel != SourceLevels.Off)
                 {
                     ulong anyKeywords = 0;
                     ulong allKeywords = 0;
-                    form.StackwalkFilter.LevelKewyordFilterAnyKeywords.ForEach(k => { anyKeywords |= k.Value; });
-                    form.StackwalkFilter.LevelKeywordFilterAllKeywords.ForEach(k => { allKeywords |= k.Value; });
+                    form.StackwalkFilter.LevelKeywordFilterAnyKeywords.ToList().ForEach(
+                        k => { anyKeywords |= k.Value; });
+                    form.StackwalkFilter.LevelKeywordFilterAllKeywords.ToList().ForEach(
+                        k => { allKeywords |= k.Value; });
+                    var enable = form.StackwalkFilter.LevelKeywordFilterIsEnable;
+                    Debug.Assert(enable.HasValue);
                     enabledProvider.SetStackwalkLevelKw((byte)form.StackwalkFilter.LevelKeywordFilterLevel,
-                        anyKeywords, allKeywords, form.StackwalkFilter.IsEnable);
+                        anyKeywords, allKeywords, enable ?? false);
                 }
                 //
                 // Payload filter
                 //
-                var payloadFilters = new List<Tuple<PayloadFilter, bool>>();
-                var anyPredicate = form.MatchAnyPredicate;
+                // Condense into a single dictionary with key being <eventId>:<Version>
+                // and value being a PayloadFilter structure containing all predicates.
+                //
+                var payloads = new Dictionary<string, PayloadFilter>();
                 foreach (var predicate in form.PayloadFilterPredicates)
                 {
+                    var key = $"{predicate.Event.Id}:{predicate.Event.Version}";
+                    PayloadFilter payloadFilter = null;
+                    if (payloads.ContainsKey(key))
+                    {
+                        payloadFilter = payloads[key];
+                    }
+                    else
+                    {
+                        var eventDescriptor = new EVENT_DESCRIPTOR();
+                        eventDescriptor.Id = ushort.Parse(predicate.Event.Id);
+                        eventDescriptor.Version = byte.Parse(predicate.Event.Version);
+                        payloadFilter = new PayloadFilter(
+                            form.Manifest.Provider.Id, eventDescriptor, true);
+                        payloads.Add(key, payloadFilter);
+                    }
 
+                    payloadFilter.AddPredicate(predicate.Field.Name,
+                        predicate.Operator!.Value,
+                        predicate.FieldValue!);
+                }
+
+                //
+                // Now put that into a tuple list and add to the provider
+                //
+                var payloadFilters = new List<Tuple<PayloadFilter, bool>>();
+                var anyPredicate = form.MatchAnyPredicate;
+                payloads.Values.ToList().ForEach(p =>
+                    payloadFilters.Add(new Tuple<PayloadFilter, bool>(p, anyPredicate)));
+                if (payloadFilters.Count > 0)
+                {
+                    enabledProvider.AddPayloadFilters(payloadFilters);
                 }
 
                 model.EnabledProviders.Add(enabledProvider);

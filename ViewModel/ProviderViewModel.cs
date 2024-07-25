@@ -20,6 +20,7 @@ using etwlib;
 using EtwPilot.Model;
 using EtwPilot.Utilities;
 using System.Collections.ObjectModel;
+using System.Diagnostics;
 
 namespace EtwPilot.ViewModel
 {
@@ -94,6 +95,7 @@ namespace EtwPilot.ViewModel
 
         public ProviderManifestViewModel? GetVmForTab(string TabName)
         {
+            Debug.Assert(m_ManifestCache.ContainsKey(TabName));
             if (m_ManifestCache.ContainsKey(TabName))
             {
                 return m_ManifestCache[TabName];

@@ -45,6 +45,9 @@
         <converters:StopConditionToBool x:Key="StopConditionToBool"/>
         <converters:IntegerToString x:Key="IntegerToString"/>
         <converters:NullableBoolConverter x:Key="NullableBoolConverter"/>
+        <converters:ParsedEtwManifestEventToString x:Key="ParsedEtwManifestEventToString"/>
+        <converters:MillisecondToSecond x:Key="MillisecondToSecond"/>
+        <converters:ByteSizeToFriendlyString x:Key="ByteSizeToFriendlyString"/>
         <!-- template for adorning errors onto input form controls -->
         <ControlTemplate x:Key="ValidationErrorTemplate">
             <DockPanel LastChildFill="True">
@@ -70,6 +73,23 @@
             </Border>
             </DockPanel>
         </ControlTemplate>
+        
+        <Style x:Key="ErrorStyle" TargetType="{x:Type Control}">
+        <Style.Triggers>
+            <Trigger Property="Validation.HasError" Value="true">
+                <Setter Property="BorderBrush" Value="Red"/>
+                <Setter Property="BorderThickness" Value="1" />
+                <Setter Property="Foreground" Value="Red" />
+                <Setter 
+                    Property="ToolTip" 
+                    Value="{Binding RelativeSource={x:Static RelativeSource.Self},Path=(Validation.Errors)/ErrorContent}" />
+                <Setter Property="ToolTipService.ShowDuration"
+                    Value="{x:Static Member=System:Int32.MaxValue}"/>
+                <Setter Property="ToolTipService.HasDropShadow" Value="True"/>
+                <Setter Property="ToolTipService.InitialShowDelay" Value="0"/>
+            </Trigger>
+        </Style.Triggers>
+        </Style>
     </ResourceDictionary>
 </Application.Resources>
 </Application>
