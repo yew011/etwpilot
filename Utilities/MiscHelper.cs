@@ -17,6 +17,9 @@ specific language governing permissions and limitations
 under the License.
 */
 
+using System.Collections;
+using System.Reflection;
+
 namespace EtwPilot.Utilities
 {
     internal static class MiscHelper
@@ -43,6 +46,22 @@ namespace EtwPilot.Utilities
             }
 
             return string.Format("{0:n" + DecimalPlaces + "} {1}", adjustedSize, sizes[mag]);
+        }
+
+        public static void ListResources()
+        {
+            var asm = Assembly.GetEntryAssembly();
+            string resName = asm.GetName().Name + ".g.resources";
+            using (var stream = asm.GetManifestResourceStream(resName))
+            using (var reader = new System.Resources.ResourceReader(stream))
+            {
+                var stuff = reader.Cast<DictionaryEntry>().Select(entry => (string)entry.Key).ToArray();
+            }
+
+            foreach (var r in System.Windows.Application.Current.Resources)
+            {
+                var thisthing = r;
+            }
         }
     }
 }

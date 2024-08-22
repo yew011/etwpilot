@@ -20,20 +20,24 @@ using System.ComponentModel;
 using System.Runtime.CompilerServices;
 using System.Windows;
 using System.Windows.Controls;
+using Newtonsoft.Json;
 
 namespace EtwPilot.ViewModel
 {
     internal abstract class ViewModelBase : INotifyPropertyChanged, INotifyDataErrorInfo
     {
+        private Guid Id;
         public event PropertyChangedEventHandler PropertyChanged;
 
         public ViewModelBase()
         {
+            Id = Guid.NewGuid();
             Errors = new Dictionary<string, IList<object>>();
             ValidationRules = new Dictionary<string, HashSet<ValidationRule>>();
         }
 
         private static StateManager _stateManager = new StateManager();
+        [JsonIgnore]
         public StateManager StateManager
         {
             get { return _stateManager; }
@@ -64,7 +68,7 @@ namespace EtwPilot.ViewModel
             OnErrorsChanged(propertyName);
         }
 
-        protected void AddErrorRange(string propertyName, IEnumerable<object> newErrors, bool isWarning = false)
+        protected void AddErrorRange(string propertyName, IEnumerable<string> newErrors, bool isWarning = false)
         {
             if (!newErrors.Any())
             {
@@ -79,14 +83,14 @@ namespace EtwPilot.ViewModel
 
             if (isWarning)
             {
-                foreach (object error in newErrors)
+                foreach (string error in newErrors)
                 {
                     propertyErrors.Add(error);
                 }
             }
             else
             {
-                foreach (object error in newErrors)
+                foreach (string error in newErrors)
                 {
                     propertyErrors.Insert(0, error);
                 }
@@ -125,6 +129,7 @@ namespace EtwPilot.ViewModel
               ? (IEnumerable<object>)errors
               : new List<object>();
 
+        [JsonIgnore]
         public bool HasErrors => Errors.Any();
 
         #endregion
@@ -134,6 +139,36 @@ namespace EtwPilot.ViewModel
             ErrorsChanged?.Invoke(this, new DataErrorsChangedEventArgs(propertyName));
         }
 
+        public void SetParentFormNotifyErrorsChanged(ViewModelBase Parent)
+        {
+            //
+            // Subscribe the parent form to any changes in the error state of the child.
+            //
+            ErrorsChanged += (sender, args) =>
+            {
+                //
+                // If we (the child) have experienced a change in any error on any property, we
+                // will notify the parent of that updated state. We store an error for a single
+                // imaginary property that doesn't exist on the parent's form but is used to
+                // indicate the fact that we (the child form) have an error somewhere.
+                //
+                var imaginaryPropertyName = $"{Id}";
+                if (HasErrors)
+                {
+                    if (!Parent.PropertyHasErrors(imaginaryPropertyName))
+                    {
+                        Parent.AddError($"{imaginaryPropertyName}",
+                            $"Sub-form {imaginaryPropertyName} has error(s).");
+                    }
+                }
+                else
+                {
+                    Parent.ClearErrors($"{imaginaryPropertyName}");
+                }
+                Parent.OnErrorsChanged($"{imaginaryPropertyName}");
+            };
+        }
+
         private Dictionary<string, IList<object>> Errors { get; }
         private Dictionary<string, HashSet<ValidationRule>> ValidationRules { get; }
     }
@@ -141,7 +176,7 @@ namespace EtwPilot.ViewModel
     internal class StateManager
     {
         public ProgressState ProgressState { get; set; }
-        public Model.SettingsModel SettingsModel { get; set; }
+        public SettingsFormViewModel Settings { get; set; }
         public StateManager() { }
     }
 
@@ -179,7 +214,7 @@ namespace EtwPilot.ViewModel
 
         public ProgressState()
         {
-            FinalizeProgress();
+            FinalizeProgress(string.Empty);
         }
 
         protected void OnPropertyChanged([CallerMemberName] string propertyName = null)
@@ -198,13 +233,14 @@ namespace EtwPilot.ViewModel
             }));
         }
 
-        public void FinalizeProgress()
+        public void FinalizeProgress(string FinalMessage)
         {
             Application.Current.Dispatcher.Invoke(new Action(() =>
             {
                 ProgressMax = 0;
                 ProgressValue = 0;
                 Visible = Visibility.Hidden;
+                StatusText = FinalMessage;
             }));
         }
 

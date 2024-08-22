@@ -18,8 +18,39 @@
                   SelectionMode="Extended"
                   SelectionChanged="ProvidersDataGrid_SelectionChanged">
             <DataGrid.Columns>
-                <DataGridTextColumn Header="ID" Binding="{Binding Id}"/>
-                <DataGridTextColumn Header="Name" Binding="{Binding Name}" />
+                <DataGridTextColumn Header="ID  "
+                                    Binding="{Binding Id}"
+                                    x:Name="ProviderId">
+                    <DataGridTextColumn.HeaderTemplate>
+                    <DataTemplate>
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="{Binding Content, RelativeSource=
+                                        {RelativeSource Mode=TemplatedParent}}"/>
+                            <TextBox x:Name="filterByIdTextBox" 
+                                     Width="100" 
+                                     TextChanged="filterByIdTextBox_TextChanged"
+                                     Style="{StaticResource DataGridColumnHeaderTextBoxStyle}"/>
+                        </StackPanel>
+                    </DataTemplate>
+                    </DataGridTextColumn.HeaderTemplate>
+                </DataGridTextColumn>
+                <DataGridTextColumn Header="Name  "
+                                    Binding="{Binding Name}"
+                                    x:Name="ProviderName">
+                    <DataGridTextColumn.HeaderTemplate>
+                    <DataTemplate>
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="{Binding Content, RelativeSource=
+                                        {RelativeSource Mode=TemplatedParent}}"/>
+                            <Separator Opacity="0" Width="5"/>
+                            <TextBox x:Name="filterByNameTextBox" 
+                                     Width="100" 
+                                     TextChanged="filterByNameTextBox_TextChanged"
+                                     Style="{StaticResource DataGridColumnHeaderTextBoxStyle}"/>
+                        </StackPanel>
+                    </DataTemplate>
+                    </DataGridTextColumn.HeaderTemplate>
+                </DataGridTextColumn>
                 <DataGridTextColumn Header="Source" Binding="{Binding Source}" />
             </DataGrid.Columns>
         </DataGrid>

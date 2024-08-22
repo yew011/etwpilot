@@ -6,23 +6,54 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <UseWPF>true</UseWPF>
+    <PlatformTarget>x64</PlatformTarget>
+    <Platforms>x64</Platforms>
+    <Configurations>Debug;Release;Debug_Cuda;Release_Cuda;Debug_DirectML;Release_DirectML</Configurations>
+    <XamlDebuggingInformation>True</XamlDebuggingInformation>
   </PropertyGroup>
 
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|AnyCPU'">
+    <NoWarn>1701;1702;8612;1998;8618</NoWarn>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|AnyCPU'">
+    <NoWarn>1701;1702;8612;1998;8618</NoWarn>
+  </PropertyGroup>
+
+  <PropertyGroup>
+    <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
+  </PropertyGroup>
+    
   <ItemGroup>
     <None Remove="images\csv.png" />
     <None Remove="images\export.png" />
+    <None Remove="images\info.png" />
     <None Remove="images\json.png" />
+    <None Remove="images\newdb.png" />
+    <None Remove="images\open.png" />
     <None Remove="images\play.png" />
     <None Remove="images\session.png" />
+    <None Remove="images\user-avatar.png" />
     <None Remove="images\xml.png" />
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="CommunityToolkit.Mvvm" Version="8.2.2" />
-    <PackageReference Include="etwlib" Version="1.8.0" />
-    <PackageReference Include="Fluent.Ribbon" Version="10.1.0" />
+    <PackageReference Include="CommunityToolkit.Mvvm" Version="8.3.2" />
+    <PackageReference Include="etwlib" Version="1.11.0" />
+    <PackageReference Include="Fluent.Ribbon" Version="11.0.0-rc0249" />
     <PackageReference Include="Meziantou.Framework.WPF" Version="1.5.5" />
-    <PackageReference Include="Microsoft.Xaml.Behaviors.Wpf" Version="1.1.122" />
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="4.12.0-2.final" />
+    <PackageReference Include="Microsoft.KernelMemory.SemanticKernelPlugin" Version="0.90.241021.1" />
+    <PackageReference Include="Microsoft.ML.OnnxRuntimeGenAI" Version="0.4.0" Condition=" '$(Configuration)' == 'Debug' OR '$(Configuration)' == 'Release' " />
+    <PackageReference Include="Microsoft.ML.OnnxRuntimeGenAI.Cuda" Version="0.4.0" Condition=" '$(Configuration)' == 'Debug_Cuda' OR '$(Configuration)' == 'Release_Cuda' " />
+    <PackageReference Include="Microsoft.ML.OnnxRuntimeGenAI.DirectML" Version="0.4.0" Condition=" '$(Configuration)' == 'Debug_DirectML' OR '$(Configuration)' == 'Release_DirectML' " />
+    <PackageReference Include="Microsoft.SemanticKernel" Version="1.24.1" />
+    <PackageReference Include="Microsoft.SemanticKernel.Abstractions" Version="1.24.1" />
+    <PackageReference Include="Microsoft.SemanticKernel.Connectors.Onnx" Version="1.24.1-alpha" />
+    <PackageReference Include="Microsoft.SemanticKernel.Connectors.Qdrant" Version="1.24.1-preview" />
+    <PackageReference Include="Microsoft.SemanticKernel.Core" Version="1.24.1" />
+    <PackageReference Include="Microsoft.SemanticKernel.Plugins.Memory" Version="1.24.1-alpha" />
+    <PackageReference Include="Microsoft.Xaml.Behaviors.Wpf" Version="1.1.135" />
     <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
   </ItemGroup>
 
@@ -37,9 +68,12 @@
     <Resource Include="images\export.png" />
     <Resource Include="images\gear.png" />
     <Resource Include="images\green_dot.png" />
+    <Resource Include="images\info.png" />
     <Resource Include="images\json.png" />
     <Resource Include="images\lightbulb.png" />
+    <Resource Include="images\newdb.png" />
     <Resource Include="images\open-folder.png" />
+    <Resource Include="images\open.png" />
     <Resource Include="images\play.png" />
     <Resource Include="images\plus.png" />
     <Resource Include="images\providers.png" />
@@ -52,6 +86,7 @@
     <Resource Include="images\stop.png" />
     <Resource Include="images\str_string.png" />
 	<Resource Include="images\logo.png" />
+	<Resource Include="images\user-avatar.png" />
 	<Resource Include="images\xml.png" />
   </ItemGroup>
 

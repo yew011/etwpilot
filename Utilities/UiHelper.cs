@@ -37,7 +37,20 @@ namespace EtwPilot.Utilities
             return (T)window.FindResource(Name);
         }
 
-        public static T? FindChild<T>(DependencyObject parent, string ChildName) where T : DependencyObject
+        public static T? GetViewModelFromFrameworkElement<T>(FrameworkElement? Element)
+        {
+            if (Element == null)
+            {
+                return default;
+            }
+            if (Element.DataContext is not T vm)
+            {
+                return default;
+            }
+            return vm;
+        }
+
+        public static T? FindChild<T>(DependencyObject parent, string? ChildName) where T : DependencyObject
         {
             if (parent == null)
             {
@@ -135,6 +148,22 @@ namespace EtwPilot.Utilities
             return null;
         }
 
+        public static T? FindControlFromDataTemplate<T>(DependencyObject Control, string ChildControlName)
+        {
+            //
+            // Locates an instance of a control created as a result of a DataTemplate.
+            //
+            // See: https://learn.microsoft.com/en-us/dotnet/desktop/wpf/data/how-to-find-datatemplate-generated-elements?view=netframeworkdesktop-4.8
+            //
+            var contentPresenter = FindChild<ContentPresenter>(Control, null);
+            if (contentPresenter == null)
+            {
+                return default(T);
+            }
+            var dataTemplate = contentPresenter.ContentTemplate;
+            return (T)dataTemplate.FindName(ChildControlName, contentPresenter);
+        }
+
         public static void Expander_Expanded(object sender, RoutedEventArgs e)
         {
             for (var vis = sender as Visual; vis != null; vis = VisualTreeHelper.GetParent(vis) as Visual)
@@ -155,7 +184,7 @@ namespace EtwPilot.Utilities
                 if (vis is DataGridRow)
                 {
                     var row = (DataGridRow)vis;
-                    row.DetailsVisibility = Visibility.Collapsed;
+                    row.DetailsVisibility = Visibility.Hidden;
                     break;
                 }
             }
@@ -169,10 +198,12 @@ namespace EtwPilot.Utilities
         public static RibbonTabItem? CreateRibbonContextualTab(
             string TabName,
             string TabText,
+            int ContextualGroupIndex,
+            Dictionary<string, List<string>>? GroupButtons,
             string TabStyleTemplateName,
             string TabHeaderTextBlockName,
             string TabCloseButtonName,
-            Action TabClosedCallback)
+            Func<Task<bool>> TabClosedCallback)
         {
             var ribbon = FindChild<Ribbon>(
                     Application.Current.MainWindow, "MainWindowRibbon");
@@ -183,11 +214,13 @@ namespace EtwPilot.Utilities
                       $"Unable to locate MainWindowRibbon");
                 return null;
             }
-            var tab = ribbon.Tabs.Where(tab => tab.Name == TabName).FirstOrDefault();
-            if (tab != null)
+            if (ribbon.Tabs.Any(tab => tab.Name == TabName))
             {
-                tab.IsSelected = true;
-                return tab;
+                Debug.Assert(false);
+                Trace(TraceLoggerType.UiHelper,
+                      TraceEventType.Error,
+                      $"Cannot create tab, name {TabName} already exists.");
+                return null;
             }
 
             //
@@ -202,15 +235,50 @@ namespace EtwPilot.Utilities
                 return null;
             }
 
+            Debug.Assert(ContextualGroupIndex < ribbon.ContextualGroups.Count);
             var newTab = new RibbonTabItem
             {
                 Name = TabName,
                 Style = style,
                 IsSelected = true,
+                Group = ribbon.ContextualGroups[ContextualGroupIndex],
                 //
                 // Important: Ribbon tab controls contain no content.
                 //
             };
+
+            //
+            // Add group buttons if any
+            //
+            if (GroupButtons != null)
+            {
+                foreach (var kvp in GroupButtons)
+                {
+                    var groupName = kvp.Key;
+                    var buttonStyles = kvp.Value;
+                    var group = new RibbonGroupBox
+                    {
+                        Header = groupName
+                    };
+                    foreach (var buttonStyle in buttonStyles)
+                    {
+                        style = ribbon.FindResource(buttonStyle) as Style;
+                        if (style == null)
+                        {
+                            Trace(TraceLoggerType.UiHelper,
+                                  TraceEventType.Error,
+                                  $"Unable to locate button style {buttonStyle}");
+                            return null;
+                        }
+                        var button = new Fluent.Button
+                        {
+                            Style = style
+                        };
+                        group.Items.Add(button);
+                    }
+                    newTab.Groups.Add(group);
+                }
+            }
 
             //
             // Note: we're not done, we need to override parts of the HeaderTemplate for
@@ -240,7 +308,8 @@ namespace EtwPilot.Utilities
             string TabStyleTemplateName,
             string TabHeaderTextBlockName,
             string TabCloseButtonName,
-            Action TabClosedCallback)
+            object? DataContext,
+            Func<Task<bool>> TabClosedCallback)
         {
             var existingTabs = TabControl.Items.Cast<TabItem>().ToList();
             var tab = existingTabs.Where(tab => tab.Name == TabName).FirstOrDefault();
@@ -262,13 +331,27 @@ namespace EtwPilot.Utilities
                 return false;
             }
 
+            //
+            // The TabItem content is wrapped in a ScrollViewer.
+            //
+            var scrollViewer = new ScrollViewer()
+            {
+                VerticalScrollBarVisibility = ScrollBarVisibility.Visible,
+                HorizontalScrollBarVisibility = ScrollBarVisibility.Auto,
+                Content = TabContent // likely a viewmodel
+            };
             var newTab = new TabItem
             {
                 Name = TabName,
                 Style = style,
                 IsSelected = true,
-                Content = TabContent // likely a viewmodel
+                Content = scrollViewer 
             };
+
+            if (DataContext != null)
+            {
+                newTab.DataContext = DataContext;
+            }
 
             //
             // Note: we're not done, we need to override parts of the HeaderTemplate for
@@ -296,39 +379,17 @@ namespace EtwPilot.Utilities
             string TabTitle,
             string TabHeaderTextBlockName,
             string TabCloseButtonName,
-            Action? TabClosedCallback)
+            Func<Task<bool>> TabClosedCallback)
         {
-            //
-            // In order to find the tab's close button and textblock, we need to pick
-            // the correct UI element/control to start searching from. For a ribbon
-            // tab item, it's the ribbon control. For a traditional tabcontrol tab item,
-            // it's the actual tab page (since this routine is called from the tab's
-            // Loaded callback, the controls are instantiated at this point).
-            //
-            DependencyObject control;
-            if (TabControl is Ribbon)
-            {
-                control = (Ribbon)TabControl;
-            }
-            else if (TabControl is TabControl)
-            {
-                control = (TabItem)NewTab;
-            }
-            else
-            {
-                Trace(TraceLoggerType.UiHelper,
-                      TraceEventType.Error,
-                      $"Unrecognized control type");
-                return;
-            }
+            var headerTextBlock = (TextBlock)FindControlFromDataTemplate<TextBlock>(NewTab, TabHeaderTextBlockName);
+            var headerCloseButton = (Button)FindControlFromDataTemplate<Button>(NewTab, TabCloseButtonName);
 
-            var headerTextblock = FindChild<TextBlock>(control, TabHeaderTextBlockName);
-            var headerCloseButton = FindChild<Button>(control, TabCloseButtonName);
-            if (headerTextblock == null || headerCloseButton == null)
+            if (headerTextBlock == null || headerCloseButton == null)
             {
                 Trace(TraceLoggerType.UiHelper,
                       TraceEventType.Error,
                       $"Unable to locate headertextblock or closeButton");
+                Debug.Assert(false);
                 return;
             }
 
@@ -337,7 +398,7 @@ namespace EtwPilot.Utilities
             // itself, so we can easily remove it.
             //
             headerCloseButton.Tag = NewTab.Name;
-            headerCloseButton.Click += (s, e) =>
+            headerCloseButton.Click += async (s, e) =>
             {
                 //
                 // Locate the button, corresponding tab name, and the containing tab control.
@@ -373,8 +434,33 @@ namespace EtwPilot.Utilities
                         return;
                     }
 
+                    var result = await TabClosedCallback.Invoke();
+                    if (!result)
+                    {
+                        Trace(TraceLoggerType.UiHelper,
+                              TraceEventType.Warning,
+                              $"TabClosedCallback returned false, not removing tab");
+                        return;
+                    }
+
                     existingTab.Template = null; // see https://github.com/dotnet/wpf/issues/6440
                     ribbon.Tabs.Remove(existingTab);
+
+                    //
+                    // If the context tab group contains no tabs after this removal,
+                    // switch back to its "parent" Ribbon tab.
+                    //
+                    if (ribbon.Tabs.Count == 3)
+                    {
+                        if (tabName.StartsWith("Manifest"))
+                        {
+                            ribbon.SelectedTabIndex = 0; // Providers tab
+                        }
+                        else if (tabName.StartsWith("LiveSession"))
+                        {
+                            ribbon.SelectedTabIndex = 1; // Sessions tab
+                        }
+                    }
                 }
                 else if (TabControl is TabControl)
                 {
@@ -388,10 +474,19 @@ namespace EtwPilot.Utilities
                               $"Tab {tabName} not found!");
                         return;
                     }
+
+                    var result = await TabClosedCallback.Invoke();
+                    if (!result)
+                    {
+                        Trace(TraceLoggerType.UiHelper,
+                              TraceEventType.Warning,
+                              $"TabClosedCallback returned false, not removing tab");
+                        return;
+                    }
+
                     existingTab.Template = null; // see https://github.com/dotnet/wpf/issues/6440
                     tc.Items.Remove(existingTab);
                 }
-                TabClosedCallback?.Invoke();
             };
 
             var title = $"{TabTitle}";
@@ -402,7 +497,7 @@ namespace EtwPilot.Utilities
                 header = $"{title.Substring(0, 15)}...{title.Substring(start - 1, 15)}";
             }
 
-            headerTextblock.Text = header;
+            headerTextBlock.Text = header;
         }
     }
 }

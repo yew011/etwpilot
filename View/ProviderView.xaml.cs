@@ -19,8 +19,10 @@ under the License.
 using etwlib;
 using EtwPilot.Utilities;
 using EtwPilot.ViewModel;
+using System.ComponentModel;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Data;
 using System.Windows.Input;
 
 namespace EtwPilot.View
@@ -66,30 +68,16 @@ namespace EtwPilot.View
             // Create the tab if it doesn't exist; otherwise simply switch to it.
             //
             var tabName = UiHelper.GetUniqueTabName(provider.Id, "Manifest");
-            Action tabClosedCallback = () =>
+            Func<Task<bool>> tabClosedCallback = async delegate()
             {
-                var vm = DataContext as MainWindowViewModel;
-                if (vm == null)
-                {
-                    return;
-                }
-                var ribbon = UiHelper.FindChild<Fluent.Ribbon>(
-                    Application.Current.MainWindow, "MainWindowRibbon");
-                if (ribbon == null)
-                {
-                    return;
-                }
-                if (ribbon.Tabs.Count == 3)
-                {
-                    vm.ProviderManifestVisible = Visibility.Hidden;
-                    ribbon.SelectedTabIndex = 0;
-                    ProvidersDataGrid.SelectedItems.Clear();
-                }
+                return true;
             };
 
             var tab = UiHelper.CreateRibbonContextualTab(
                     tabName,
                     provider.Name!,
+                    0,
+                    null,
                     "ProviderContextTabStyle",
                     "ProviderContextTabText",
                     "ProviderContextTabCloseButton",
@@ -128,6 +116,59 @@ namespace EtwPilot.View
 
             vm.m_ProviderViewModel.SelectedProviders =
                 ProvidersDataGrid.SelectedItems.Cast<ParsedEtwProvider>().ToList();
+        }
+
+        private void filterByIdTextBox_TextChanged(object sender, TextChangedEventArgs e)
+        {
+            ApplyFilter(sender);
+        }
+
+        private void filterByNameTextBox_TextChanged(object sender, TextChangedEventArgs e)
+        {
+            ApplyFilter(sender);
+        }
+
+        private void ApplyFilter(object sender)
+        {
+            var searchBox = sender as TextBox;
+            if (searchBox == null)
+            {
+                return;
+            }
+            var filter = searchBox.Text;
+            var cv = CollectionViewSource.GetDefaultView(ProvidersDataGrid.ItemsSource);
+            if (string.IsNullOrEmpty(filter))
+            {
+                cv.Filter = null;
+            }
+            else
+            {
+                cv.Filter = o =>
+                {
+                    var provider = o as ParsedEtwProvider;
+                    if (provider == null)
+                    {
+                        return true;
+                    }
+
+                    switch (searchBox.Name)
+                    {
+                        case "filterByIdTextBox":
+                            {
+                                return provider.Id.ToString().Contains(filter, StringComparison.InvariantCultureIgnoreCase);
+                            }
+                        case "filterByNameTextBox":
+                            {
+                                return string.IsNullOrEmpty(provider.Name) ? false :
+                                    provider.Name.ToString().Contains(filter, StringComparison.InvariantCultureIgnoreCase);
+                            }
+                        default:
+                            {
+                                return true;
+                            }
+                    }
+                };
+            }
         }
     }
 }

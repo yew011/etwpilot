@@ -5,6 +5,7 @@
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              xmlns:local="clr-namespace:EtwPilot.ViewModel"
              xmlns:Fluent="urn:fluent-ribbon"
+             xmlns:controls="clr-namespace:EtwPilot.Controls"
              mc:Ignorable="d"
              Name="SettingsFormViewControl"
              DataContext="{StaticResource g_MainWindowViewModel}">
@@ -12,57 +13,72 @@
         <Grid.RowDefinitions>
             <RowDefinition Height="*" />
         </Grid.RowDefinitions>
-        <TabControl Name="SettingsTabControl">
+        <TabControl Name="SettingsTabControl"
+                    DataContext="{Binding StateManager.Settings,ValidatesOnNotifyDataErrors=False}">
             <TabItem Header="General">
                 <StackPanel Orientation="Vertical" Margin="5">
                     <StackPanel Orientation="Horizontal" Margin="5">
                         <Label Width="150">Symbol path:</Label>
                         <TextBox Name="SymbolPathTextBox"
-                             Width="350" 
-                             Text="{Binding m_SettingsFormViewModel.m_SettingsModel.SymbolPath, Mode=TwoWay}" />
-                        <Button Name="BrowseSymbolPathButton" Click="BrowseSymbolPathButton_Click">Browse...</Button>
+                             Width="350"
+                             Style="{StaticResource ErrorStyle}"
+                             Text="{Binding SymbolPath, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+                        <Button Name="BrowseSymbolPathButton" 
+                                Click="BrowseSymbolPathButton_Click">Browse...</Button>
                     </StackPanel>
                     <StackPanel Orientation="Horizontal" Margin="5">
                         <Label Width="150">Dbghelp.dll path:</Label>
                         <TextBox Name="DbgHelpDllPathTextBox" 
                              Width="350"
-                             Text="{Binding m_SettingsFormViewModel.m_SettingsModel.DbghelpPath, Mode=TwoWay}"/>
+                             Style="{StaticResource ErrorStyle}"
+                             Text="{Binding DbghelpPath, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
                         <Button Name="BrowseDbgHelpDllPathButton" Click="BrowseDbgHelpDllPathButton_Click">Browse...</Button>
                     </StackPanel>
                     <StackPanel Orientation="Horizontal" Margin="5">
                         <Label Width="150">Provider cache path:</Label>
                         <TextBox Name="ProviderCachePathTextBox" 
                              Width="350"
-                             Text="{Binding m_SettingsFormViewModel.m_SettingsModel.ProviderCacheLocation, Mode=TwoWay}"/>
+                             Style="{StaticResource ErrorStyle}"
+                             Text="{Binding ProviderCacheLocation, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
                         <Button Name="BrowseProviderCachePathButton" Click="BrowseProviderCachePathButton_Click">Browse...</Button>
                     </StackPanel>
                     <StackPanel Orientation="Horizontal" Margin="5">
                         <CheckBox Name="HideNoManifestProvidersCheckbox" 
                               Padding="5"
-                              IsChecked="{Binding m_SettingsFormViewModel.m_SettingsModel.HideProvidersWithoutManifest, Mode=TwoWay}"/>
+                              IsChecked="{Binding HideProvidersWithoutManifest, Mode=TwoWay}"/>
                         <TextBlock TextWrapping="Wrap" Text="Hide providers without a manifest" />
+                    </StackPanel>
+                    <StackPanel Orientation="Horizontal" Margin="5">
+                        <CheckBox Name="UseDefaultEtwColumnsCheckbox" 
+                              Padding="5"
+                              IsChecked="{Binding UseDefaultEtwColumns, Mode=TwoWay}"/>
+                        <TextBlock TextWrapping="Wrap" Text="Use default ETW display columns" />
                     </StackPanel>
                 </StackPanel>
             </TabItem>
-            <TabItem Header="Sessions">
+            <TabItem Header="Insight">
                 <StackPanel Orientation="Vertical" Margin="5">
                     <StackPanel Orientation="Horizontal" Margin="5">
-                        <Label Width="150">ETW event columns:</Label>
-                        <ListBox ItemsSource="{Binding m_SettingsFormViewModel.m_SettingsModel.EtwEventColumns, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                             SelectionMode="Multiple"
-                             Width="450">
-                            <ListBox.Resources>
-                                <Style TargetType="{x:Type ListBoxItem}">
-                                    <Setter Property="IsSelected" Value="{Binding Visible}" />
-                                </Style>
-                            </ListBox.Resources>
-                            <ListBox.ItemTemplate>
-                                <DataTemplate>
-                                    <TextBox Text="{Binding Name}" BorderThickness="0"/>
-                                </DataTemplate>
-                            </ListBox.ItemTemplate>
-                        </ListBox>
+                        <Label Width="150">SLM path:</Label>
+                        <TextBox Name="ModelPathTextbox"
+                             Width="350"
+                             Style="{StaticResource ErrorStyle}"
+                             Text="{Binding ModelPath, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+                        <Button Name="BrowseModelPathButton" Click="BrowseModelPathButton_Click">Browse...</Button>
                     </StackPanel>
+                    <StackPanel Orientation="Horizontal" Margin="5">
+                        <Label Width="150">Embeddings model file:</Label>
+                        <TextBox Name="EmbeddingsModelPathTextbox"
+                             Width="350"
+                             Style="{StaticResource ErrorStyle}"
+                             Text="{Binding EmbeddingsModelFile, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+                        <Button Name="BrowseEmbeddingsModelFileButton" Click="BrowseEmbeddingsModelFileButton_Click">Browse...</Button>
+                    </StackPanel>
+                    <DockPanel>
+                        <GroupBox DockPanel.Dock="Top" Header="Search Options" Margin="2,5,0,1">
+                            <controls:ModelSearchOptions SearchOptions="{Binding SearchOptions}" />
+                        </GroupBox>
+                    </DockPanel>
                 </StackPanel>
             </TabItem>
             <TabItem Header="Debug">
@@ -71,21 +87,21 @@
                         <Label Width="150">EtwPilot trace level:</Label>
                         <ComboBox Width="150"
                                   ItemsSource="{Binding Source={StaticResource SourceLevelsEnum}}"
-                                  SelectedItem="{Binding m_SettingsFormViewModel.m_SettingsModel.TraceLevelApp, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                  SelectedItem="{Binding TraceLevelApp, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                                   IsSynchronizedWithCurrentItem="false"/>
                     </StackPanel>
                     <StackPanel Orientation="Horizontal" Margin="5">
                         <Label Width="150">Symbolresolver trace level:</Label>
                         <ComboBox Width="150"
                                   ItemsSource="{Binding Source={StaticResource SourceLevelsEnum}}"
-                                  SelectedItem="{Binding m_SettingsFormViewModel.m_SettingsModel.TraceLevelSymbolresolver, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                  SelectedItem="{Binding TraceLevelSymbolresolver, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                                   IsSynchronizedWithCurrentItem="false"/>
                     </StackPanel>
                     <StackPanel Orientation="Horizontal" Margin="5">
                         <Label Width="150">etwlib trace level:</Label>
                         <ComboBox Width="150"
                                   ItemsSource="{Binding Source={StaticResource SourceLevelsEnum}}"
-                                  SelectedItem="{Binding m_SettingsFormViewModel.m_SettingsModel.TraceLevelEtwlib, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                  SelectedItem="{Binding TraceLevelEtwlib, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                                   IsSynchronizedWithCurrentItem="false"/>
                     </StackPanel>
                 </StackPanel>

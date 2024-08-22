@@ -24,12 +24,11 @@ using System.Diagnostics;
 using System.Windows;
 using System.IO;
 using System.Windows.Controls;
-using MessageBox = System.Windows.MessageBox;
+using Brushes = System.Windows.Media.Brushes;
 using System.Windows.Forms;
 using System.Text;
 using EtwPilot.Utilities;
-using System.Drawing;
-using System.Windows.Media.Imaging;
+using System.Windows.Controls.Primitives;
 
 namespace EtwPilot.ViewModel
 {
@@ -75,61 +74,10 @@ namespace EtwPilot.ViewModel
             }
         }
 
-        private ProviderViewModel _m_ProviderViewModel;
-        public ProviderViewModel m_ProviderViewModel
-        {
-            get => _m_ProviderViewModel;
-            set
-            {
-                if (_m_ProviderViewModel != value)
-                {
-                    _m_ProviderViewModel = value;
-                    OnPropertyChanged("m_ProviderViewModel");
-                }
-            }
-        }
-
-        private SettingsFormViewModel _m_SettingsFormViewModel;
-        public SettingsFormViewModel m_SettingsFormViewModel
-        {
-            get => _m_SettingsFormViewModel;
-            set
-            {
-                if (_m_SettingsFormViewModel != value)
-                {
-                    _m_SettingsFormViewModel = value;
-                    OnPropertyChanged("m_SettingsFormViewModel");
-                }
-            }
-        }
-
-        private SessionViewModel _m_SessionViewModel;
-        public SessionViewModel m_SessionViewModel
-        {
-            get => _m_SessionViewModel;
-            set
-            {
-                if (_m_SessionViewModel != value)
-                {
-                    _m_SessionViewModel = value;
-                    OnPropertyChanged("m_SessionViewModel");
-                }
-            }
-        }
-
-        private SessionFormViewModel _m_SessionFormViewModel;
-        public SessionFormViewModel m_SessionFormViewModel
-        {
-            get => _m_SessionFormViewModel;
-            set
-            {
-                if (_m_SessionFormViewModel != value)
-                {
-                    _m_SessionFormViewModel = value;
-                    OnPropertyChanged("_m_SessionFormViewModel");
-                }
-            }
-        }
+        public ProviderViewModel m_ProviderViewModel { get; set; }
+        public SessionViewModel m_SessionViewModel { get; set; }
+        public SessionFormViewModel m_SessionFormViewModel { get; set; }
+        public InsightsViewModel m_InsightsViewModel { get; set; }
 
         private Visibility _ProviderManifestVisible;
         public Visibility ProviderManifestVisible
@@ -173,32 +121,6 @@ namespace EtwPilot.ViewModel
             }
         }
 
-        #endregion
-
-        #region commands
-
-        public AsyncRelayCommand LoadProvidersCommand { get; set; }
-        public AsyncRelayCommand LoadSessionsCommand { get; set; }
-        public AsyncRelayCommand<Guid> LoadProviderManifestCommand { get; set; }
-        public AsyncRelayCommand<ExportFormat> ExportProvidersCommand { get; set; }
-        public AsyncRelayCommand<ExportFormat> ExportSessionsCommand { get; set; }
-        public AsyncRelayCommand DumpProviderManifestsCommand { get; set; }
-        public AsyncRelayCommand SaveProvidersToClipboardCommand { get; set; }
-        public AsyncRelayCommand SaveSessionsToClipboardCommand { get; set; }
-        public AsyncRelayCommand<SelectionChangedEventArgs> SwitchCurrentViewModelCommand { get; set; }
-        public AsyncRelayCommand<RoutedEventArgs> BackstageMenuClickCommand { get; set; }
-        public AsyncRelayCommand<CancelEventArgs> WindowClosingCommand { get; set; }
-        public AsyncRelayCommand<RoutedEventArgs> WindowLoadedCommand { get; set; }
-        public AsyncRelayCommand CancelCurrentCommandCommand { get; set; }
-        public AsyncRelayCommand NewSessionFromProviderCommand { get; set; }
-        public AsyncRelayCommand NewSessionCommand { get; set; }
-        public AsyncRelayCommand StartSessionCommand { get; set; }
-        public AsyncRelayCommand StopSessionCommand { get; set; }
-
-        #endregion
-
-        public AsyncRelayCommand m_CurrentCommand { get; private set; }
-
         private int m_RibbonTabControlSelectedIndex;
         public int RibbonTabControlSelectedIndex
         {
@@ -212,9 +134,41 @@ namespace EtwPilot.ViewModel
                 }
             }
         }
+        #endregion
+
+        #region commands
+
+        public AsyncRelayCommand LoadProvidersCommand { get; set; }
+        public AsyncRelayCommand LoadSessionsCommand { get; set; }
+        public AsyncRelayCommand<Guid> LoadProviderManifestCommand { get; set; }
+        public AsyncRelayCommand<ExportFormat> ExportProvidersCommand { get; set; }
+        public AsyncRelayCommand<ExportFormat> ExportSessionsCommand { get; set; }
+        public AsyncRelayCommand<ExportFormat> ExportLiveSessionDataCommand { get; set; }
+        public AsyncRelayCommand DumpProviderManifestsCommand { get; set; }
+        public AsyncRelayCommand SaveProvidersToClipboardCommand { get; set; }
+        public AsyncRelayCommand SaveSessionsToClipboardCommand { get; set; }
+        public AsyncRelayCommand SaveLiveSessionDataToClipboardCommand { get; set; }
+        public AsyncRelayCommand<SelectionChangedEventArgs> SwitchCurrentViewModelCommand { get; set; }
+        public AsyncRelayCommand<RoutedEventArgs> WindowLoadedCommand { get; set; }
+        public AsyncRelayCommand CancelCurrentCommandCommand { get; set; }
+        public AsyncRelayCommand NewSessionFromProviderCommand { get; set; }
+        public AsyncRelayCommand NewSessionCommand { get; set; }
+        public AsyncRelayCommand StartSessionCommand { get; set; }
+        public AsyncRelayCommand StopSessionCommand { get; set; }
+        public AsyncRelayCommand StopAllSessionsCommand { get; set; }
+        public AsyncRelayCommand ShowFormPreviewCommand { get; set; }
+        public AsyncRelayCommand SendToInsightsCommand { get; set; }
+        public AsyncRelayCommand ShowDebugLogsCommand { get; set; }
+        public AsyncRelayCommand ExitCommand { get; set; }
+
+        public AsyncRelayCommand m_CurrentCommand { get; private set; }
+
+        #endregion
 
         public MainWindowViewModel()
         {
+            MiscHelper.ListResources();
+
             //
             // Set up commands
             //
@@ -226,18 +180,18 @@ namespace EtwPilot.ViewModel
                 Command_ExportProviders, _ => CanExecute());
             ExportSessionsCommand = new AsyncRelayCommand<ExportFormat>(
                 Command_ExportSessions, _ => CanExecute());
+            ExportLiveSessionDataCommand = new AsyncRelayCommand<ExportFormat>(
+                Command_ExportLiveSessionData, _ => CanExecute());
             DumpProviderManifestsCommand = new AsyncRelayCommand(
                 Command_DumpProviderManifests, CanExecute);
             SaveProvidersToClipboardCommand = new AsyncRelayCommand(
                 Command_SaveProvidersToClipboard, CanExecute);
             SaveSessionsToClipboardCommand = new AsyncRelayCommand(
                 Command_SaveSessionsToClipboard, CanExecute);
+            SaveLiveSessionDataToClipboardCommand = new AsyncRelayCommand(
+                Command_SaveLiveSessionDataToClipboard, CanExecute);
             SwitchCurrentViewModelCommand = new AsyncRelayCommand<SelectionChangedEventArgs>(
                 Command_SwitchCurrentViewModel, _ => true);
-            BackstageMenuClickCommand = new AsyncRelayCommand<RoutedEventArgs>(
-                Command_BackstageMenuClick, _ => CanExecute());
-            WindowClosingCommand = new AsyncRelayCommand<CancelEventArgs>(
-                Command_WindowClosing, _ => true);
             WindowLoadedCommand = new AsyncRelayCommand<RoutedEventArgs>(
                 Command_WindowLoaded, _ => CanExecute());
             CancelCurrentCommandCommand = new AsyncRelayCommand(Command_CancelCurrentCommand);
@@ -249,6 +203,16 @@ namespace EtwPilot.ViewModel
                 Command_StartSession, CanExecuteStartSession);
             StopSessionCommand = new AsyncRelayCommand(
                 Command_StopSession, CanExecuteStopSession);
+            StopAllSessionsCommand = new AsyncRelayCommand(
+                Command_StopAllSessions, CanExecuteStopAllSessions);
+            ShowFormPreviewCommand = new AsyncRelayCommand(
+                Command_ShowFormPreview, CanExecuteStartSession);
+            SendToInsightsCommand = new AsyncRelayCommand(
+                Command_SendToInsights, CanExecuteSendToInsights);
+            ShowDebugLogsCommand = new AsyncRelayCommand(
+                Command_ShowDebugLogs, () => { return true; });
+            ExitCommand = new AsyncRelayCommand(
+                async () => { System.Windows.Application.Current.Shutdown(); }, () => { return true; });
 
             //
             // Our progress state is tied to statemanager.
@@ -256,27 +220,40 @@ namespace EtwPilot.ViewModel
             m_ProgressState = new ProgressState();
 
             //
-            // Setup StateManager for other viewmodels
+            // Setup StateManager for other viewmodels.
             //
             StateManager.ProgressState = m_ProgressState;
+            StateManager.Settings = SettingsFormViewModel.LoadDefault();
+
+            //
+            // Subscribe to changes to the settings instance, so that autosave kicks in.
+            // Note that the internal Save() routine in this class resets this value.
+            //
+            StateManager.Settings.PropertyChanged += (obj, p) =>
+            {
+                if (p.PropertyName == "HasUnsavedChanges")
+                {
+                    return;
+                }
+                StateManager.Settings.HasUnsavedChanges = true;
+            };
 
             //
             // Instatiate other viewmodels. SettingsFormViewModel must be instantiated first
             // as it sets StateManager.SettingsModel which other viewmodels use.
             //
-            m_SettingsFormViewModel = new SettingsFormViewModel();
-            m_SettingsFormViewModel.LoadDefault();
             m_ProviderViewModel = new ProviderViewModel();
             m_SessionViewModel = new SessionViewModel();
             m_SessionFormViewModel = new SessionFormViewModel(); // lazy init
+            m_InsightsViewModel = new InsightsViewModel();
 
             //
             // Subscribe to property change events in session form, so when the form becomes valid,
             // the session control buttons and associated commands are available.
             //
-            m_SessionFormViewModel.PropertyChanged += delegate (object? sender, PropertyChangedEventArgs args)
+            m_SessionFormViewModel.ErrorsChanged += delegate (object? sender, DataErrorsChangedEventArgs e)
             {
-                StartSessionCommand.NotifyCanExecuteChanged();
+                NotifyCanExecuteChangeForLiveSessionRelatedCommands();
             };
 
             //
@@ -291,20 +268,15 @@ namespace EtwPilot.ViewModel
             // Initialize traces and set trace levels
             //
             etwlib.TraceLogger.Initialize();
-            etwlib.TraceLogger.SetLevel(m_SettingsFormViewModel.m_SettingsModel.TraceLevelEtwlib);
+            etwlib.TraceLogger.SetLevel(StateManager.Settings.TraceLevelEtwlib);
             EtwPilot.Utilities.TraceLogger.Initialize();
-            EtwPilot.Utilities.TraceLogger.SetLevel(m_SettingsFormViewModel.m_SettingsModel.TraceLevelApp);
+            EtwPilot.Utilities.TraceLogger.SetLevel(StateManager.Settings.TraceLevelApp);
             symbolresolver.TraceLogger.Initialize();
-            symbolresolver.TraceLogger.SetLevel(m_SettingsFormViewModel.m_SettingsModel.TraceLevelSymbolresolver);
+            symbolresolver.TraceLogger.SetLevel(StateManager.Settings.TraceLevelSymbolresolver);
 
             Trace(TraceLoggerType.MainWindow,
                   TraceEventType.Information,
                   "MainWindow opened");
-        }
-
-        private async Task Command_WindowClosing(CancelEventArgs Args)
-        {
-            await OnWindowClosing(Args);
         }
 
         private async Task Command_WindowLoaded(RoutedEventArgs Args)
@@ -329,8 +301,7 @@ namespace EtwPilot.ViewModel
             StateManager.ProgressState.InitializeProgress(2);
             CurrentViewModel = m_ProviderViewModel;
             await m_ProviderViewModel.LoadProviders();
-            m_ProgressState.UpdateProgressMessage($"Loaded {m_ProviderViewModel.Providers.Count} providers");
-            m_ProgressState.FinalizeProgress();
+            m_ProgressState.FinalizeProgress($"Loaded {m_ProviderViewModel.Providers.Count} providers");
         }
 
         private async Task Command_LoadProviderManifest(Guid Id)
@@ -343,8 +314,7 @@ namespace EtwPilot.ViewModel
             }
             CurrentViewModel = manifest;
             ProviderManifestVisible = Visibility.Visible;
-            m_ProgressState.UpdateProgressMessage($"Loaded manifest for provider {Id}");
-            m_ProgressState.FinalizeProgress();
+            m_ProgressState.FinalizeProgress($"Loaded manifest for provider {Id}");
         }
 
         private async Task Command_LoadSessions()
@@ -352,8 +322,7 @@ namespace EtwPilot.ViewModel
             StateManager.ProgressState.InitializeProgress(2);
             CurrentViewModel = m_SessionViewModel;
             await m_SessionViewModel.LoadSessions();
-            m_ProgressState.UpdateProgressMessage($"Loaded {m_SessionViewModel.Sessions.Count} sessions");
-            m_ProgressState.FinalizeProgress();
+            m_ProgressState.FinalizeProgress($"Loaded {m_SessionViewModel.Sessions.Count} sessions");
         }
 
         private async Task Command_NewSession()
@@ -372,111 +341,79 @@ namespace EtwPilot.ViewModel
             RibbonTabControlSelectedIndex = 1;
         }
 
-        private async Task Command_StartSession()
+        private async Task<bool> Command_StartSession()
         {
-            RibbonTabControlSelectedIndex = 1;
-
             //
             // Load the form data into a model object
             //
             var model = m_SessionFormViewModel.GetFormData();
             if (model == null)
             {
-                return;
+                return false;
             }
 
             //
-            // Create a new live session tab
+            // Create a new live session view model that represents this new trace session
+            // CurrentViewModel must be updated now before the session tab is created,
+            // hence we must do this outside of session view model.
             //
-            var tabName = UiHelper.GetUniqueTabName(model.Id, "LiveSession");
-            var vm = m_SessionViewModel.CreateLiveSession(model, tabName);
-            Action tabClosedCallback = async () =>
-            {
-                //
-                // If the last tab was closed, the ribbon's tabcontrol automatically
-                // switches to the prior tab, which invokes Command_SwitchCurrentViewModel,
-                // which could restore another view's VM. Set it back manually now for
-                // the stop command.
-                //
-                CurrentViewModel = vm;
-
-                //
-                // Stop the live session and cleanup
-                //
-                await Command_StopSession();
-
-                //
-                // Hide the context tab group if no more tabs available
-                //
-                var ribbon = UiHelper.FindChild<Fluent.Ribbon>(
-                    System.Windows.Application.Current.MainWindow, "MainWindowRibbon");
-                if (ribbon == null)
-                {
-                    return;
-                }
-                if (ribbon.Tabs.Count == 3)
-                {
-                    LiveSessionsVisible = Visibility.Hidden;
-                    ribbon.SelectedTabIndex = 1;
-                }
-            };
-            //
-            // Create a cache entry for the new live session and its tab.
-            //
-            var tab = UiHelper.CreateRibbonContextualTab(
-                    tabName,
-                    model.Name,
-                    "SessionContextTabStyle",
-                    "SessionContextTabText",
-                    "SessionContextTabCloseButton",
-                    tabClosedCallback);
-            if (tab == null)
-            {
-                Trace(TraceLoggerType.MainWindow,
-                      TraceEventType.Error,
-                      $"Unable to create contextual tab {tabName}");
-                return;
-            }
-
-            //
-            // Add a stop button to the contextual tab, if it's a new tab.
-            //
-            if (!tab.Groups.Any(g => g.Name == "ControlGroup"))
-            {
-                var group = new RibbonGroupBox
-                {
-                    Name = "ControlGroup"
-                };
-                var icon = UiHelper.GetGlobalResource<BitmapImage>("stop");
-                group.Items.Add(new Fluent.Button()
-                {
-                    Name = "StopTraceButton",
-                    Icon = icon,
-                    Command = StopSessionCommand,
-                    Header = "Stop"
+            var vm = new LiveSessionViewModel(
+                model,
+                () => {
+                    NotifyCanExecuteChangeForLiveSessionRelatedCommands();
+                },
+                () => {
+                    NotifyCanExecuteChangeForLiveSessionRelatedCommands();
                 });
-                tab.Groups.Add(group);
-            }
+            CurrentViewModel = vm;
 
             //
-            // Switch to and start the live session.
+            // Start it.
             //
-            CurrentViewModel = vm;
-            m_CurrentCommand = StartSessionCommand;
-            await vm.Start();
-            m_ProgressState.FinalizeProgress();
+            return await m_SessionViewModel.StartLiveSession(vm);
         }
 
-        private async Task Command_StopSession()
+        private async Task<bool> Command_StopSession()
         {
             var vm = CurrentViewModel as LiveSessionViewModel;
             if (vm == null)
             {
-                return;
+                return false;
             }
-            m_ProgressState.UpdateProgressMessage($"Live session stop requested...");
-            await vm.Stop();
-            m_ProgressState.UpdateProgressMessage($"Live session stopped");
+            var result = await m_SessionViewModel.StopLiveSession(vm);
+            NotifyCanExecuteChangeForLiveSessionRelatedCommands();
+            return result;
+        }
+
+        private async Task<bool> Command_StopAllSessions()
+        {
+            var result = await m_SessionViewModel.StopAllLiveSessions();
+            NotifyCanExecuteChangeForLiveSessionRelatedCommands();
+            return result;
+        }
+
+        private async Task<bool> Command_ShowFormPreview()
+        {
+            var popup = new Popup() {
+                StaysOpen = false,
+                Placement = PlacementMode.Mouse
+            };
+            var popBorder = new Border()
+            {
+                BorderBrush = Brushes.Black,
+                Background = Brushes.LightYellow,
+                BorderThickness = new Thickness(1)
+            };
+            var popContent = new TextBlock()
+            {
+                Text = $"{m_SessionFormViewModel}",
+                Padding = new Thickness(5),
+                Margin = new Thickness(5),
+            };
+            popBorder.Child = popContent;
+            popup.IsOpen = true;            
+            popup.Child = popBorder;
+            return true;
         }
 
         private async Task Command_ExportProviders(ExportFormat Format)
@@ -517,6 +454,17 @@ namespace EtwPilot.ViewModel
             {
                 await DataExporter.Export(sessions, Format, StateManager, "Sessions");
             }
+        }
+
+        private async Task Command_ExportLiveSessionData(ExportFormat Format)
+        {
+            var vm = CurrentViewModel as LiveSessionViewModel;
+            if (vm == null || vm.CurrentProviderTraceData == null || vm.CurrentProviderTraceData.Data.Count == 0)
+            {
+                return;
+            }
+            var list = vm.CurrentProviderTraceData.Data.ToList();
+            await DataExporter.Export(list, Format, StateManager, "LiveSession");
         }
 
         private async Task Command_DumpProviderManifests(CancellationToken Token)
@@ -560,9 +508,8 @@ namespace EtwPilot.ViewModel
             {
                 if (Token.IsCancellationRequested)
                 {
-                    m_ProgressState.UpdateProgressMessage($"Operation cancelled");
                     CancelCommandButtonVisibility = Visibility.Hidden;
-                    m_ProgressState.FinalizeProgress();
+                    m_ProgressState.FinalizeProgress("Operation cancelled");
                     return;
                 }
 
@@ -579,9 +526,9 @@ namespace EtwPilot.ViewModel
                 File.WriteAllText(target, manifest.SelectedProviderManifest.ToXml());
                 m_ProgressState.UpdateProgressValue();
             }
-            m_ProgressState.UpdateProgressMessage($"Exported {providers.Count} manifests to {root} ({numErrors} errors)");
             CancelCommandButtonVisibility = Visibility.Hidden;
-            m_ProgressState.FinalizeProgress();
+            m_ProgressState.FinalizeProgress(
+                $"Exported {providers.Count} manifests to {root} ({numErrors} errors)");
         }
 
         private async Task Command_SaveProvidersToClipboard()
@@ -593,8 +540,7 @@ namespace EtwPilot.ViewModel
             }
             m_ProgressState.InitializeProgress(1);
             System.Windows.Clipboard.SetText(DataExporter.GetDataAsCsv(providers));
-            m_ProgressState.UpdateProgressMessage($"Copied {providers.Count} rows to clipboard");
-            m_ProgressState.FinalizeProgress();
+            m_ProgressState.FinalizeProgress($"Copied {providers.Count} rows to clipboard");
         }
 
         private async Task Command_SaveSessionsToClipboard()
@@ -611,8 +557,19 @@ namespace EtwPilot.ViewModel
                 sb.AppendLine(session.ToString());
             }
             System.Windows.Clipboard.SetText(sb.ToString());
-            m_ProgressState.UpdateProgressMessage($"Copied {sessions.Count} rows to clipboard");
-            m_ProgressState.FinalizeProgress();
+            m_ProgressState.FinalizeProgress($"Copied {sessions.Count} rows to clipboard");
+        }
+
+        private async Task Command_SaveLiveSessionDataToClipboard()
+        {
+            var vm = CurrentViewModel as LiveSessionViewModel;
+            if (vm == null || vm.CurrentProviderTraceData == null || vm.CurrentProviderTraceData.Data.Count == 0)
+            {
+                return;
+            }
+            var list = vm.CurrentProviderTraceData.Data.ToList();
+            System.Windows.Clipboard.SetText(DataExporter.GetDataAsCsv(list));
+            m_ProgressState.FinalizeProgress($"Copied {list.Count} rows to clipboard");
         }
 
         private async Task Command_SwitchCurrentViewModel(SelectionChangedEventArgs Args)
@@ -658,22 +615,24 @@ namespace EtwPilot.ViewModel
                         {
                             CurrentViewModel = m_SessionViewModel;
                         }
-                        if (m_SessionViewModel.HasLiveSessions())
-                        {
-                            LiveSessionsVisible = Visibility.Visible;
-                        }
-                        StartSessionCommand.NotifyCanExecuteChanged();
+                        LiveSessionsVisible = m_SessionViewModel.HasLiveSessions() ?
+                            Visibility.Visible : Visibility.Hidden;
                         break;
                     }
                 case "InsightsTab":
                     {
                         LiveSessionsVisible = Visibility.Hidden;
                         ProviderManifestVisible = Visibility.Hidden;
-                        CurrentViewModel = null;
+                        CurrentViewModel = m_InsightsViewModel;
                         break;
                     }
                 default:
                     {
+                        //
+                        // Important: do not NULL CurrentViewModel here.
+                        // It could be a live session tab whose VM has
+                        // not be setup yet and nulling here breaks.
+                        //
                         LiveSessionsVisible = Visibility.Hidden;
                         ProviderManifestVisible = Visibility.Hidden;
                         break;
@@ -688,124 +647,52 @@ namespace EtwPilot.ViewModel
             if (tab.Name.StartsWith("Manifest_"))
             {
                 ProviderManifestVisible = Visibility.Visible;
-                CurrentViewModel = m_ProviderViewModel.GetVmForTab(tab.Name)!;
+                var vm = m_ProviderViewModel.GetVmForTab(tab.Name)!;
+                if (vm != null)
+                {
+                    CurrentViewModel = vm;
+                }
+                Debug.Assert(CurrentViewModel != null);
             }
             else if (tab.Name.StartsWith("LiveSession_"))
             {
+                //
+                // NB: if we're being invoked as a side effect of Command_StartSession,
+                // the tab has been created but the VM has not - so this will return
+                // null here. This is fine, because Command_StartSession sets the
+                // CurrentViewModel once it completes setting up the trace.
+                //
                 LiveSessionsVisible = Visibility.Visible;
-                CurrentViewModel = m_SessionViewModel.GetVmForTab(tab.Name)!;
-                Debug.Assert(CurrentViewModel != null);
+                var vm = m_SessionViewModel.GetVmForTab(tab.Name)!;
+                if (vm != null)
+                {
+                    CurrentViewModel = vm;
+                }
+                //
+                // Force stop button to re-evaluate if it should be enabled or disabled
+                // based on the VM's live session we are switch to.
+                //
+                NotifyCanExecuteChangeForLiveSessionRelatedCommands();
             }
         }
 
-        private async Task Command_BackstageMenuClick(RoutedEventArgs Args)
+        private async Task Command_SendToInsights()
         {
-            var menuItem = Args.Source as BackstageTabItem;
-            if (menuItem == null || menuItem.Name == null)
+            var vm = CurrentViewModel as LiveSessionViewModel;
+            if (vm == null)
             {
                 return;
             }
-
-            //
-            // Switch the content view back to the settings form
-            //
-            if (menuItem.Name != "MainContentMenuItem")
-            {
-                var tabControl = menuItem.Parent as BackstageTabControl;
-                tabControl!.SelectedIndex = 0;
-            }
-
-            m_ProgressState.InitializeProgress(1);
-
-            switch (menuItem.Name)
-            {
-                case "LoadSettingsMenuItem":
-                    {
-                        var dialog = new System.Windows.Forms.OpenFileDialog();
-                        dialog.CheckFileExists = true;
-                        dialog.CheckPathExists = true;
-                        dialog.Multiselect = false;
-
-                        if (dialog.ShowDialog() != System.Windows.Forms.DialogResult.OK)
-                        {
-                            break;
-                        }
-
-                        try
-                        {
-                            m_SettingsFormViewModel.Load(dialog.FileName);
-                        }
-                        catch (Exception ex)
-                        {
-                            MessageBox.Show(
-                                $"Unable to load settings from {dialog.FileName}: {ex.Message}");
-                            break;
-                        }
-                        m_ProgressState.UpdateProgressMessage($"Successfully loaded settings from {dialog.FileName}");
-                        break;
-                    }
-                case "SaveSettingsMenuItem":
-                    {
-                        try
-                        {
-                            m_SettingsFormViewModel.Save();
-                        }
-                        catch (Exception ex)
-                        {
-                            MessageBox.Show($"Unable to save settings: {ex.Message}");
-                            break;
-                        }
-
-                        m_ProgressState.UpdateProgressMessage($"Successfully saved settings");
-                        break;
-                    }
-                case "SaveSettingsAsMenuItem":
-                    {
-                        var sfd = new System.Windows.Forms.SaveFileDialog();
-                        sfd.Filter = "json files (*.json)|*.json";
-                        sfd.RestoreDirectory = true;
-
-                        if (sfd.ShowDialog() != System.Windows.Forms.DialogResult.OK)
-                        {
-                            break;
-                        }
-
-                        try
-                        {
-                            m_SettingsFormViewModel.Save(sfd.FileName);
-                        }
-                        catch (Exception ex)
-                        {
-                            MessageBox.Show($"Unable to save settings: {ex.Message}");
-                            break;
-                        }
-                        m_ProgressState.UpdateProgressMessage($"Successfully saved settings to {sfd.FileName}");
-                        break;
-                    }
-                case "DebugLogsMenuItem":
-                    {
-                        var psi = new ProcessStartInfo();
-                        psi.FileName = Model.SettingsModel.DefaultWorkingDirectory;
-                        psi.UseShellExecute = true;
-                        Process.Start(psi);
-                        break;
-                    }
-                case "ExitMenuItem":
-                    {
-                        await OnWindowClosing(new CancelEventArgs());
-                        break;
-                    }
-                default:
-                    {
-                        break;
-                    }
-            }
-            m_ProgressState.FinalizeProgress();
+            CurrentViewModel = m_InsightsViewModel;
+            m_InsightsViewModel.LoadData(vm);
         }
 
-        private async Task OnWindowClosing(CancelEventArgs Args)
+        private async Task Command_ShowDebugLogs()
         {
-            await m_SessionViewModel.StopAllLiveSessions();
+            var psi = new ProcessStartInfo();
+            psi.FileName = SettingsFormViewModel.DefaultWorkingDirectory;
+            psi.UseShellExecute = true;
+            Process.Start(psi);
         }
 
         private List<ParsedEtwProvider>? GetSelectedProvidersFromVm()
@@ -852,13 +739,36 @@ namespace EtwPilot.ViewModel
 
         private bool CanExecuteStopSession()
         {
-            if (m_CurrentCommand == null ||
-                !m_CurrentCommand.IsRunning ||
-                m_CurrentCommand != StartSessionCommand)
+            var vm = CurrentViewModel as LiveSessionViewModel;
+            if (vm == null)
             {
                 return false;
             }
-            return true;
+            return vm.IsRunning();
+        }
+
+        private bool CanExecuteStopAllSessions()
+        {
+            return m_SessionViewModel.HasActiveLiveSessions();
+        }
+
+        private bool CanExecuteSendToInsights()
+        {
+            var vm = CurrentViewModel as LiveSessionViewModel;
+            if (vm == null || string.IsNullOrEmpty(StateManager.Settings.ModelPath) || vm.CurrentProviderTraceData == null)
+            {
+                return false;
+            }
+            return vm.CurrentProviderTraceData.Data.Count > 0;
+        }
+
+        private void NotifyCanExecuteChangeForLiveSessionRelatedCommands()
+        {
+            StartSessionCommand.NotifyCanExecuteChanged();
+            StopSessionCommand.NotifyCanExecuteChanged();
+            StopAllSessionsCommand.NotifyCanExecuteChanged();
+            ShowFormPreviewCommand.NotifyCanExecuteChanged();
+            SendToInsightsCommand.NotifyCanExecuteChanged();
         }
     }
 }

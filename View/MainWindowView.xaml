@@ -15,32 +15,26 @@
                      Height="900" Width="1500">
     <!-- Use the interactions feature to redirect some UI events to commands -->
     <behaviours:Interaction.Triggers>
-        <behaviours:EventTrigger EventName="Closing">
-            <behaviours:InvokeCommandAction 
-               Command="{Binding WindowClosingCommand}"
-               PassEventArgsToCommand="True"/>
-        </behaviours:EventTrigger>
         <behaviours:EventTrigger EventName="Loaded">
             <behaviours:InvokeCommandAction 
                Command="{Binding WindowLoadedCommand}"
                PassEventArgsToCommand="True"/>
         </behaviours:EventTrigger>
-        <behaviours:EventTrigger EventName="MouseLeftButtonUp">
-            <behaviours:InvokeCommandAction 
-                Command="{Binding BackstageMenuClickCommand}"
-                PassEventArgsToCommand="True"/>
-        </behaviours:EventTrigger>
     </behaviours:Interaction.Triggers>
     <Fluent:RibbonWindow.Resources>
         <!-- Instantiate first-level views as resources so they're not
-        recreated every time tabs are switched - see
-            https://stackoverflow.com/questions/38468786/mvvm-datatemplate-creates-a-new-view
-        -->
+             recreated every time tabs are switched - see:
+                https://stackoverflow.com/questions/38468786/mvvm-datatemplate-creates-a-new-view
+        
+            This is only done for views where content should never change once loaded, because
+            having to reload content on subsequent reuses would create an undesirable coupling
+            between viewmodels and their views.-->
         <view:ProviderView x:Key="StaticProviderView"/>
         <view:ProviderManifestView x:Key="StaticProviderManifestView"/>
         <view:SessionView x:Key="StaticSessionView"/>
         <view:SettingsFormView x:Key="StaticSettingsFormView"/>
-        <view:LiveSessionView x:Key="StaticLiveSessionView"/>
+        <view:InsightsView x:Key="StaticInsightsView"/>
+        
         <!-- DataTemplates for current content view model -->
         <DataTemplate DataType="{x:Type vm:ProviderViewModel}">
             <ContentControl Content="{StaticResource StaticProviderView}" />
@@ -55,7 +49,10 @@
             <ContentControl Content="{StaticResource StaticSettingsFormView}" />
         </DataTemplate>
         <DataTemplate DataType="{x:Type vm:LiveSessionViewModel}">
-            <ContentControl Content="{StaticResource StaticLiveSessionView}" />
+            <view:LiveSessionView />
+        </DataTemplate>
+        <DataTemplate DataType="{x:Type vm:InsightsViewModel}">
+            <ContentControl Content="{StaticResource StaticInsightsView}" />
         </DataTemplate>
     </Fluent:RibbonWindow.Resources>
     <DockPanel>
@@ -69,7 +66,7 @@
                 <!-- Template for dynamic contextual tabs. Some properties are set in code-behind. -->
                 <Style x:Key="ProviderContextTabStyle" TargetType="{x:Type Fluent:RibbonTabItem}">
                     <Setter Property="Group" Value="{Binding Source={x:Reference manifestsContextualTabGroup}}"/>
-                    <Setter Property="Visibility" Value="{Binding ProviderManifestVisible}"/>
+                    <Setter Property="Visibility" Value="{Binding ProviderManifestVisible,Mode=TwoWay}"/>
                     <Setter Property="HeaderTemplate">
                         <Setter.Value>
                             <DataTemplate>
@@ -89,7 +86,7 @@
                 </Style>
                 <Style x:Key="SessionContextTabStyle" TargetType="{x:Type Fluent:RibbonTabItem}">
                     <Setter Property="Group" Value="{Binding Source={x:Reference sessionsContextualTabGroup}}"/>
-                    <Setter Property="Visibility" Value="{Binding LiveSessionsVisible}"/>
+                    <Setter Property="Visibility" Value="{Binding LiveSessionsVisible,Mode=TwoWay}"/>
                     <Setter Property="HeaderTemplate">
                         <Setter.Value>
                             <DataTemplate>
@@ -118,16 +115,23 @@
 
             <!--Backstage-->
             <Fluent:Ribbon.Menu>
-                <Fluent:Backstage>
+                <Fluent:Backstage IsOpenChanged="Backstage_IsOpenChanged">
                     <Fluent:BackstageTabControl>
                         <Fluent:BackstageTabItem Header="Settings" Name="MainContentMenuItem">
-                            <ContentControl Content="{Binding m_SettingsFormViewModel}"/>
+                            <ContentControl Content="{Binding StateManager.Settings,ValidatesOnNotifyDataErrors=False}"/>
                         </Fluent:BackstageTabItem>
-                        <Fluent:BackstageTabItem Header="Load settings..." Name="LoadSettingsMenuItem"/>
-                        <Fluent:BackstageTabItem Header="Save settings" Name="SaveSettingsMenuItem"/>
-                        <Fluent:BackstageTabItem Header="Save settings as..." Name="SaveSettingsAsMenuItem"/>
-                        <Fluent:BackstageTabItem Header="Debug logs" Name="DebugLogsMenuItem"/>
-                        <Fluent:BackstageTabItem Header="Exit" Name="ExitMenuItem"/>
+                        <Fluent:Button Header="Load settings"
+                                       DataContext="{Binding StateManager.Settings,ValidatesOnNotifyDataErrors=False}"
+                                       Command="{Binding LoadSettingsCommand}" />
+                        <Fluent:Button Header="Save settings"
+                                       DataContext="{Binding StateManager.Settings,ValidatesOnNotifyDataErrors=False}"
+                                       Command="{Binding SaveSettingsCommand}" />
+                        <Fluent:Button Header="Show debug logs"
+                                       DataContext="{StaticResource g_MainWindowViewModel}"
+                                       Command="{Binding ShowDebugLogsCommand}" />
+                        <Fluent:Button Header="Exit"
+                                       DataContext="{StaticResource g_MainWindowViewModel}"
+                                       Command="{Binding ExitCommand}" />
                     </Fluent:BackstageTabControl>
                 </Fluent:Backstage>
             </Fluent:Ribbon.Menu>
@@ -196,22 +200,55 @@
                     <Fluent:Button Header="Start"
                                    Icon="{DynamicResource start}"
                                    Command="{Binding StartSessionCommand}"/>
+                    <Fluent:Button Header="Stop All"
+                                   Icon="{DynamicResource stop}"
+                                   Command="{Binding StopAllSessionsCommand}"/>
+                </Fluent:RibbonGroupBox>
+                <Fluent:RibbonGroupBox Header="Tools">
+                    <Fluent:Button Header="Preview"
+                                   Icon="{DynamicResource bulletlist}"
+                                   Command="{Binding ShowFormPreviewCommand}"/>
                 </Fluent:RibbonGroupBox>
             </Fluent:RibbonTabItem>
-            <Fluent:RibbonTabItem Header="Insights" Name="InsightsTab"/>
+            <Fluent:RibbonTabItem Header="Insights" 
+                                  Name="InsightsTab"
+                                  DataContext="{Binding m_InsightsViewModel,ValidatesOnNotifyDataErrors=False}">
+                <Fluent:RibbonGroupBox Header="Actions" Width="Auto">
+                    <Fluent:ToggleButton Header="Chat only"
+                                   Icon="{DynamicResource user-avatar}"
+                                   Command="{Binding ToggleChatOnlyModeCommand,ValidatesOnNotifyDataErrors=False}"/>
+                    <Fluent:Button Header="Reload Model"
+                                   Icon="{DynamicResource refresh}"
+                                   Command="{Binding ReloadModelCommand,ValidatesOnNotifyDataErrors=False}"/>
+                </Fluent:RibbonGroupBox>
+                <Fluent:RibbonGroupBox Header="Provider" Width="Auto">
+                    <Fluent:Button Header="New"
+                                   Icon="{DynamicResource newdb}"
+                                   IsEnabled="{Binding ChatOnlyMode,Converter={StaticResource InverseBooleanConverter}}"
+                                   Command="{Binding NewProviderVecDbCommand,ValidatesOnNotifyDataErrors=False}"/>
+                    <Fluent:Button Header="Load"
+                                   Icon="{DynamicResource open}"
+                                   IsEnabled="{Binding ChatOnlyMode,Converter={StaticResource InverseBooleanConverter}}"
+                                   Command="{Binding LoadProviderVecDbCommand,ValidatesOnNotifyDataErrors=False}"/>
+                </Fluent:RibbonGroupBox>
+            </Fluent:RibbonTabItem>
 
             <!--Contextual Tab Groups-->
             <Fluent:Ribbon.ContextualGroups>
                 <Fluent:RibbonContextualTabGroup 
                     Name="manifestsContextualTabGroup"
                     Header="Provider Manifests" 
-                    Visibility="{Binding ProviderManifestVisible}"
+                    Visibility="{Binding ProviderManifestVisible,Mode=TwoWay}"
                     Background="Green" 
+                    Width="Auto"
+                    MinWidth="125"
                     BorderBrush="Green"/>
                 <Fluent:RibbonContextualTabGroup
                     Name="sessionsContextualTabGroup"
                     Header="Live Trace Sessions" 
-                    Visibility="{Binding LiveSessionsVisible}"
+                    Width="Auto"
+                    HorizontalAlignment="Left"
+                    Visibility="{Binding LiveSessionsVisible,Mode=TwoWay}"
                     Background="Red" 
                     BorderBrush="Red"/>
             </Fluent:Ribbon.ContextualGroups>
@@ -259,6 +296,7 @@
                 </TextBlock>
             </StatusBarItem>
         </StatusBar>
-        <ContentControl Name="MainContentControl" Content="{Binding CurrentViewModel}"/>
+        <ContentControl Name="MainContentControl" 
+                        Content="{Binding CurrentViewModel,ValidatesOnNotifyDataErrors=False}"/>
     </DockPanel>
 </Fluent:RibbonWindow>

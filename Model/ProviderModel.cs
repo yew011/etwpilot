@@ -71,7 +71,7 @@ namespace EtwPilot.Model
 
         private async Task<List<ParsedEtwProvider>?> LoadFromCache(bool ForceRefresh = false)
         {
-            var cache = StateManager.SettingsModel.ProviderCacheLocation;
+            var cache = StateManager.Settings.ProviderCacheLocation;
             Debug.Assert(!string.IsNullOrEmpty(cache));
 
             if (!File.Exists(cache) || ForceRefresh)

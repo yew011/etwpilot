@@ -24,13 +24,31 @@ namespace EtwPilot.Utilities.Converters
 {
     using StopCondition = ViewModel.LiveSessionViewModel.StopCondition;
 
+    public static class IConverterCode
+    {
+        //
+        // Allows users to customize IConverter code for default ETW columns
+        //
+        public static readonly string s_DecimalToHexIConverterCode = @"
+        public object Convert(object value, Type targetType, object parameter, System.Globalization.CultureInfo culture)
+        {
+            var val = System.Convert.ToInt64(value);
+            return $""0x{val:X}"";
+        }
+
+        public object ConvertBack(object value, Type targetType, object parameter, System.Globalization.CultureInfo culture)
+        {
+            throw new NotImplementedException();
+        }";
+    }
+
     public class IsGreaterThanZero :IValueConverter
     {
         public object Convert(object value, Type targetType, object parameter, System.Globalization.CultureInfo culture)
         {
             if ((int)value <= 0)
             {
-                return Visibility.Collapsed;
+                return Visibility.Hidden;
             }
             return Visibility.Visible;
         }
@@ -197,6 +215,45 @@ namespace EtwPilot.Utilities.Converters
         {
             var result = bool.Parse((string)parameter);
             return result;
+        }
+    }
+
+    public class DefaultConverter : IValueConverter
+    {
+        public object? Convert(object value, Type targetType, object parameter, System.Globalization.CultureInfo culture)
+        {
+            if (value == null)
+            {
+                return Binding.DoNothing;
+            }
+
+            return value.ToString();
+        }
+
+        public object ConvertBack(object value, Type targetType, object parameter, System.Globalization.CultureInfo culture)
+        {
+            throw new NotImplementedException();
+        }
+    }
+
+    public class InverseBooleanConverter : IValueConverter
+    {
+        //
+        // I hate that you make me do this, WPF. I hate you. You're awful.
+        //
+        public object Convert(object value, Type targetType, object parameter,
+            System.Globalization.CultureInfo culture)
+        {
+            if (targetType != typeof(bool))
+                throw new InvalidOperationException("The target must be a boolean");
+
+            return !(bool)value;
+        }
+
+        public object ConvertBack(object value, Type targetType, object parameter,
+            System.Globalization.CultureInfo culture)
+        {
+            throw new NotSupportedException();
         }
     }
 

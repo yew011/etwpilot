@@ -28,6 +28,7 @@ namespace EtwPilot.ViewModel
     {
         public List<ParsedEtwProvider> SelectedProviders;
         private ProviderModel Model;
+
         private ObservableCollection<ParsedEtwProvider> _providers;
         public ObservableCollection<ParsedEtwProvider> Providers
         {
@@ -42,6 +43,20 @@ namespace EtwPilot.ViewModel
             }
         }
 
+        private ObservableCollection<ParsedEtwProvider> _ProvidersWithManifest;
+        public ObservableCollection<ParsedEtwProvider> ProvidersWithManifest
+        {
+            get => _ProvidersWithManifest;
+            set
+            {
+                if (_ProvidersWithManifest != value)
+                {
+                    _ProvidersWithManifest = value;
+                    OnPropertyChanged("ProvidersWithManifest");
+                }
+            }
+        }
+
         private Dictionary<string, ProviderManifestViewModel> m_ManifestCache;
 
         public ProviderViewModel()
@@ -50,6 +65,7 @@ namespace EtwPilot.ViewModel
             Model = new ProviderModel(StateManager);
             m_ManifestCache = new Dictionary<string, ProviderManifestViewModel>();
             SelectedProviders = new List<ParsedEtwProvider>();
+            ProvidersWithManifest = new ObservableCollection<ParsedEtwProvider>();
         }
 
         public async Task LoadProviders()
@@ -61,9 +77,12 @@ namespace EtwPilot.ViewModel
             }
             Providers.Clear();
             m_ManifestCache.Clear();
-            if (StateManager.SettingsModel.HideProvidersWithoutManifest)
+
+            var filtered = providers.Where(p => p.HasManifest).Cast<ParsedEtwProvider>().ToList();
+            filtered.ForEach(f => ProvidersWithManifest.Add(f));
+
+            if (StateManager.Settings.HideProvidersWithoutManifest)
             {
-                var filtered = providers.Where(p => p.HasManifest).Cast<ParsedEtwProvider>().ToList();
                 filtered.ForEach(f => Providers.Add(f));
             }
             else

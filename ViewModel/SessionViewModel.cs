@@ -25,6 +25,8 @@ using System.Diagnostics;
 
 namespace EtwPilot.ViewModel
 {
+    using static EtwPilot.Utilities.TraceLogger;
+
     internal class SessionViewModel : ViewModelBase
     {
         public List<ParsedEtwSession> SelectedSessions;
@@ -64,20 +66,110 @@ namespace EtwPilot.ViewModel
             sessions.ForEach(s => Sessions.Add(s));
         }
 
-        public bool HasLiveSessions()
+        public bool HasLiveSessions() => LiveSessionCache.Count > 0;
+        public bool HasActiveLiveSessions() => LiveSessionCache.Values.Any(
+            s => s.IsRunning() && !s.IsStopping());
+
+        public async Task<bool> StartLiveSession(LiveSessionViewModel LiveSession)
         {
-            return LiveSessionCache.Count > 0;
+            //
+            // Create a UI contextual tab for this live session
+            //
+            Func<Task<bool>> tabClosedCallback = async delegate ()
+            {
+                //
+                // Stop the live session and cleanup
+                //
+                var result = await StopLiveSession(LiveSession);
+                if (!result)
+                {
+                    return false;
+                }
+
+                //
+                // Locate the corresponding tab name from our livesession cache
+                // and remove the entry from the cache
+                //
+                var tabName = LiveSessionCache.Where(kvp => kvp.Value == LiveSession)?.Select(
+                    kvp => kvp.Key).FirstOrDefault();
+                if (tabName == null)
+                {
+                    Debug.Assert(false);
+                    return false;
+                }
+
+                RemoveLiveSession(tabName);
+                return true;
+            };
+            var tabName = UiHelper.GetUniqueTabName(LiveSession.Configuration.Id, "LiveSession");
+            var tab = UiHelper.CreateRibbonContextualTab(
+                    tabName,
+                    LiveSession.Configuration.Name,
+                    1,
+                    new Dictionary<string, List<string>>() {
+                        { "Control", new List<string> { "LiveSessionStopButtonStyle" } },
+                        { "Actions", new List<string> { "LiveSessionInsightsButtonStyle" } },
+                        { "Export", new List<string> { 
+                            "LiveSessionExportJSONButtonStyle",
+                            "LiveSessionExportCSVButtonStyle",
+                            "LiveSessionExportXMLButtonStyle",
+                            "LiveSessionExportClipboardButtonStyle",
+                        } },
+                    },
+                    "SessionContextTabStyle",
+                    "SessionContextTabText",
+                    "SessionContextTabCloseButton",
+                    tabClosedCallback);
+            if (tab == null)
+            {
+                Trace(TraceLoggerType.LiveSession,
+                      TraceEventType.Error,
+                      $"Unable to create contextual tab {tabName}");
+                return false;
+            }
+            AddLiveSession(LiveSession, tabName);
+
+            //
+            // Start the live session.
+            //
+            var success = await LiveSession.Start();
+            return success;
         }
 
-        public LiveSessionViewModel CreateLiveSession(SessionFormModel Model, string TabName)
+        public async Task<bool> StopLiveSession(LiveSessionViewModel LiveSession)
         {
-            var vm = new LiveSessionViewModel(Model);
+            if (!LiveSession.IsRunning())
+            {
+                return true;
+            }
+            if (LiveSession.IsStopping())
+            {
+                StateManager.ProgressState.UpdateProgressMessage($"Stop in progress, please wait...");
+                return false;
+            }
+            StateManager.ProgressState.UpdateProgressMessage($"Live session stop requested...");
+            var result = await LiveSession.Stop();
+            if (!result)
+            {
+                return result;
+            }
+            StateManager.ProgressState.UpdateProgressMessage($"Live session stopped");
+            return true;
+        }
+
+        public void AddLiveSession(LiveSessionViewModel LiveSession, string TabName)
+        {
             Debug.Assert(!LiveSessionCache.ContainsKey(TabName));
-            LiveSessionCache.Add(TabName, vm);
-            return vm;
+            LiveSessionCache.Add(TabName, LiveSession);
         }
 
-        public async Task StopAllLiveSessions()
+        public void RemoveLiveSession(string TabName)
+        {
+            Debug.Assert(LiveSessionCache.ContainsKey(TabName));
+            LiveSessionCache.Remove(TabName);
+        }
+
+        public async Task<bool> StopAllLiveSessions()
         {
             var total = LiveSessionCache.Count;
             var i = 1;
@@ -86,13 +178,34 @@ namespace EtwPilot.ViewModel
                 var vm = kvp.Value;
                 StateManager.ProgressState.UpdateProgressMessage(
                     $"Please wait, stopping live session {i++} of {total}...");
-                await vm.Stop();
+                if (!await StopLiveSession(vm))
+                {
+                    return false;
+                }
             }
+            return true;
+        }
+
+        public async Task<bool> ShutdownAllLiveSessions()
+        {
+            var total = LiveSessionCache.Count;
+            var i = 1;
+            foreach (var kvp in LiveSessionCache)
+            {
+                var vm = kvp.Value;
+                StateManager.ProgressState.UpdateProgressMessage(
+                    $"Please wait, stopping live session {i++} of {total}...");
+                if (!await StopLiveSession(vm))
+                {
+                    return false;
+                }
+            }
+            LiveSessionCache.Clear();
+            return true;
         }
 
         public LiveSessionViewModel? GetVmForTab(string TabName)
         {
-            Debug.Assert(LiveSessionCache.ContainsKey(TabName));
             if (LiveSessionCache.ContainsKey(TabName))
             {
                 return LiveSessionCache[TabName];

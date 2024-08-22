@@ -24,10 +24,10 @@ using System.IO;
 using System.Runtime.InteropServices;
 using static etwlib.NativeTraceConsumer;
 using static etwlib.NativeTraceControl;
-using System.Windows.Threading;
-using System.Windows.Data;
-using Meziantou.Framework.WPF;
 using Meziantou.Framework.WPF.Collections;
+using System.Collections.Concurrent;
+using System.Windows.Data;
+using EtwPilot.Utilities;
 
 namespace EtwPilot.ViewModel
 {
@@ -43,85 +43,163 @@ namespace EtwPilot.ViewModel
             Max
         }
 
-        #region observable properties
-
-        private int _EventsConsumed;
-        public int EventsConsumed
+        private long _EventsConsumed;
+        public long EventsConsumed
         {
-            get => _EventsConsumed;
+            get { return Interlocked.Read(ref _EventsConsumed); }
             set
             {
                 if (_EventsConsumed != value)
                 {
-                    _EventsConsumed = value;
+                    Interlocked.Exchange(ref _EventsConsumed, value);
                     OnPropertyChanged("EventsConsumed");
                 }
             }
         }
 
-        private uint _BytesConsumed;
-        public uint BytesConsumed
+        private long _BytesConsumed;
+        public long BytesConsumed
         {
-            get => _BytesConsumed;
+            get { return Interlocked.Read(ref _BytesConsumed); }
             set
             {
                 if (_BytesConsumed != value)
                 {
-                    _BytesConsumed = value;
+                    Interlocked.Exchange(ref _BytesConsumed, value);
                     OnPropertyChanged("BytesConsumed");
                 }
             }
         }
 
-        private ConcurrentObservableCollection<ParsedEtwEvent> _Data;
-        public ConcurrentObservableCollection<ParsedEtwEvent> Data
-        {
-            get => _Data;
-            private set { _Data = value; }
-        }
-        #endregion
-
         public SessionFormModel Configuration { get; set; }
         public Stopwatch Stopwatch { get; set; }
-        private Task CurrentTask;
         private CancellationTokenSource CancellationSource;
         private AutoResetEvent TaskCompletedEvent;
+        private Action TraceStartedCallback;
+        private Action TraceStoppedCallback;
+        private bool StartTaskRunning;
+        private bool StopTaskRunning;
+        private TraceSession _TraceSession;
+        private Timer _ElapsedSecTimer;
+        private ConcurrentDictionary<string, DynamicRuntimeLibrary> ConverterLibraryCache;
 
-        public LiveSessionViewModel(SessionFormModel SessionModel)
+        //
+        // Per-provider trace data, accessed from arbitrary thread ctx.
+        //
+        private ConcurrentDictionary<Guid, ProviderTraceData> _ProviderTraceData;
+
+        private ProviderTraceData _CurrentProviderTraceData; // relates to currently selected tab
+        public ProviderTraceData CurrentProviderTraceData
+        {
+            get => _CurrentProviderTraceData;
+            set
+            {
+                if (_CurrentProviderTraceData != value)
+                {
+                    _CurrentProviderTraceData = value;
+                    OnPropertyChanged("CurrentProviderTraceData");
+                }
+            }
+        }
+
+        public LiveSessionViewModel(
+            SessionFormModel Model,
+            Action StartedCallback,
+            Action StoppedCallback
+            )
         {
             CancellationSource = new CancellationTokenSource();
             TaskCompletedEvent = new AutoResetEvent(false);
             Stopwatch = new Stopwatch();
-            Configuration = SessionModel;
-            Data = new ConcurrentObservableCollection<ParsedEtwEvent>();
+            Configuration = Model;
+            _ProviderTraceData = new ConcurrentDictionary<Guid, ProviderTraceData>();
+            TraceStartedCallback = StartedCallback;
+            TraceStoppedCallback = StoppedCallback;
+            //
+            // For the elapsed seconds visual aid to update once a second. This is
+            // required because Stopwatch.ElapsedMilliseconds is a property that
+            // only updates when it is accessed (queried), so one-way binding to
+            // the control does not do that.
+            //
+            _ElapsedSecTimer = new Timer(new TimerCallback((s) =>
+                OnPropertyChanged("Stopwatch")), null, 1000, 1000);
+            ConverterLibraryCache = new ConcurrentDictionary<string, DynamicRuntimeLibrary>();
         }
 
-        public async Task Stop()
+        public bool IsRunning()
         {
-            await Task.Run(() =>
-            {
-                CancellationSource.Cancel();
-                TaskCompletedEvent.WaitOne();
-            });
+            //
+            // NB: StartTask.Status is NOT reliable!
+            //
+            return StartTaskRunning;
         }
 
-        public async Task Start()
+        public bool IsStopping()
         {
+            //
+            // NB: StopTask.Status is NOT reliable!
+            //
+            return StopTaskRunning;
+        }
+
+        public async Task<bool> Stop()
+        {
+            Debug.Assert(!StopTaskRunning);
+            Debug.Assert(_TraceSession != null);
+            StopTaskRunning = true;
+            var success = true;
+
             try
             {
+                TraceStoppedCallback();
                 await Task.Run(() =>
                 {
-                    StartInternal();
+                    //
+                    // Cancel our work.
+                    //
+                    CancellationSource.Cancel();
+                    //
+                    // Stop the trace controller.
+                    //
+                    _TraceSession.Stop();
+
+                    TaskCompletedEvent.WaitOne();
                 });
             }
             catch (Exception ex)
             {
                 StateManager.ProgressState.UpdateProgressMessage(
                     $"Exception occurred: {ex.Message}");
+                success = false;
             }
+            StopTaskRunning = false;
+            return success;
         }
 
-        private void StartInternal()
+        public async Task<bool> Start()
+        {
+            Debug.Assert(!StartTaskRunning);
+            Debug.Assert(!StopTaskRunning);
+            StartTaskRunning = true;
+            var success = true;
+
+            try
+            {
+                BuildConverterLibraryCache();
+                TraceStartedCallback();
+                await Task.Run(() => ConsumeTraceEvents());
+            }
+            catch (Exception ex)
+            {
+                StateManager.ProgressState.FinalizeProgress(
+                    $"Exception occurred: {ex.Message}");
+                success = false;
+            }
+            StartTaskRunning = false;
+            return success;
+        }
+
+        private void ConsumeTraceEvents()  // blocking
         {
             //
             // Setup progress bar.
@@ -140,7 +218,6 @@ namespace EtwPilot.ViewModel
             //
             // Instantiate trace object
             //
-            TraceSession trace;
             if (!Configuration.IsRealTime)
             {
                 var sb = new StringBuilder(Configuration.Name);
@@ -150,29 +227,28 @@ namespace EtwPilot.ViewModel
                 }
                 var filename = $"{sb}-{DateTime.Now}.etl";
                 var target = Path.Combine(Configuration.LogLocation, filename);
-                trace = new FileTrace(target);
+                _TraceSession = new FileTrace(target);
             }
             else
             {
-                trace = new RealTimeTrace(Configuration.Name);
+                _TraceSession = new RealTimeTrace(Configuration.Name);
             }
 
-            etwlib.TraceLogger.SetLevel(StateManager.SettingsModel.TraceLevelEtwlib);
+            etwlib.TraceLogger.SetLevel(StateManager.Settings.TraceLevelEtwlib);
 
             //
             // Start trace
             //
-            using (trace)
             using (var parserBuffers = new EventParserBuffers())
             {
                 try
                 {
-                    foreach (var provider in Configuration.EnabledProviders)
+                    foreach (var provider in Configuration.ConfiguredProviders)
                     {
-                        trace.AddProvider(provider);
+                        _TraceSession.AddProvider(provider._EnabledProvider);
                     }
 
-                    trace.Start();
+                    _TraceSession.Start();
 
                     StateManager.ProgressState.UpdateProgressMessage(
                         $"Live session {Configuration.Name} has started.");
@@ -181,7 +257,7 @@ namespace EtwPilot.ViewModel
                     //
                     // Begin consuming events. This is a blocking call.
                     //
-                    trace.Consume(new EventRecordCallback((Event) =>
+                    _TraceSession.Consume(new EventRecordCallback((Event) =>
                     {
                         var evt = (EVENT_RECORD)Marshal.PtrToStructure(
                                 Event, typeof(EVENT_RECORD))!;
@@ -189,7 +265,7 @@ namespace EtwPilot.ViewModel
                         var parser = new EventParser(
                             evt,
                             parserBuffers,
-                            trace.GetPerfFreq());
+                            _TraceSession.GetPerfFreq());
                         ParsedEtwEvent? parsedEvent = null;
 
                         //
@@ -216,7 +292,14 @@ namespace EtwPilot.ViewModel
                             return;
                         }
 
-                        Data.Add(parsedEvent);
+                        if (!_ProviderTraceData.ContainsKey(parsedEvent.Provider.Id))
+                        {
+                            Trace(TraceLoggerType.LiveSession,
+                                  TraceEventType.Error,
+                                  $"Dropping event for unrecognized provider {parsedEvent.Provider}");
+                            return;
+                        }
+                        _ProviderTraceData[parsedEvent.Provider.Id].Data.Add(parsedEvent);
                         EventsConsumed++;
                     }),
                     new BufferCallback((LogFile) =>
@@ -238,9 +321,7 @@ namespace EtwPilot.ViewModel
                                   TraceEventType.Error,
                                   $"Unable to cast EVENT_TRACE_LOGFILE: {ex.Message}");
                         }
-
                         BytesConsumed += logfile.Filled;
-
                         var mbConsumed = Math.Round((double)BytesConsumed / 1000000, 2);
                         var elapsedSec = (int)Math.Floor((decimal)Stopwatch.ElapsedMilliseconds / 1000);
 
@@ -267,8 +348,98 @@ namespace EtwPilot.ViewModel
             }
 
             Stopwatch.Stop();
-            StateManager.ProgressState.FinalizeProgress();
+            StateManager.ProgressState.FinalizeProgress($"Live session {Configuration.Name} stopped.");
             TaskCompletedEvent.Set();
+        }
+
+        public ProviderTraceData? RegisterProviderTab(ConfiguredProvider Provider)
+        {
+            var id = Provider._EnabledProvider.Id;
+            if (!_ProviderTraceData.ContainsKey(id))
+            {
+                var result = _ProviderTraceData.TryAdd(id, new ProviderTraceData()
+                {
+                    Columns = Provider.Columns,
+                });
+                Debug.Assert(result);
+            }
+            return GetProviderData(id);
+        }
+
+        public ProviderTraceData? GetProviderData(Guid ProviderId)
+        {
+            if (!_ProviderTraceData.ContainsKey(ProviderId))
+            {
+                Debug.Assert(false);
+                return null;
+            }
+            return _ProviderTraceData[ProviderId];
+        }
+
+        public IValueConverter? GetIConverter(string ColumnName)
+        {
+            if (!ConverterLibraryCache.ContainsKey(ColumnName))
+            {
+                Debug.Assert(false);
+                return null;
+            }
+            return ConverterLibraryCache[ColumnName].GetInstance() as IValueConverter;
+        }
+
+        private void BuildConverterLibraryCache()
+        {
+            //
+            // Compile a small dynamic library for each IConverter supplied in
+            // column definitions. This allows users to format display columns
+            // to their liking. This is done once per trace session (viewmodel)
+            // and reused across tab load/unload operations.
+            // These small libraries are kept in memory until the VM is destroyed.
+            //
+            foreach (var prov in Configuration.ConfiguredProviders)
+            {
+                foreach (var col in prov.Columns)
+                {
+                    if (string.IsNullOrEmpty(col.IConverterCode))
+                    {
+                        continue;
+                    }
+                    var library = col.GetIConverterLibrary();
+                    var result = library.TryCompile(out string err);
+                    if (!result)
+                    {
+                        Debug.Assert(result);
+                        ConverterLibraryCache.Clear();
+                        return;
+                    }
+                    result = ConverterLibraryCache.TryAdd(col.Name, library);
+                    if (!result)
+                    {
+                        //
+                        // The column was likely defined by a previous configured provider.
+                        //
+                        continue;
+                    }                    
+                }
+            }
+        }
+    }
+
+    internal class ProviderTraceData : ViewModelBase
+    {
+        private ConcurrentObservableCollection<ParsedEtwEvent> _Data;
+        public ConcurrentObservableCollection<ParsedEtwEvent> Data
+        {
+            get => _Data;
+            private set { _Data = value; }
+        }
+        public bool IsEnabled { get; set; }
+        public List<EtwColumnViewModel> Columns { get; set; }
+
+        public ProviderTraceData()
+        {
+            _Data = new ConcurrentObservableCollection<ParsedEtwEvent>();
+            IsEnabled = true;
+            Columns = new List<EtwColumnViewModel>();
         }
     }
 }

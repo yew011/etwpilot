@@ -17,10 +17,18 @@ specific language governing permissions and limitations
 under the License.
 */
 using etwlib;
+using EtwPilot.ViewModel;
 
 namespace EtwPilot.Model
 {
     using StopCondition = ViewModel.LiveSessionViewModel.StopCondition;
+    using static EtwPilot.Utilities.TraceLogger;
+
+    internal class ConfiguredProvider
+    {
+        public EnabledProvider _EnabledProvider { get; set; }
+        public List<EtwColumnViewModel> Columns { get; set; }
+    }
 
     internal class SessionFormModel
     {
@@ -30,13 +38,11 @@ namespace EtwPilot.Model
         public string LogLocation { get; set; }
         public StopCondition StopCondition { get; set; }
         public int StopConditionValue { get; set; }
-        public List<EnabledProvider> EnabledProviders { get; set; }
-        public Dictionary<string, Type> Columns { get; set; }
+        public List<ConfiguredProvider> ConfiguredProviders { get; set; }
 
         public SessionFormModel()
         {
-            EnabledProviders = new List<EnabledProvider>();
-            Columns = new Dictionary<string, Type>();
+            ConfiguredProviders = new List<ConfiguredProvider>();
             Id = Guid.NewGuid();
         }
     }

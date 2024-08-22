@@ -3,7 +3,6 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-             xmlns:local="clr-namespace:EtwPilot.ViewModel"
              xmlns:Fluent="urn:fluent-ribbon"
              xmlns:Utilities="clr-namespace:EtwPilot.Utilities"
              mc:Ignorable="d" 
@@ -19,7 +18,26 @@
             <Setter Property="FontSize" Value="10" />
             <Setter Property="FontFamily" Value="Calibri" />
             <Setter Property="Foreground" Value="Blue" />
-        </Style> 
+        </Style>
+        <!-- Template for dynamic per-provider tabs. Some properties are set in code-behind. -->
+        <Style x:Key="LiveSessionTabStyle" TargetType="{x:Type TabItem}">
+            <Setter Property="HeaderTemplate">
+                <Setter.Value>
+                    <DataTemplate>
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Name="LiveSessionTabText"/>
+                            <Separator Width="5"/>
+                            <Button Name="LiveSessionTabCloseButton"
+                            Content="{StaticResource red_x}"
+                            BorderThickness="0"
+                            Margin="0"
+                            Padding="0"
+                            Background="Transparent"/>
+                        </StackPanel>
+                    </DataTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
     </UserControl.Resources>
     <Grid VirtualizingPanel.VirtualizationMode="Recycling">
     <Grid.RowDefinitions>
@@ -46,25 +64,11 @@
                    Text="{Binding BytesConsumed,Converter={StaticResource ByteSizeToFriendlyString}}"/>
     </StackPanel>
     <ScrollViewer VerticalScrollBarVisibility="Auto" Grid.Row="1">
-        <TabControl Name="LiveSessionTabControl">
-            <TabItem Header="Events">
-                <!-- Important: Fixing the control to a MaxHeight and MaxWidth
-                is required, as otherwise the Grid will attempt to re-calculate
-                control bounds on every single row/column. Etw captures are
-                noisy and will hang the UI. -->
-                <DataGrid Name="LiveSessionDataGrid"
-                          AlternatingRowBackground="AliceBlue"
-                          EnableColumnVirtualization="True"
-                          EnableRowVirtualization="True"
-                          IsReadOnly="true"
-                          AutoGenerateColumns="true"
-                          RowHeight="25"
-                          MaxHeight="1600"
-                          MaxWidth="1600"
-                          VirtualizingPanel.IsVirtualizing="True"
-                          ItemsSource="{Binding Data.AsObservable}"/>
-            </TabItem>
-        </TabControl>
+        <TabControl Name="LiveSessionTabControl"
+                    SelectionChanged="LiveSessionTabControl_SelectionChanged"
+                    Loaded="LiveSessionTabControl_Loaded"
+                    Unloaded="LiveSessionTabControl_Unloaded"/>
+        <!-- TabItems are created dynamically in UserControl_Loaded -->
     </ScrollViewer>
     </Grid>
 </UserControl>

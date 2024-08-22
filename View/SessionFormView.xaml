@@ -56,7 +56,7 @@
                 </StackPanel>
                 <StackPanel Orientation="Horizontal" Margin="5">
                     <Label Width="150">Enabled Providers:</Label>
-                    <ComboBox ItemsSource="{Binding m_ProviderViewModel.Providers}"
+                    <ComboBox ItemsSource="{Binding m_ProviderViewModel.ProvidersWithManifest}"
                               Name="SelectedProvider"
                               SelectedIndex="0"/>
                     <Separator Opacity="0" Width="5"/>
@@ -133,13 +133,12 @@ Mode=TwoWay,Converter={StaticResource StopConditionToBool}, ConverterParameter=T
                 </StackPanel>
             </StackPanel>
         </GroupBox>
-        <ScrollViewer Height="Auto" VerticalScrollBarVisibility="Auto" Grid.Row="1">
-            <GroupBox Grid.Row="1" Background="AliceBlue" Margin="5">
-                <GroupBox.Header>
-                    <TextBlock FontWeight="Bold" Text="Provider Filters"/>
-                </GroupBox.Header>
-                <TabControl Name="ProviderFiltersTabControl"
-                            SelectionChanged="ProviderFiltersTabControl_SelectionChanged"/>
+        <GroupBox Grid.Row="1" Background="AliceBlue" Margin="5">
+            <GroupBox.Header>
+                <TextBlock FontWeight="Bold" Text="Provider Filters"/>
+            </GroupBox.Header>
+            <TabControl Name="ProviderFiltersTabControl"
+                        SelectionChanged="ProviderFiltersTabControl_SelectionChanged">
                 <!-- note: tab pages are added dynamically by clicking the AddProvider
                 button from the parent form (SessionFormView.xaml). As part of the tab
                 creation process, its Content property is set to the corresponding instance
@@ -147,7 +146,7 @@ Mode=TwoWay,Converter={StaticResource StopConditionToBool}, ConverterParameter=T
                 the resources of this control (top of this page). This trigger loads the
                 singleton ProviderFilterFormView instance, bound to the view model of the
                 newly created tab. -->
-            </GroupBox>
-        </ScrollViewer>
+            </TabControl>
+        </GroupBox>
     </Grid>
 </UserControl>

@@ -26,6 +26,51 @@ namespace EtwPilot
         public MainWindow()
         {
             InitializeComponent();
+            Closing += MainWindow_Closing;
+        }
+
+        private void MainWindow_Closing(object? sender, System.ComponentModel.CancelEventArgs e)
+        {
+            var vm = DataContext as MainWindowViewModel;
+            if (vm == null)
+            {
+                return;
+            }
+            if (!vm.m_SessionViewModel.HasActiveLiveSessions())
+            {
+                return;
+            }
+
+            //
+            // Abort window close always. Do live session shutdown from dispatcher.
+            //
+            e.Cancel = true;
+            Dispatcher.InvokeAsync( async () =>
+            {
+                if (await vm.m_SessionViewModel.ShutdownAllLiveSessions())
+                {
+                    Close();
+                }
+            });
+
+        }
+
+        private void Backstage_IsOpenChanged(object sender, System.Windows.DependencyPropertyChangedEventArgs e)
+        {
+            var newvalue = (bool)e.NewValue;
+            var oldvalue = (bool)e.OldValue;
+            if (oldvalue && !newvalue)
+            {
+                var vm = DataContext as MainWindowViewModel;
+                if (vm == null)
+                {
+                    return;
+                }
+                if (!vm.StateManager.Settings.HasErrors && vm.StateManager.Settings.HasUnsavedChanges)
+                {
+                    vm.StateManager.Settings.Save(null);
+                }
+            }
         }
     }
 }

@@ -8,7 +8,8 @@
              d:DesignHeight="450" d:DesignWidth="800"
              DataContext="{StaticResource g_MainWindowViewModel}">
     <Grid>
-        <TabControl>
+        <TabControl SelectionChanged="TabControl_SelectionChanged"
+                    GotFocus="TabControl_GotFocus">
             <TabItem Header="Scope">
                 <StackPanel Orientation="Vertical" Margin="5">
                     <StackPanel Orientation="Horizontal" Margin="5" VerticalAlignment="Top">
@@ -64,7 +65,7 @@
             </TabItem>
             <TabItem Header="Attribute" 
                      Name="AttributeTab"
-                     DataContext="{Binding m_SessionFormViewModel.CurrentProviderFilterForm,Mode=TwoWay}">
+                     DataContext="{Binding m_SessionFormViewModel.CurrentProviderFilterForm,Mode=TwoWay,ValidatesOnNotifyDataErrors=False}">
                 <StackPanel Orientation="Vertical" Margin="5">
                     <StackPanel Orientation="Horizontal" Margin="5">
                         <Label Width="150">Events:</Label>
@@ -75,8 +76,7 @@
                                  MaxWidth="600"
                                  MaxHeight="250"
                                  SelectionChanged="AttributeFilterEvents_SelectionChanged"
-                                 Style="{StaticResource ErrorStyle}"
-                                 Tag="{Binding AttributeFilter.Events,Mode=TwoWay,UpdateSourceTrigger=PropertyChanged}"/>
+                                 Style="{StaticResource ErrorStyle}"/>
                         <RadioButton GroupName="EnableDisableGroup"
                                      Name="EnableButton"
                                      Content="Enable"
@@ -104,8 +104,7 @@
                                  Width="Auto"
                                  MaxWidth="600"
                                  MaxHeight="250"
-                                 Style="{StaticResource ErrorStyle}"
-                                 Tag="{Binding AttributeFilter.AnyKeywords,UpdateSourceTrigger=PropertyChanged}"/>
+                                 Style="{StaticResource ErrorStyle}"/>
                     </StackPanel>
                     <StackPanel Orientation="Horizontal" Margin="5">
                         <Label Width="150">All keywords:</Label>
@@ -116,13 +115,12 @@
                                  Width="Auto"
                                  MaxWidth="600"
                                  MaxHeight="250"
-                                 Style="{StaticResource ErrorStyle}"
-                                 Tag="{Binding AttributeFilter.AllKeywords,Mode=TwoWay,UpdateSourceTrigger=PropertyChanged}"/>
+                                 Style="{StaticResource ErrorStyle}"/>
                     </StackPanel>
                 </StackPanel>
             </TabItem>
             <TabItem Header="Stackwalk"
-                     DataContext="{Binding m_SessionFormViewModel.CurrentProviderFilterForm,Mode=TwoWay}">
+                     DataContext="{Binding m_SessionFormViewModel.CurrentProviderFilterForm,Mode=TwoWay,ValidatesOnNotifyDataErrors=False}">
                 <StackPanel Orientation="Vertical" Margin="5">
                     <StackPanel Orientation="Horizontal" Margin="5">
                         <Label Width="150">Events:</Label>
@@ -133,8 +131,7 @@
                                  MaxWidth="600"
                                  MaxHeight="250"
                                  SelectionChanged="StackwalkFilterEvents_SelectionChanged"
-                                 Style="{StaticResource ErrorStyle}"
-                                 Tag="{Binding StackwalkFilter.Events,Mode=TwoWay,UpdateSourceTrigger=PropertyChanged}"/>
+                                 Style="{StaticResource ErrorStyle}"/>
                         <RadioButton GroupName="EnableDisableGroup1"
                                      Content="Enable"
                                      Style="{StaticResource ErrorStyle}"
@@ -174,8 +171,7 @@
                                              MaxWidth="600"
                                              MaxHeight="250"
                                              SelectionChanged="StackwalkLevelKeywordFilterAnyKeywords_SelectionChanged"
-                                             Style="{StaticResource ErrorStyle}"
-                                             Tag="{Binding StackwalkFilter.LevelKeywordFilterAnyKeywords,Mode=TwoWay,UpdateSourceTrigger=PropertyChanged}"/>
+                                             Style="{StaticResource ErrorStyle}"/>
                                 </StackPanel>
                                 <StackPanel Orientation="Horizontal" Margin="5">
                                     <Label Width="150">All keywords:</Label>
@@ -186,8 +182,7 @@
                                              MaxWidth="600"
                                              MaxHeight="250"
                                              SelectionChanged="StackwalkLevelKeywordFilterAllKeywords_SelectionChanged"
-                                             Style="{StaticResource ErrorStyle}"
-                                             Tag="{Binding StackwalkFilter.LevelKeywordFilterAllKeywords,Mode=TwoWay,UpdateSourceTrigger=PropertyChanged}"/>
+                                             Style="{StaticResource ErrorStyle}"/>
                                 </StackPanel>
                             </StackPanel>
                         </GroupBox>
@@ -195,7 +190,7 @@
                 </StackPanel>
             </TabItem>
             <TabItem Header="Payload"
-                     DataContext="{Binding m_SessionFormViewModel.CurrentProviderFilterForm,Mode=TwoWay}">
+                     DataContext="{Binding m_SessionFormViewModel.CurrentProviderFilterForm,Mode=TwoWay,ValidatesOnNotifyDataErrors=False}">
                 <StackPanel Orientation="Vertical" Margin="5">
                     <StackPanel Orientation="Horizontal">
                         <Label Width="100">Event:</Label>
@@ -296,6 +291,104 @@
                         <TextBox Name="PredicateValue" Width="150"
                                  Style="{StaticResource ErrorStyle}"
                                  Text="{Binding SelectedPredicate.FieldValue,Mode=TwoWay,UpdateSourceTrigger=PropertyChanged}"/>
+                    </StackPanel>
+                </StackPanel>
+            </TabItem>
+            <TabItem Header="Choose Columns"
+                     Name="ChooseEtwColumnsTab"
+                     DataContext="{Binding m_SessionFormViewModel.CurrentProviderFilterForm,Mode=TwoWay,ValidatesOnNotifyDataErrors=True}">
+                <StackPanel Orientation="Horizontal" Margin="5">
+                    <StackPanel Orientation="Vertical" Margin="5">
+                        <StackPanel Orientation="Horizontal">
+                            <Label Width="70">Available:</Label>
+                            <DataGrid Name="AvailableEtwColumnsDataGrid"
+                                      IsReadOnly="True"
+                                      AutoGenerateColumns="False"
+                                      ItemsSource="{Binding AvailableEtwColumns,NotifyOnValidationError=False,ValidatesOnNotifyDataErrors=False}"
+                                      SelectionMode="Extended"
+                                      RowValidationErrorTemplate="{x:Null}"
+                                      SelectionChanged="AvailableEtwColumnsDataGrid_SelectionChanged"
+                                      SelectionUnit="FullRow"
+                                      MinWidth="250"
+                                      MaxHeight="220"
+                                      VerticalAlignment="Top">
+                                <DataGrid.Columns>
+                                    <DataGridTextColumn Header="Name" Binding="{Binding Name}"/>
+                                    <DataGridTextColumn Header="Event" Binding="{Binding TemplateSourceEvent}"/>
+                                    <DataGridTextColumn Header="Type" Binding="{Binding TemplateFieldType}"/>
+                                </DataGrid.Columns>
+                            </DataGrid>
+                        </StackPanel>
+                        <Separator Opacity="0" Width="5"/>
+                        <StackPanel Orientation="Horizontal">
+                            <Label Width="70"/>
+                            <Button Name="AddDefaultColumnsButton"
+                                    Content="Add Default"
+                                    Command="{Binding AddDefaultEtwColumnsCommand}"/>
+                            <Separator Opacity="0" Width="5"/>
+                            <Button Name="AddSelectedColumnsButton"
+                                    Content="Add Selected"
+                                    Command="{Binding AddEtwColumnsCommand}"
+                                    CommandParameter="{Binding ElementName=AvailableEtwColumnsDataGrid,Path=SelectedItems}"/>                    
+                        </StackPanel>
+                    </StackPanel>
+                    <StackPanel Orientation="Vertical" Margin="5">
+                        <StackPanel Orientation="Horizontal">
+                            <Label Width="70">Selected:</Label>
+                                <DataGrid Name="ChosenEtwColumnsDataGrid"
+                                          IsReadOnly="False"
+                                          AutoGenerateColumns="False"
+                                          ItemsSource="{Binding ChosenEtwColumns,Mode=TwoWay,UpdateSourceTrigger=PropertyChanged}"
+                                          SelectionChanged="ChosenEtwColumnsDataGrid_SelectionChanged"
+                                          SelectionMode="Extended"
+                                          SelectionUnit="FullRow"
+                                          MinWidth="350"
+                                          MaxHeight="400"
+                                          VerticalAlignment="Top"
+                                          CellEditEnding="ChosenEtwColumnsDataGrid_CellEditEnding">
+                                    <DataGrid.Resources>
+                                        <!-- We want MouseDoubleClick on the cell, not the entire DataGrid... -->
+                                        <Style TargetType="{x:Type DataGridCell}">
+                                            <EventSetter Event="MouseDoubleClick" 
+                                                         Handler="ChosenEtwColumnsDataGrid_DataGridCellDoubleClick"/>
+                                        </Style>
+                                    </DataGrid.Resources>
+                                    <DataGrid.Columns>
+                                        <DataGridTextColumn Header="Name" IsReadOnly="True" Binding="{Binding Name}"/>
+                                        <DataGridTextColumn Header="Event" IsReadOnly="True" Binding="{Binding TemplateSourceEvent}"/>
+                                        <DataGridTextColumn Header="Type" IsReadOnly="True" Binding="{Binding TemplateFieldType}"/>
+                                        <DataGridTextColumn Header="IConverter" 
+                                                            Binding="{Binding IConverterCode}"
+                                                            Width="300">
+                                            <DataGridTextColumn.ElementStyle>
+                                                <Style TargetType="TextBlock"
+                                                       BasedOn="{StaticResource ErrorStyleTextBlockOnly}">
+                                                    <Setter Property="TextWrapping" Value="Wrap" />
+                                                </Style>
+                                            </DataGridTextColumn.ElementStyle>
+                                            <DataGridTextColumn.EditingElementStyle>
+                                                <Style TargetType="TextBox"
+                                                       BasedOn="{StaticResource ErrorStyle}">
+                                                    <Setter Property="TextWrapping" Value="Wrap" />
+                                                    <Setter Property="AcceptsReturn" Value="true" />
+                                                </Style>
+                                            </DataGridTextColumn.EditingElementStyle>
+                                        </DataGridTextColumn>
+                                    </DataGrid.Columns>
+                                </DataGrid>
+                        </StackPanel>
+                        <Separator Opacity="0" Width="5"/>
+                        <StackPanel Orientation="Horizontal">
+                            <Label Width="70"/>
+                            <Button Name="RemoveEtwColumnButton"
+                                    Content="Remove"
+                                    Command="{Binding RemoveEtwColumnCommand}"
+                                    CommandParameter="{Binding ElementName=ChosenEtwColumnsDataGrid,Path=SelectedItems}"/>
+                            <Separator Opacity="0" Width="5"/>
+                            <Button Name="ClearEtwColumnButton"
+                                    Content="Clear"
+                                    Command="{Binding ClearEtwColumnCommand}"/>
+                        </StackPanel>
                     </StackPanel>
                 </StackPanel>
             </TabItem>

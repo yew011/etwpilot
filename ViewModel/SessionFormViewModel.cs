@@ -24,6 +24,7 @@ using etwlib;
 using EtwPilot.Utilities;
 using System.IO;
 using static etwlib.NativeTraceConsumer;
+using System.Text;
 
 namespace EtwPilot.ViewModel
 {
@@ -207,20 +208,17 @@ namespace EtwPilot.ViewModel
             get => _NumProviderFilterForms;
             private set
             {
+                _NumProviderFilterForms = value;
                 //
                 // Visual validation feedback bound to "AddProvider" button
                 //
                 ClearErrors(nameof(NumProviderFilterForms));
-                if (value == 0)
+                if (_NumProviderFilterForms == 0)
                 {
                     AddError(nameof(NumProviderFilterForms), 
                         $"At least one provider must be added.");
                 }
-                else if (_NumProviderFilterForms != value)
-                {
-                    _NumProviderFilterForms = value;
-                    OnPropertyChanged("NumProviderFilterForms");
-                }
+                OnPropertyChanged("NumProviderFilterForms");
             }
         }
 
@@ -422,6 +420,11 @@ namespace EtwPilot.ViewModel
             }
             NumProviderFilterForms++;
             var vm = new ProviderFilterFormViewModel(manifest.SelectedProviderManifest);
+            //
+            // Bubble up any errors in sub-form to parent form
+            //
+            vm.SetParentFormNotifyErrorsChanged(this);
+            vm.Initialize();
             m_ProviderFilterForms.Add(TabName, vm);
             CurrentProviderFilterForm = vm;
             return vm;
@@ -429,12 +432,28 @@ namespace EtwPilot.ViewModel
 
         public void RemoveProviderFilterForm(string TabName)
         {
+            //
+            // Invoked from SessionFormView code-behind when tab "X" is clicked
+            //
             if (m_ProviderFilterForms.ContainsKey(TabName))
             {
+                m_ProviderFilterForms[TabName].Finalize();
                 NumProviderFilterForms--;
                 m_ProviderFilterForms.Remove(TabName);
                 CurrentProviderFilterForm = null;
             }
+        }
+
+        public override string ToString()
+        {
+            var sb = new StringBuilder();
+            sb.AppendLine($"Name: {Name}");
+            sb.AppendLine($"Real-time: {IsRealTime}");
+            sb.AppendLine($"Log location: {LogLocation}");
+            sb.AppendLine($"Stop condition: {StopCondition}");
+            sb.AppendLine($"Stop condition value: {StopConditionValue}");
+            m_ProviderFilterForms.ToList().ForEach(f => sb.AppendLine($"{f.Value}"));
+            return sb.ToString();
         }
 
         public SessionFormModel? GetFormData()
@@ -571,7 +590,18 @@ namespace EtwPilot.ViewModel
                     enabledProvider.AddPayloadFilters(payloadFilters);
                 }
 
-                model.EnabledProviders.Add(enabledProvider);
+                //
+                // ETW columns to display in the data capture datagrid.
+                // Store only the EtwColumnDisplay since we don't need its wrapping VM.
+                //
+                Debug.Assert(form.ChosenEtwColumns.Count > 0);
+                var cols = form.ChosenEtwColumns.ToList();
+                var configuredProvider = new ConfiguredProvider()
+                {
+                    _EnabledProvider = enabledProvider,
+                    Columns = cols,
+                };
+                model.ConfiguredProviders.Add(configuredProvider);
             }
             return model;
         }

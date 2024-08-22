@@ -23,9 +23,6 @@ namespace EtwPilot.View
 {
     using UserControl = System.Windows.Controls.UserControl;
 
-    /// <summary>
-    /// Interaction logic for SettingsFormView.xaml
-    /// </summary>
     public partial class SettingsFormView : UserControl
     {
         public SettingsFormView()
@@ -70,6 +67,32 @@ namespace EtwPilot.View
                 return;
             }
             ProviderCachePathTextBox.Text = browser.SelectedPath;
+        }
+
+        private void BrowseModelPathButton_Click(object sender, RoutedEventArgs e)
+        {
+            var browser = new FolderBrowserDialog();
+            browser.Description = "Select a location";
+            browser.RootFolder = Environment.SpecialFolder.MyComputer;
+            var result = browser.ShowDialog();
+            if (result != DialogResult.OK)
+            {
+                return;
+            }
+            ModelPathTextbox.Text = browser.SelectedPath;
+        }
+
+        private void BrowseEmbeddingsModelFileButton_Click(object sender, RoutedEventArgs e)
+        {
+            var browser = new OpenFileDialog();
+            browser.Title = "Select a text embeddings model file";
+            browser.Filter = "ONNX model files (*.onnx)|*.onnx";
+            var result = browser.ShowDialog();
+            if (result != DialogResult.OK)
+            {
+                return;
+            }
+            EmbeddingsModelPathTextbox.Text = browser.FileName;
         }
     }
 }

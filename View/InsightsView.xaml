@@ -1,0 +1,89 @@
+﻿<UserControl x:Class="EtwPilot.View.InsightsView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:Fluent="urn:fluent-ribbon"
+             xmlns:Utilities="clr-namespace:EtwPilot.Utilities"
+             xmlns:model="clr-namespace:EtwPilot.Model;assembly=EtwPilot"
+             xmlns:scm="clr-namespace:System.ComponentModel;assembly=WindowsBase"
+             mc:Ignorable="d" 
+             d:DesignHeight="450" d:DesignWidth="800"
+             Name="InsightsControl"
+             DataContext="{StaticResource g_MainWindowViewModel}">
+    <DockPanel DataContext="{Binding m_InsightsViewModel,ValidatesOnNotifyDataErrors=False}">
+        <DockPanel DockPanel.Dock="Bottom" Height="100" Margin="2">
+            <DockPanel DockPanel.Dock="Right">
+                <DockPanel>
+                    <UniformGrid Columns="2" DockPanel.Dock="Bottom" Height="30" Width="100">
+                        <Button Content="Clear"
+                                Command="{Binding ClearCommand}"/>
+                        <Button Content="Cancel" 
+                                Command="{Binding CancelCommand}"/>
+                    </UniformGrid>
+                    <Button Content="Send" 
+                            Command="{Binding GenerateCommand}"
+                            IsDefault="True"/>
+                </DockPanel>
+            </DockPanel>
+            <TextBox Text="{Binding Prompt, UpdateSourceTrigger=PropertyChanged,ValidatesOnNotifyDataErrors=False}"
+                     IsEnabled="{Binding ConfigurationReady,ValidatesOnNotifyDataErrors=False}"
+                     Name="PromptTextbox"
+                     KeyUp="PromptTextbox_KeyUp"/>
+        </DockPanel>
+        <Border BorderBrush="Gainsboro" BorderThickness="1" Margin="2">
+            <ScrollViewer CanContentScroll="False" Utilities:AutoScrollBehavior.AutoScroll="True" HorizontalScrollBarVisibility="Disabled" >
+                <ItemsControl ItemsSource="{Binding}" ScrollViewer.HorizontalScrollBarVisibility="Disabled" ScrollViewer.VerticalScrollBarVisibility="Disabled">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate>
+                            <Border BorderBrush="Gainsboro" BorderThickness="1" Margin="2">
+                                <DockPanel>
+                                    <DockPanel DockPanel.Dock="Left" Margin="10">
+                                        <Border BorderBrush="Gainsboro" BorderThickness="1" Margin="2" VerticalAlignment="Top">
+                                            <Image Width="60" Height="60" RenderOptions.BitmapScalingMode="Fant">
+                                                <Image.Style>
+                                                    <Style TargetType="{x:Type Image}">
+                                                        <Style.Triggers>
+                                                            <DataTrigger Binding="{Binding Type}"
+                                                                         Value="{x:Static model:InsightsInferenceResultModel+ContentType.ModelOutput}">
+                                                                <Setter Property="Source"
+                                                                        Value="{StaticResource logo}" />
+                                                            </DataTrigger>
+                                                            <DataTrigger Binding="{Binding Type}"
+                                                                         Value="{x:Static model:InsightsInferenceResultModel+ContentType.UserInput}">
+                                                                <Setter Property="Source"
+                                                                        Value="{StaticResource user-avatar}" />
+                                                            </DataTrigger>
+                                                            <DataTrigger Binding="{Binding Type}"
+                                                                         Value="{x:Static model:InsightsInferenceResultModel+ContentType.SystemMessage}">
+                                                                <Setter Property="Source"
+                                                                        Value="{StaticResource info}" />
+                                                            </DataTrigger>
+                                                        </Style.Triggers>
+                                                    </Style>
+                                                </Image.Style>
+                                            </Image>
+                                        </Border>
+                                    </DockPanel>
+                                    <DockPanel DockPanel.Dock="Bottom">
+                                        <TextBlock Text="{Binding Timestamp}" HorizontalAlignment="Right" Margin="0,0,4,2" />
+                                    </DockPanel>
+                                    <DockPanel Margin="5">
+                                        <TextBox Text="{Binding Content}" TextWrapping="Wrap" Style="{x:Null}" BorderThickness="0" IsReadOnly="True" />
+                                    </DockPanel>
+                                </DockPanel>
+                            </Border>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                    <ItemsControl.DataContext>
+                        <CollectionViewSource Source="{Binding ResultHistory.AsObservable,ValidatesOnNotifyDataErrors=False}">
+                            <CollectionViewSource.SortDescriptions>
+                                <scm:SortDescription PropertyName="Timestamp" Direction="Ascending" />
+                            </CollectionViewSource.SortDescriptions>
+                        </CollectionViewSource>
+                    </ItemsControl.DataContext>
+                </ItemsControl>
+            </ScrollViewer>
+        </Border>
+    </DockPanel>
+</UserControl>

@@ -120,15 +120,16 @@ namespace EtwPilot.View
             // If the tab already exists for this manifest, just select the tab, otherwise
             // we have to create the tab now.
             //
-            Action tabClosedCallback = () =>
+            Func<Task<bool>> tabClosedCallback = async delegate()
             {
                 var vm = DataContext as MainWindowViewModel;
                 if (vm == null)
                 {
-                    return;
+                    return false;
                 }
-                var newSessionFormVm = vm.m_SessionFormViewModel;
-                newSessionFormVm.RemoveProviderFilterForm(tabName);
+
+                vm.m_SessionFormViewModel.RemoveProviderFilterForm(tabName);
+                return true;
             };
 
             if (!UiHelper.CreateTabControlContextualTab(
@@ -139,6 +140,7 @@ namespace EtwPilot.View
                     "ProviderFilterContextTabStyle",
                     "ProviderFilterContextTabText",
                     "ProviderFilterContextTabCloseButton",
+                    null,
                     tabClosedCallback))
             {
                 Trace(TraceLoggerType.MainWindow,
@@ -175,7 +177,6 @@ namespace EtwPilot.View
                 tabName, Guid.Empty);
             if (providerFilterVm == null)
             {
-                Debug.Assert(false);
                 return;
             }
             newSessionFormVm.CurrentProviderFilterForm = providerFilterVm;

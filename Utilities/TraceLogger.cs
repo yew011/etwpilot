@@ -21,11 +21,12 @@ using System.IO;
 
 namespace EtwPilot.Utilities
 {
-    using static EtwPilot.Model.SettingsModel;
+    using EtwPilot.ViewModel;
 
     public static class TraceLogger
     {
-        public static readonly string m_TraceFileDir = Path.Combine(new string[] { DefaultWorkingDirectory, "Logs" });
+        public static readonly string m_TraceFileDir = Path.Combine(new string[] { 
+            SettingsFormViewModel.DefaultWorkingDirectory, "Logs" });
         public static string m_Location = Path.Combine(new string[] { m_TraceFileDir,
                             $"EtwPilot-{DateTime.Now.ToString("yyyy-MM-dd-HHmmss")}.txt"});
         private static TextWriterTraceListener m_TraceListener =
@@ -39,6 +40,7 @@ namespace EtwPilot.Utilities
             new TraceSource("Providers", SourceLevels.Verbose),
             new TraceSource("Sessions", SourceLevels.Verbose),
             new TraceSource("UiHelper", SourceLevels.Verbose),
+            new TraceSource("Inference", SourceLevels.Verbose),
         };
 
         public enum TraceLoggerType
@@ -49,6 +51,7 @@ namespace EtwPilot.Utilities
             Providers,
             Sessions,
             UiHelper,
+            Inference,
             Max
         }
 
@@ -61,7 +64,7 @@ namespace EtwPilot.Utilities
                 source.Switch = m_Switch;
             }
 
-            if (Directory.Exists(DefaultWorkingDirectory))
+            if (Directory.Exists(SettingsFormViewModel.DefaultWorkingDirectory))
             {
                 if (!Directory.Exists(m_TraceFileDir))
                 {

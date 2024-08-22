@@ -24,6 +24,8 @@ using System.Windows.Forms;
 using System.Xml.Serialization;
 using System.Xml;
 using System.Text;
+using System.Collections;
+using System.Diagnostics;
 
 namespace EtwPilot.Utilities
 {
@@ -70,10 +72,6 @@ namespace EtwPilot.Utilities
                     }
                 case ExportFormat.Csv:
                     {
-                        //
-                        // NB: If T is not a flat type (ie, nested lists), this CSV will
-                        // not be correct.
-                        //
                         File.WriteAllText(location, GetDataAsCsv(Data));
                         break;
                     }
@@ -82,8 +80,7 @@ namespace EtwPilot.Utilities
                         var lines = Data as List<string>;
                         if (lines == null)
                         {
-                            State.ProgressState.UpdateProgressMessage("Invalid data format");
-                            State.ProgressState.FinalizeProgress();
+                            State.ProgressState.FinalizeProgress("Invalid data format");
                             return;
                         }
                         File.WriteAllLines(location, lines);
@@ -94,14 +91,14 @@ namespace EtwPilot.Utilities
                         break;
                     }
             }
-            State.ProgressState.UpdateProgressMessage($"Exported {Data.Count} rows to {location}");
-            State.ProgressState.FinalizeProgress();
+            State.ProgressState.FinalizeProgress($"Exported {Data.Count} rows to {location}");
         }
 
         public static string GetDataAsCsv<T>(List<T> Data)
         {
             //
-            // NB: If T is not a flat type (ie, nested lists), this CSV will not be correct.
+            // NB: If T is not a flat type (ie, nested lists), we will attempt to construct
+            // a single comma-separated, escaped string for any nested list.
             //
             var sb = new StringBuilder();
             var properties = typeof(T).GetProperties(
@@ -110,7 +107,28 @@ namespace EtwPilot.Utilities
             sb.AppendLine(string.Join(",", columns));
             foreach (var data in Data)
             {
-                var values = properties.Select(p => p.GetValue(data, null)).ToList();
+                var values = properties.Select(p =>
+                {
+                    var obj = p.GetValue(data, null);
+                    if (obj != null && p.PropertyType != typeof(string) &&
+                        obj.GetType().GetInterfaces().Any(k => k.IsGenericType
+                        && k.GetGenericTypeDefinition() == typeof(IEnumerable<>)))
+                    {
+                        var values = p.GetValue(data, null) as IEnumerable;
+                        Debug.Assert(values != null);
+                        List<string> strvalues = new List<string>();
+                        foreach (var v in values)
+                        {
+                            strvalues.Add(v.ToString()!);
+                        }
+                        Debug.Assert(strvalues.Count > 0);
+                        return $"\"{string.Join(",", strvalues)}\"";
+                    }
+                    else
+                    {
+                        return obj;
+                    }
+                }).ToList();
                 sb.AppendLine(string.Join(",", values));
             }
             return sb.ToString();

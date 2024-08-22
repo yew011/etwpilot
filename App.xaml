@@ -7,6 +7,8 @@
              xmlns:System="clr-namespace:System;assembly=mscorlib"
              xmlns:Diagnostics="clr-namespace:System.Diagnostics;assembly=System.Diagnostics.TraceSource"
              xmlns:etw="clr-namespace:etwlib;assembly=etwlib"
+             xmlns:model="clr-namespace:EtwPilot.Model;assembly=EtwPilot"
+             xmlns:Fluent="urn:fluent-ribbon"
              StartupUri="View/MainWindowView.xaml">
     <Application.Resources>
     <ResourceDictionary>
@@ -25,6 +27,12 @@
                 <x:Type TypeName="etw:NativeTraceConsumer+PAYLOAD_OPERATOR"/>
             </ObjectDataProvider.MethodParameters>
         </ObjectDataProvider>
+        <ObjectDataProvider x:Key="InsightsInferenceResultModelContentTypeEnum" MethodName="GetValues"
+            ObjectType="{x:Type System:Enum}">
+            <ObjectDataProvider.MethodParameters>
+                <x:Type TypeName="model:InsightsInferenceResultModel+ContentType"/>
+            </ObjectDataProvider.MethodParameters>
+        </ObjectDataProvider>
         <BitmapImage x:Key="refresh"  UriSource="images/refresh.png"/>
         <BitmapImage x:Key="plus"  UriSource="images/plus.png"/>
         <BitmapImage x:Key="logo"  UriSource="images/logo.png"/>
@@ -38,6 +46,12 @@
         <BitmapImage x:Key="start"  UriSource="images/play.png"/>
         <BitmapImage x:Key="stop"  UriSource="images/stop.png"/>
         <BitmapImage x:Key="red_x_bmp"  UriSource="images/stop.png"/>
+        <BitmapImage x:Key="bulletlist"  UriSource="images/bulletlist.png"/>
+        <BitmapImage x:Key="lightbulb"  UriSource="images/lightbulb.png"/>
+        <BitmapImage x:Key="open"  UriSource="images/open.png"/>
+        <BitmapImage x:Key="user-avatar"  UriSource="images/user-avatar.png"/>
+        <BitmapImage x:Key="info"  UriSource="images/info.png"/>
+        <BitmapImage x:Key="newdb"  UriSource="images/newdb.png"/>
         <Image x:Key="red_x" x:Shared="false" Source="images/red_x.png" Width="15" Height="15"/>
         <vm:MainWindowViewModel x:Key="g_MainWindowViewModel" />
         <converters:IsGreaterThanZero x:Key="IsGreaterThanZero"/>
@@ -47,6 +61,7 @@
         <converters:NullableBoolConverter x:Key="NullableBoolConverter"/>
         <converters:ParsedEtwManifestEventToString x:Key="ParsedEtwManifestEventToString"/>
         <converters:MillisecondToSecond x:Key="MillisecondToSecond"/>
+        <converters:InverseBooleanConverter x:Key="InverseBooleanConverter"/>
         <converters:ByteSizeToFriendlyString x:Key="ByteSizeToFriendlyString"/>
         <!-- template for adorning errors onto input form controls -->
         <ControlTemplate x:Key="ValidationErrorTemplate">
@@ -75,13 +90,27 @@
         </ControlTemplate>
         
         <Style x:Key="ErrorStyle" TargetType="{x:Type Control}">
-        <Style.Triggers>
+            <Style.Triggers>
+                <Trigger Property="Validation.HasError" Value="true">
+                    <Setter Property="BorderBrush" Value="Red"/>
+                    <Setter Property="BorderThickness" Value="1" />
+                    <Setter Property="Foreground" Value="Red" />
+                    <Setter Property="ToolTip" 
+                        Value="{Binding RelativeSource={x:Static RelativeSource.Self},Path=(Validation.Errors)/ErrorContent}" />
+                    <Setter Property="ToolTipService.ShowDuration"
+                        Value="{x:Static Member=System:Int32.MaxValue}"/>
+                    <Setter Property="ToolTipService.HasDropShadow" Value="True"/>
+                    <Setter Property="ToolTipService.InitialShowDelay" Value="0"/>
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+        
+        <!-- Create a special style for things like DataGridCell which must use a TextBlock -->
+        <Style x:Key="ErrorStyleTextBlockOnly" TargetType="{x:Type TextBlock}">
+            <Style.Triggers>
             <Trigger Property="Validation.HasError" Value="true">
-                <Setter Property="BorderBrush" Value="Red"/>
-                <Setter Property="BorderThickness" Value="1" />
                 <Setter Property="Foreground" Value="Red" />
-                <Setter 
-                    Property="ToolTip" 
+                <Setter Property="ToolTip" 
                     Value="{Binding RelativeSource={x:Static RelativeSource.Self},Path=(Validation.Errors)/ErrorContent}" />
                 <Setter Property="ToolTipService.ShowDuration"
                     Value="{x:Static Member=System:Int32.MaxValue}"/>
@@ -90,6 +119,48 @@
             </Trigger>
         </Style.Triggers>
         </Style>
+        
+        <!-- Fluent Ribbon groupbox buttons that are added to Fluent Context Tabs for LiveSessions -->
+        <Style x:Key="LiveSessionStopButtonStyle" TargetType="{x:Type Fluent:Button}">
+            <Setter Property="Icon" Value="{DynamicResource stop}" />
+            <Setter Property="Command" Value="{Binding StopSessionCommand}" />
+            <Setter Property="Header" Value="Stop" />
+        </Style>
+        <Style x:Key="LiveSessionInsightsButtonStyle" TargetType="{x:Type Fluent:Button}">
+            <Setter Property="Icon" Value="{DynamicResource lightbulb}" />
+            <Setter Property="Command" Value="{Binding SendToInsightsCommand}" />
+            <Setter Property="Header" Value="Insights" />
+        </Style>
+        <Style x:Key="LiveSessionExportJSONButtonStyle" TargetType="{x:Type Fluent:Button}">
+            <Setter Property="Icon" Value="{DynamicResource json}" />
+            <Setter Property="Command" Value="{Binding ExportLiveSessionDataCommand}" />
+            <Setter Property="CommandParameter" Value="{x:Static vm:MainWindowViewModel+ExportFormat.Json}"/>
+            <Setter Property="Header" Value="JSON" />
+        </Style>
+        <Style x:Key="LiveSessionExportCSVButtonStyle" TargetType="{x:Type Fluent:Button}">
+            <Setter Property="Icon" Value="{DynamicResource csv}" />
+            <Setter Property="Command" Value="{Binding ExportLiveSessionDataCommand}" />
+            <Setter Property="CommandParameter" Value="{x:Static vm:MainWindowViewModel+ExportFormat.Csv}"/>
+            <Setter Property="Header" Value="CSV" />
+        </Style>
+        <Style x:Key="LiveSessionExportXMLButtonStyle" TargetType="{x:Type Fluent:Button}">
+            <Setter Property="Icon" Value="{DynamicResource xml}" />
+            <Setter Property="Command" Value="{Binding ExportLiveSessionDataCommand}" />
+            <Setter Property="CommandParameter" Value="{x:Static vm:MainWindowViewModel+ExportFormat.Xml}"/>
+            <Setter Property="Header" Value="XML" />
+        </Style>
+        <Style x:Key="LiveSessionExportClipboardButtonStyle" TargetType="{x:Type Fluent:Button}">
+            <Setter Property="Icon" Value="{DynamicResource clipboard}" />
+            <Setter Property="Command" Value="{Binding SaveLiveSessionDataToClipboardCommand}" />
+            <Setter Property="Header" Value="Clip" />
+        </Style>
+        
+        
+        <Style x:Key="DataGridColumnHeaderTextBoxStyle" TargetType="{x:Type TextBox}">
+            <Setter Property="Background" Value="AliceBlue" />
+            <Setter Property="BorderBrush" Value="DarkGray" />
+        </Style>    
+        
     </ResourceDictionary>
 </Application.Resources>
 </Application>
