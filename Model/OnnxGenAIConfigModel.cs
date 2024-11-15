@@ -19,10 +19,14 @@ under the License.
 using Newtonsoft.Json;
 using Newtonsoft.Json.Serialization;
 using System.ComponentModel;
+using System.Diagnostics;
+using System.IO;
 using System.Runtime.CompilerServices;
 
 namespace EtwPilot.Model
 {
+    using static EtwPilot.Utilities.TraceLogger;
+
     //
     // The format of the JSON file should conform to the onnxruntime-genai config format, eg:
     //      https://huggingface.co/microsoft/Phi-3-mini-128k-instruct-onnx/tree/main/cuda/cuda-int4-rtn-block-32/genai_config.json
@@ -40,6 +44,90 @@ namespace EtwPilot.Model
         {
             ModelOptions = new OnnxGenAIModelOptionsModel();
             SearchOptions = new OnnxGenAISearchOptionsModel();
+        }
+
+        public string EmbeddingsVocabFile;
+
+        public static OnnxGenAIConfigModel? Load(string ModelPath, string EmbeddingsModelFile)
+        {
+            if (!ValidateModelPath(ModelPath) || !ValidateEmbeddingsModelFile(EmbeddingsModelFile))
+            {
+                return null;
+            }
+
+            try
+            {
+                var configPath = Path.Combine(ModelPath, "genai_config.json");
+                var configJson = File.ReadAllText(configPath);
+                if (string.IsNullOrEmpty(configJson))
+                {
+                    Debug.Assert(false);
+                    Trace(TraceLoggerType.Inference,
+                          TraceEventType.Error,
+                          $"Json content for OnnxGenAI config file {configPath} is empty.");
+                    return null;
+                }
+                var settings = new JsonSerializerSettings
+                {
+                    MissingMemberHandling = MissingMemberHandling.Error,
+                    Error = (sender, eventArgs) => {
+                        Console.WriteLine(eventArgs.ErrorContext.Error.Message);  // or write to a log
+                        eventArgs.ErrorContext.Handled = true;
+                    }
+                };
+                var onnxConfig = JsonConvert.DeserializeObject<OnnxGenAIConfigModel>(configJson, settings);
+                if (onnxConfig == null)
+                {
+                    Trace(TraceLoggerType.Inference,
+                          TraceEventType.Error,
+                          $"Unable to deserialize json content {configPath}: empty result.");
+                    return null;
+                }
+                onnxConfig.EmbeddingsVocabFile = GetVocabFile(EmbeddingsModelFile);
+                return onnxConfig;
+            }
+            catch (Exception ex)
+            {
+                Trace(TraceLoggerType.Inference,
+                      TraceEventType.Error,
+                      $"Exception occurred when loading model config: {ex.Message}");
+                return null;
+            }
+        }
+
+        public static bool ValidateModelPath(string ModelPath)
+        {
+            if (string.IsNullOrEmpty(ModelPath) || !Directory.Exists(ModelPath))
+            {
+                return false;
+            }
+
+            var configPath = Path.Combine(ModelPath, "genai_config.json");
+            if (!File.Exists(configPath))
+            {
+                return false;
+            }
+            return true;
+        }
+
+        public static bool ValidateEmbeddingsModelFile(string ModelFile)
+        {
+            if (string.IsNullOrEmpty(ModelFile) || !File.Exists(ModelFile))
+            {
+                return false;
+            }
+            var vocabFile = GetVocabFile(ModelFile);
+            if (!File.Exists(vocabFile))
+            {
+                return false;
+            }
+            return true;
+        }
+
+        private static string GetVocabFile(string ModelFile)
+        {
+            var baseDir = Directory.GetParent(Path.GetDirectoryName(ModelFile)!)!.FullName;
+            return Path.Combine(baseDir, "vocab.txt");
         }
     }
 
@@ -94,7 +182,7 @@ namespace EtwPilot.Model
         public double TopK
         {
             get { return _topK; }
-            set { _topK = value; NotifyPropertyChanged(); }
+            set { _topK = value; NotifyPropertyChanged("TopK"); }
         }
 
         /// <summary>

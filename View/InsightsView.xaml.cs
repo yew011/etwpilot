@@ -46,5 +46,16 @@ namespace EtwPilot.View
             }
             vm.m_InsightsViewModel.Prompt += e.Key;
         }
+
+        private async void InsightsControl_Loaded(object sender, RoutedEventArgs e)
+        {
+            var vm = UiHelper.GetViewModelFromFrameworkElement<
+                MainWindowViewModel>(sender as FrameworkElement);
+            if (vm == null)
+            {
+                return;
+            }
+            await vm.m_InsightsViewModel.Initialize();
+        }
     }
 }

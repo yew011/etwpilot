@@ -27,7 +27,8 @@ namespace EtwPilot.Model
         {
             ModelOutput,
             UserInput,
-            SystemMessage
+            SystemMessage,
+            ErrorMessage
         }
 
         private string _Content;

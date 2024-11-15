@@ -4,11 +4,15 @@
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              xmlns:local="clr-namespace:EtwPilot.ViewModel"
+             xmlns:view="clr-namespace:EtwPilot.View"
              xmlns:Fluent="urn:fluent-ribbon"
              xmlns:controls="clr-namespace:EtwPilot.Controls"
              mc:Ignorable="d"
              Name="SettingsFormViewControl"
              DataContext="{StaticResource g_MainWindowViewModel}">
+    <UserControl.Resources>
+        <controls:ModelSearchOptions x:Key="staticSearchOptionsControl"/>
+    </UserControl.Resources>
     <Grid>
         <Grid.RowDefinitions>
             <RowDefinition Height="*" />
@@ -74,9 +78,16 @@
                              Text="{Binding EmbeddingsModelFile, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
                         <Button Name="BrowseEmbeddingsModelFileButton" Click="BrowseEmbeddingsModelFileButton_Click">Browse...</Button>
                     </StackPanel>
+                    <StackPanel Orientation="Horizontal" Margin="5">
+                        <Label Width="150">Qdrant host URI (for RAG):</Label>
+                        <TextBox Name="QdrantHostUri"
+                             Width="350"
+                             Style="{StaticResource ErrorStyle}"
+                             Text="{Binding QdrantHostUri, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+                    </StackPanel>
                     <DockPanel>
                         <GroupBox DockPanel.Dock="Top" Header="Search Options" Margin="2,5,0,1">
-                            <controls:ModelSearchOptions SearchOptions="{Binding SearchOptions}" />
+                            <ContentControl Content="{StaticResource staticSearchOptionsControl}" />
                         </GroupBox>
                     </DockPanel>
                 </StackPanel>

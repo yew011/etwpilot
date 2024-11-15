@@ -236,6 +236,12 @@ namespace EtwPilot.ViewModel
                     return;
                 }
                 StateManager.Settings.HasUnsavedChanges = true;
+                if (p.PropertyName == "ModelPath" ||
+                    p.PropertyName == "EmbeddingsModelFile" ||
+                    p.PropertyName == "ModelConfig")
+                {
+                    StateManager.Settings.HasModelRelatedUnsavedChanges = true;
+                }
             };
 
             //

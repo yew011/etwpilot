@@ -19,13 +19,13 @@ under the License.
 using CommunityToolkit.Mvvm.Input;
 using EtwPilot.Model;
 using System.Diagnostics;
-using System.IO;
-using Newtonsoft.Json;
 using EtwPilot.Utilities;
 using System.ComponentModel;
 using Meziantou.Framework.WPF.Collections;
 using Microsoft.SemanticKernel;
-using Microsoft.SemanticKernel.Embeddings;
+using System.Windows.Forms;
+using Qdrant.Client;
+using etwlib;
 
 //
 // Remove supression after onnx connector is out of alpha
@@ -41,6 +41,21 @@ namespace EtwPilot.ViewModel
 
     internal class InsightsViewModel : ViewModelBase
     {
+        internal enum DataSource
+        {
+            Invalid,
+            File,
+            Live
+        }
+
+        internal enum ChatTopic
+        {
+            Invalid,
+            General,
+            Manifests,
+            Data
+        }
+
         private struct OutputToken
         {
             public OutputToken(int _Id, string _Value)
@@ -61,47 +76,57 @@ namespace EtwPilot.ViewModel
             Max
         }
 
-        public class Facts
-        {
-            public Dictionary<string, string> m_Facts;
-
-            public Facts()
-            {
-                m_Facts = new Dictionary<string, string>();
-            }
-        }
-
         #region observable properties
 
-            private bool _ChatOnlyMode;
-        public bool ChatOnlyMode
+        private ChatTopic _Topic;
+        public ChatTopic Topic
         {
-            get => _ChatOnlyMode;
+            get => _Topic;
             set
             {
-                if (_ChatOnlyMode != value)
+                if (_Topic != value)
                 {
-                    _ChatOnlyMode = value;
-                    OnPropertyChanged("ChatOnlyMode");
+                    _Topic = value;
+                    OnPropertyChanged("Topic");
+                }
+
+                ClearErrors(nameof(Topic));
+                if (value == ChatTopic.Invalid)
+                {
+                    AddError(nameof(Topic), "Please choose a topic.");
                 }
             }
         }
 
-        private bool _ConfigurationReady;
-        public bool ConfigurationReady
+        private bool _VecDbCommandsAllowed;
+        public bool VecDbCommandsAllowed
         {
-            get => _ConfigurationReady;
+            get => _VecDbCommandsAllowed;
             set
             {
-                if (_ConfigurationReady != value)
+                if (_VecDbCommandsAllowed != value)
                 {
-                    _ConfigurationReady = value;
+                    _VecDbCommandsAllowed = value;
+                    OnPropertyChanged("VecDbCommandsAllowed");
+                }
+            }
+        }
+
+        private bool _Initialized;
+        public bool Initialized
+        {
+            get => _Initialized;
+            set
+            {
+                if (_Initialized != value)
+                {
+                    _Initialized = value;
                     OnPropertyChanged("ConfigurationReady");
                 }
-                ClearErrors(nameof(ConfigurationReady));
-                if (!ConfigurationReady)
+                ClearErrors(nameof(Initialized));
+                if (!Initialized)
                 {
-                    AddError(nameof(ConfigurationReady), "Configuration is invalid.");
+                    AddError(nameof(Initialized), "Insights is not initialized.");
                 }
             }
         }
@@ -128,76 +153,94 @@ namespace EtwPilot.ViewModel
         #endregion
 
         #region commands
-        public AsyncRelayCommand NewProviderVecDbCommand { get; set; }
-        public AsyncRelayCommand LoadProviderVecDbCommand { get; set; }
+        public AsyncRelayCommand<DataSource> ImportVectorDbDataCommand { get; set; }
+        public AsyncRelayCommand RestoreVectorDbCollectionCommand { get; set; }
+        public AsyncRelayCommand SaveVectorDbCollectionCommand { get; set; }
         public AsyncRelayCommand ClearCommand { get; set; }
         public AsyncRelayCommand CancelCommand { get; set; }
         public AsyncRelayCommand GenerateCommand { get; set; }
-        public AsyncRelayCommand ToggleChatOnlyModeCommand { get; set; }
-        public AsyncRelayCommand ReloadModelCommand { get; set; }
+        public AsyncRelayCommand<ChatTopic> SetChatTopicCommand { get; set; }
+        public AsyncRelayCommand ReinitializeCommand { get; set; }
 
         #endregion
 
         public ConcurrentObservableCollection<InsightsInferenceResultModel> ResultHistory { get; }
         private CancellationTokenSource _cancellationTokenSource;
-        private bool m_Initialized;
         private bool m_ModelBusy;
-        private int m_TokensUsed;
         private Kernel m_Kernel;
-        private InsightsConfigurationModel? m_Configuration;
-        private Facts m_Facts;
+        private EtwVectorDb m_VectorDb;
 
         public InsightsViewModel()
         {
-            m_Configuration = null;
-            Prompt = null;
-            ConfigurationReady = IsConfigurationReady();
-            ResultHistory = new ConcurrentObservableCollection<InsightsInferenceResultModel>();
-            m_Facts = new Facts();
-            NewProviderVecDbCommand = new AsyncRelayCommand(
-                Command_NewProviderVecDb, () => { return !m_ModelBusy && IsConfigurationReady(); });
-            LoadProviderVecDbCommand = new AsyncRelayCommand(
-                Command_LoadProviderVecDb, () => { return !m_ModelBusy; });
+            ImportVectorDbDataCommand = new AsyncRelayCommand<DataSource>(
+                Command_ImportVecDbData, _ => CanExecuteVecDbCommand());
+            RestoreVectorDbCollectionCommand = new AsyncRelayCommand(
+                Command_RestoreVecDbCollection, CanExecuteVecDbCommand);
+            SaveVectorDbCollectionCommand = new AsyncRelayCommand(
+                Command_SaveVecDbCollection, CanExecuteVecDbCommand);
             ClearCommand = new AsyncRelayCommand(
                 Command_Clear, () => { return !m_ModelBusy; });
             CancelCommand = new AsyncRelayCommand(
                 Command_Cancel, () => { return true; });
             GenerateCommand = new AsyncRelayCommand(
                 Command_Generate, CanExecuteGenerate);
-            ToggleChatOnlyModeCommand = new AsyncRelayCommand(
-                Command_ChatOnlyMode, () => { return !m_ModelBusy; });
-            ReloadModelCommand = new AsyncRelayCommand(
-                Command_ReloadModel, CanExecuteReloadModel);
-            m_TokensUsed = 0;
+            SetChatTopicCommand = new AsyncRelayCommand<ChatTopic>(
+                Command_SetChatTopic, _ => { return !m_ModelBusy; });
+            ReinitializeCommand = new AsyncRelayCommand(
+                Command_Reinitialize, CanExecuteReinitialize);
+            ResultHistory = new ConcurrentObservableCollection<InsightsInferenceResultModel>();
+            Prompt = null;
+            Initialized = false;
+            VecDbCommandsAllowed = false;
+            Topic = ChatTopic.Invalid;
+            m_VectorDb = new EtwVectorDb();
 
             //
             // Listen for changes to the model configuration in global settings
             // and update the command availability.
             //
             StateManager.Settings.PropertyChanged += 
-                (object? sender, PropertyChangedEventArgs Args) => {
-                    ConfigurationReady = IsConfigurationReady();
-                    GenerateCommand.NotifyCanExecuteChanged();
+                async (object? sender, PropertyChangedEventArgs Args) => {
+                    if (Args.PropertyName != "NewSettingsReady")
+                    {
+                        return;
+                    }
+                    if (StateManager.Settings.HasModelRelatedUnsavedChanges)
+                    {
+                        await Initialize();
+                    }
+                    CanExecuteChanged();
                 };
 
-            ErrorsChanged += (obj, e) =>
+            ErrorsChanged += (object? sender, DataErrorsChangedEventArgs e) =>
             {
                 ShowErrors();
+                CanExecuteChanged();
             };
+        }
 
-            PropertyChanged += (obj, p) =>
+        public async Task Initialize()
+        {
+            StateManager.ProgressState.InitializeProgress(2);
+            try
             {
-                GenerateCommand.NotifyCanExecuteChanged();
-            };
-
-            //
-            // Initally, know facts are loaded, so set an error. This will be cleared
-            // when user loads input facts. Note this is ignored in chat-only mode.
-            //
-            // Note: There is no ObservableDictionary in c# core.
-            //
-            AddError(nameof(m_Facts), "Load facts");
-            ShowErrors();
+                StateManager.ProgressState.UpdateProgressMessage($"Initializing model....");
+                await InitializeModel();
+                StateManager.ProgressState.UpdateProgressValue();
+                StateManager.ProgressState.UpdateProgressMessage($"Initializing vector db....");
+                var qdrantHostUri = StateManager.Settings.QdrantHostUri;
+                await m_VectorDb.Initialize(m_Kernel, StateManager, qdrantHostUri);
+                StateManager.ProgressState.UpdateProgressValue();
+                StateManager.ProgressState.FinalizeProgress($"Ready.");
+                Initialized = true;
+                CanExecuteChanged();
+            }
+            catch (Exception ex)
+            {
+                var msg = $"Model init failed: {ex.Message}";
+                Trace(TraceLoggerType.Inference, TraceEventType.Error, msg);
+                AddSystemMessageToResult(msg);
+            }
         }
 
         public void LoadData(LiveSessionViewModel LiveSession)
@@ -228,94 +271,152 @@ namespace EtwPilot.ViewModel
             GenerateCommand.NotifyCanExecuteChanged();*/
         }
 
-        public void LoadFacts(string FilePath)
+        private async Task Command_SetChatTopic(ChatTopic _Topic)
         {
-            m_ModelBusy = true;
-            StateManager.ProgressState.InitializeProgress(2);
-            if (!File.Exists(FilePath))
+            Topic = _Topic;
+            VecDbCommandsAllowed = (Topic == ChatTopic.Data || Topic == ChatTopic.Manifests);
+            if (Topic == ChatTopic.Manifests)
             {
-                StateManager.ProgressState.FinalizeProgress("File does not exist.");
-                m_ModelBusy = false;
-                return;
+                var count = await m_VectorDb.GetManifestRecordCount();
+                ClearErrors("DummyField");
+                if (count == 0)
+                {
+                    AddError("DummyField", "No manifest data exists. Please import data now.");
+                }
+                else
+                {
+                    AddSystemMessageToResult($"Manifest collection has {count} records available.");
+                }
             }
-            StateManager.ProgressState.UpdateProgressMessage($"Loading facts from {FilePath}...");
-            StateManager.ProgressState.UpdateProgressValue();
+            else if (Topic == ChatTopic.Data)
+            {
+                var count = await m_VectorDb.GetDataRecordCount();
+                ClearErrors("DummyField");
+                if (count == 0)
+                {
+                    AddError("DummyField", "No ETW data exists. Please import data now.");
+                }
+                else
+                {
+                    AddSystemMessageToResult($"Data collection has {count} records available.");
+                }
+            }
+            CanExecuteChanged();
+        }
 
+        private async Task Command_ImportVecDbData(DataSource Source)
+        {
             try
             {
-                var settings = new JsonSerializerSettings
+                if (Topic == ChatTopic.Manifests)
                 {
-                    MissingMemberHandling = MissingMemberHandling.Error,
-                    Error = (sender, eventArgs) => {
-                        Console.WriteLine(eventArgs.ErrorContext.Error.Message);  // or write to a log
-                        eventArgs.ErrorContext.Handled = true;
+                    if (Source == DataSource.Live)
+                    {
+                        StateManager.ProgressState.InitializeProgress(2);
+                        StateManager.ProgressState.UpdateProgressMessage($"Generating records....");
+                        var result = await Task.Run(() =>
+                        {
+                            return ProviderParser.GetManifests();
+                        });
+                        StateManager.ProgressState.UpdateProgressValue();
+                        await m_VectorDb.ImportManifestData(result.Values.ToList());
                     }
-                };
-                var facts = JsonConvert.DeserializeObject<Facts>(FilePath, settings);
-                if (facts == null)
-                {
-                    StateManager.ProgressState.FinalizeProgress("No data available.");
-                    return;
+                    else if (Source == DataSource.File)
+                    {
+
+                    }
+                    else
+                    {
+                        throw new Exception($"Unsupported data source {Source}");
+                    }
+                    StateManager.ProgressState.FinalizeProgress($"Import successful.");
                 }
-                m_Facts = facts;
-                StateManager.ProgressState.FinalizeProgress($"Facts successfully loaded from {FilePath}");
-                m_ModelBusy = false;
-                GenerateCommand.NotifyCanExecuteChanged();
+                else if (Topic == ChatTopic.Data)
+                {
+                    await m_VectorDb.CreateDataCollection();
+                }
+                else
+                {
+                    throw new Exception($"Unsupported topic {Topic}");
+                }
             }
             catch (Exception ex)
             {
-                m_ModelBusy = false;
-                StateManager.ProgressState.FinalizeProgress($"Exception loading facts: {ex.Message}");
-                GenerateCommand.NotifyCanExecuteChanged();
-                return;
+                StateManager.ProgressState.FinalizeProgress($"Import failed: {ex.Message}");
             }
         }
 
-        private async Task Command_ChatOnlyMode()
-        {
-            ChatOnlyMode = !ChatOnlyMode;
-            ShowErrors();
-            ReloadModelCommand.NotifyCanExecuteChanged();
-        }
-
-        private async Task Command_NewProviderVecDb()
-        {
-            if (!m_Initialized)
-            {
-                var result = await Reload();
-                if (!result)
-                {
-                    return;
-                }
-            }
-            var embeddingService = m_Kernel.GetRequiredService<ITextEmbeddingGenerationService>();
-            var db = new EtwProviderManifestVectorDb(m_Kernel, StateManager);
-            await db.Create(10);
-        }
-
-        private async Task Command_LoadProviderVecDb()
+        private async Task Command_RestoreVecDbCollection()
         {
             var dialog = new System.Windows.Forms.OpenFileDialog();
             dialog.CheckFileExists = true;
             dialog.CheckPathExists = true;
             dialog.Multiselect = false;
+            dialog.Title = $"Select a {(Topic == ChatTopic.Data ? "data" : "manifests")} collection snapshot";
+            var result = dialog.ShowDialog();
+            if (result != DialogResult.OK)
+            {
+                return;
+            }
+            var source = dialog.FileName;
 
-            if (dialog.ShowDialog() != System.Windows.Forms.DialogResult.OK)
+            StateManager.ProgressState.InitializeProgress(1);
+            try
             {
-                return;
+                if (dialog.ShowDialog() != System.Windows.Forms.DialogResult.OK)
+                {
+                    return;
+                }
+                if (Topic == ChatTopic.Manifests)
+                {
+                    await m_VectorDb.RestoreManifestCollection(source);
+                }
+                else if (Topic == ChatTopic.Data)
+                {
+                    await m_VectorDb.RestoreDataCollection(source);
+                }
+                StateManager.ProgressState.FinalizeProgress($"Collection restored from {source}");
             }
-            var vm = UiHelper.GetGlobalResource<MainWindowViewModel>("g_MainWindowViewModel");
-            if (vm == null)
+            catch (Exception ex)
             {
-                return;
+                StateManager.ProgressState.FinalizeProgress($"Restore failed: {ex.Message}");
             }
-            vm.CurrentViewModel = this;
-            LoadFacts(dialog.FileName);
         }
 
-        private async Task Command_ReloadModel()
+        private async Task Command_SaveVecDbCollection()
         {
-            _ = await Reload();
+            var browser = new FolderBrowserDialog();
+            browser.Description = "Select a location to save the collection";
+            browser.RootFolder = Environment.SpecialFolder.MyComputer;
+            var result = browser.ShowDialog();
+            if (result != DialogResult.OK)
+            {
+                return;
+            }
+            var target = browser.SelectedPath;
+            StateManager.ProgressState.InitializeProgress(2);
+            try
+            {
+                if (Topic == ChatTopic.Manifests)
+                {
+                    await m_VectorDb.SaveManifestCollection(target);
+                }
+                else if (Topic == ChatTopic.Data)
+                {
+                    await m_VectorDb.SaveDataCollection(target);
+                }
+                StateManager.ProgressState.FinalizeProgress($"Collection saved to {target}");
+            }
+            catch (Exception ex)
+            {
+                StateManager.ProgressState.FinalizeProgress($"Save failed: {ex.Message}");
+            }
+        }
+
+        private async Task Command_Reinitialize()
+        {
+            Initialized = false;
+            await Initialize();
         }
 
         private async Task Command_Clear()
@@ -331,36 +432,55 @@ namespace EtwPilot.ViewModel
         private async Task Command_Generate()
         {
             m_ModelBusy = true;
-            StateManager.ProgressState.InitializeProgress(4);
+            StateManager.ProgressState.InitializeProgress(1);
             try
             {
                 _cancellationTokenSource = new CancellationTokenSource();
-                //
-                // Initialize the model once if necessary
-                //
-                if (!m_Initialized)
-                {
-                    var result = await InitializeModel();
-                    if (!result)
-                    {
-                        m_ModelBusy = false;
-                        return;
-                    }
-                }
-                else
-                {
-                    StateManager.ProgressState.UpdateProgressValue();
-                }
-
                 var userInput = new InsightsInferenceResultModel
                 {
-                    //Content = $"<|user|>{Prompt}<|end><|assistant|>",
                     Content = Prompt,
                     Type = InsightsInferenceResultModel.ContentType.UserInput
                 };
-
                 ResultHistory.Add(userInput);
-                await CaptureInferenceResults(userInput.Content, "");
+
+                InsightsInferenceResultModel result = null;
+                var additionalContext = string.Empty;
+
+                if (Topic == ChatTopic.Manifests)
+                {
+                    additionalContext += $"{Environment.NewLine}" +
+                        $"Use this additional context on related ETW provider manifests: {{{{etwSearchPlugin.SearchEtwProviderManifests $query}}}}";
+                }
+                else if (Topic == ChatTopic.Data)
+                {
+                    additionalContext += $"{Environment.NewLine}" +
+                        $"Use this additional context containing actual ETW data: {{{{etwSearchPlugin.SearchEtwProviderManifests $query}}}}";
+                }
+
+                StateManager.ProgressState.UpdateProgressValue();
+                StateManager.ProgressState.UpdateProgressMessage("Please wait, performing inference...");
+
+                await Task.Run(async () =>
+                {
+                    await foreach (var chatUpdate in m_Kernel.InvokePromptStreamingAsync<StreamingChatMessageContent>(
+                        promptTemplate: @$"Question: {{{{$query}}}}{additionalContext}",
+                        arguments: new KernelArguments()
+                        {
+                            { "query", userInput.Content }
+                        }))
+                    {
+                        if (result == null)
+                        {
+                            if (string.IsNullOrWhiteSpace(chatUpdate.Content))
+                            {
+                                continue;
+                            }
+                            ResultHistory.Add(result = new InsightsInferenceResultModel());
+                        }
+                        _cancellationTokenSource.Token.ThrowIfCancellationRequested();
+                        result.Content += chatUpdate.Content;
+                    }
+                });
             }
             catch (OperationCanceledException)
             {
@@ -371,110 +491,68 @@ namespace EtwPilot.ViewModel
                 AddSystemMessageToResult($"Inference exception: {ex.Message}");
                 _cancellationTokenSource?.Cancel();
             }
-            StateManager.ProgressState.FinalizeProgress(
-                $"Tokens used {m_TokensUsed}/{m_Configuration!.GenAIConfig.ModelOptions.ContextLength}");
+            StateManager.ProgressState.FinalizeProgress(null);
             m_ModelBusy = false;
         }
 
-        private async Task<bool> InitializeModel()
+        private async Task InitializeModel()
         {
-            StateManager.ProgressState.UpdateProgressMessage("Initializing AI model...");
-            m_ModelBusy = true;
-            var result = await Task.Run(async () =>
+            await Task.Run(async () =>
             {
-                try
-                {
-                    var modelPath = m_Configuration!.ModelPath;
-                    var embeddingsModelFile = m_Configuration!.EmbeddingsModelFile;
-                    var embeddingsVocabFile = m_Configuration!.EmbeddingsVocabFile;
-                    var modelId = m_Configuration.GenAIConfig.ModelOptions.Type;
+                var modelPath = StateManager.Settings.ModelPath;
+                var embeddingsModelFile = StateManager.Settings.EmbeddingsModelFile;
+                var embeddingsVocabFile = StateManager.Settings.ModelConfig!.EmbeddingsVocabFile;
+                var modelId = StateManager.Settings.ModelConfig.ModelOptions.Type;
+                var qdrantHostUri = StateManager.Settings.QdrantHostUri;
 
-                    //
-                    // Create SK kernel from builder, based on onnxruntime-genai and bert text
-                    // embedding service using qdrant vector db for RAG.
-                    //
-                    var builder = Kernel.CreateBuilder().AddQdrantVectorStore("localhost");
-                    builder.AddOnnxRuntimeGenAIChatCompletion(modelId, modelPath)
-                           .AddBertOnnxTextEmbeddingGeneration(embeddingsModelFile, embeddingsVocabFile);
-                    m_Kernel = builder.Build();
-                    m_Kernel.Plugins.AddFromObject(new QdrantVecDbEtwSearchPlugin(m_Kernel), "etwSearchPlugin");
-                    m_Initialized = true;
-                    StateManager.ProgressState.UpdateProgressValue();
-                }
-                catch (Exception ex)
+                //
+                // Quick validity test on host uri
+                //
+                using (var client = new QdrantClient(qdrantHostUri))
                 {
-                    var msg = $"Model init failed: {ex.Message}";
-                    Trace(TraceLoggerType.Inference, TraceEventType.Error, msg);
-                    AddSystemMessageToResult(msg);
-                    StateManager.ProgressState.FinalizeProgress("Initialization failed.");
-                    return false;
+                    _ = await client.HealthAsync();
                 }
-                return true;
+
+                //
+                // Create SK kernel from builder, based on onnxruntime-genai and bert text
+                // embedding service using qdrant vector db for RAG.
+                // Note: must set HasNamedVectors here, even though we also set it when we
+                // create the collection from VectorDb.cs. This is due to how SK abstraction
+                // implements GetCollection()
+                //
+                var builder = Kernel.CreateBuilder();
+                builder.AddQdrantVectorStore(qdrantHostUri, options: new()
+                {
+                    HasNamedVectors = true,
+                    VectorStoreCollectionFactory = new EtwCollectionFactory()
+                });
+                builder.AddOnnxRuntimeGenAIChatCompletion(modelId, modelPath)
+                       .AddBertOnnxTextEmbeddingGeneration(embeddingsModelFile, embeddingsVocabFile);
+                m_Kernel = builder.Build();
+                m_Kernel.Plugins.AddFromObject(new QdrantVecDbEtwSearchPlugin(m_Kernel), "etwSearchPlugin");
             });
-            m_ModelBusy = false;
-            return result;
-        }
-
-        private async Task CaptureInferenceResults(string UserInput, string RecallCollectionName)
-        {
-            InsightsInferenceResultModel result = null;
-            await foreach (var chatUpdate in m_Kernel.InvokePromptStreamingAsync<StreamingChatMessageContent>(
-
-                promptTemplate: @"""{{etwSearchPlugin.SearchEtwProviderAsync $query}}. {{$query}}""",
-                arguments: new KernelArguments()
-                {
-                    { "input", UserInput },
-                    { "collection", "manifests" }
-                }))
-            {
-                if (result == null)
-                {
-                    if (string.IsNullOrWhiteSpace(chatUpdate.Content))
-                    {
-                        continue;
-                    }
-                    ResultHistory.Add(result = new InsightsInferenceResultModel());
-                }
-                _cancellationTokenSource.Token.ThrowIfCancellationRequested();
-                result.Content += chatUpdate.Content;
-            }
-        }
-
-        private async Task<bool> Reload()
-        {
-            m_ModelBusy = true;
-            ResultHistory.Clear();
-            m_Initialized = false;
-            m_TokensUsed = 0;
-            _cancellationTokenSource = new CancellationTokenSource();
-            StateManager.ProgressState.InitializeProgress(1);
-            var result = await InitializeModel();
-            if (!result)
-            {
-                m_ModelBusy = false;
-                return false;
-            }
-            StateManager.ProgressState.FinalizeProgress("");
-            m_ModelBusy = false;
-            return true;
         }
 
         private void ShowErrors()
         {
-            ResultHistory.Clear();
+            //
+            // Remove past errors
+            //
+            ResultHistory.Where(item => item.Type == InsightsInferenceResultModel.ContentType.ErrorMessage).ToList().
+                ForEach(item => ResultHistory.Remove(item));
             var errors = GetErrors(null);
-            var modelInputErrors = GetErrors(nameof(m_Facts)).Cast<string>().ToList();
+            var modelInputErrors = GetErrors(nameof(m_VectorDb)).Cast<string>().ToList();
             foreach (var error in errors)
             {
-                if (modelInputErrors.Contains(error) && ChatOnlyMode)
+                if (modelInputErrors.Contains(error) && Topic == ChatTopic.General)
                 {
                     //
-                    // The "chat only" option overrides this as an error, because model input
-                    // isn't needed for chat mode.
+                    // The general topic mode overrides this as an error, because RAG model input
+                    // isn't needed.
                     //
                     continue;
                 }
-                AddSystemMessageToResult(error.ToString()!);
+                AddErrorMessageToResult(error.ToString()!);
             }
         }
 
@@ -488,52 +566,78 @@ namespace EtwPilot.ViewModel
             });
         }
 
-        private bool CanExecuteGenerate()
+        private void AddErrorMessageToResult(string Message)
         {
-            if (!ConfigurationReady || m_ModelBusy)
+            var message = Message.Substring(0, Math.Min(Message.Length, 5000));
+            ResultHistory.Add(new InsightsInferenceResultModel()
             {
-                return false;
-            }
-            if (!HasErrors)
-            {
-                return true;
-            }
-            if (ChatOnlyMode && HasErrors)
-            {
-                //
-                // If there are errors, but there's only one error and it's on ModelInputData,
-                // then the "chat only" option overrides this as an error, because model input
-                // isn't needed for chat mode.
-                //
-                var errors = GetErrors(null).Cast<string>().ToList();
-                if (errors.Count == 1)
-                {
-                    var error = GetErrors(nameof(m_Facts)).Cast<string>().ToList();
-                    if (error.Count > 0)
-                    {
-                        return true;
-                    }
-                }
-            }
-            return false;
+                Type = InsightsInferenceResultModel.ContentType.ErrorMessage,
+                Content = message
+            });
         }
 
-        private bool CanExecuteReloadModel()
+        private bool CanExecuteGenerate()
         {
             if (m_ModelBusy)
             {
+                //
+                // The model is performing inference.
+                //
                 return false;
             }
-
-            return ChatOnlyMode;
+            if (Topic == ChatTopic.General && !PropertyHasErrors(nameof(Prompt)) && !PropertyHasErrors(nameof(Initialized)))
+            {
+                //
+                // The topic is general chat, prompt is valid, and the model is initialized
+                //
+                return true;
+            }
+            //
+            // Otherwise, all form errors apply.
+            //
+            return !HasErrors;
         }
 
-        private bool IsConfigurationReady()
+        public bool CanExecuteVecDbCommand()
         {
-            m_Configuration = InsightsConfigurationModel.Load(
-                StateManager.Settings.ModelPath, 
-                StateManager.Settings.EmbeddingsModelFile);
-            return m_Configuration != null;
+            if (Topic != ChatTopic.Data && Topic != ChatTopic.Manifests)
+            {
+                //
+                // Vector db operations are not available in general topic mode.
+                //
+                return false;
+            }
+            if (m_ModelBusy)
+            {
+                //
+                // The model is performing inference.
+                //
+                return false;
+            }
+            //
+            // The only form error that applies is configuration (prompt not needed yet)
+            //
+            return !PropertyHasErrors(nameof(Initialized));
+        }
+
+        private bool CanExecuteReinitialize()
+        {
+            if (m_ModelBusy)
+            {
+                //
+                // The model is performing inference.
+                //
+                return false;
+            }
+            return true;
+        }
+
+        private void CanExecuteChanged()
+        {
+            GenerateCommand.NotifyCanExecuteChanged();
+            ImportVectorDbDataCommand.NotifyCanExecuteChanged();
+            RestoreVectorDbCollectionCommand.NotifyCanExecuteChanged();
+            SaveVectorDbCollectionCommand.NotifyCanExecuteChanged();
         }
     }
 }

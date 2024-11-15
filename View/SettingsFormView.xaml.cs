@@ -16,6 +16,8 @@ KIND, either express or implied.  See the License for the
 specific language governing permissions and limitations
 under the License.
 */
+using EtwPilot.Utilities;
+using EtwPilot.ViewModel;
 using System.Windows;
 using System.Windows.Forms;
 
@@ -79,6 +81,13 @@ namespace EtwPilot.View
             {
                 return;
             }
+            var vm = UiHelper.GetViewModelFromFrameworkElement<
+                SettingsFormViewModel>(sender as FrameworkElement);
+            if (vm == null)
+            {
+                return;
+            }
+            vm.TryCreateModelConfig();
             ModelPathTextbox.Text = browser.SelectedPath;
         }
 
@@ -92,6 +101,13 @@ namespace EtwPilot.View
             {
                 return;
             }
+            var vm = UiHelper.GetViewModelFromFrameworkElement<
+                SettingsFormViewModel>(sender as FrameworkElement);
+            if (vm == null)
+            {
+                return;
+            }
+            vm.TryCreateModelConfig();
             EmbeddingsModelPathTextbox.Text = browser.FileName;
         }
     }

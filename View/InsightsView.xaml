@@ -10,7 +10,8 @@
              mc:Ignorable="d" 
              d:DesignHeight="450" d:DesignWidth="800"
              Name="InsightsControl"
-             DataContext="{StaticResource g_MainWindowViewModel}">
+             DataContext="{StaticResource g_MainWindowViewModel}"
+             Loaded="InsightsControl_Loaded">
     <DockPanel DataContext="{Binding m_InsightsViewModel,ValidatesOnNotifyDataErrors=False}">
         <DockPanel DockPanel.Dock="Bottom" Height="100" Margin="2">
             <DockPanel DockPanel.Dock="Right">
@@ -27,7 +28,6 @@
                 </DockPanel>
             </DockPanel>
             <TextBox Text="{Binding Prompt, UpdateSourceTrigger=PropertyChanged,ValidatesOnNotifyDataErrors=False}"
-                     IsEnabled="{Binding ConfigurationReady,ValidatesOnNotifyDataErrors=False}"
                      Name="PromptTextbox"
                      KeyUp="PromptTextbox_KeyUp"/>
         </DockPanel>
@@ -58,6 +58,11 @@
                                                                          Value="{x:Static model:InsightsInferenceResultModel+ContentType.SystemMessage}">
                                                                 <Setter Property="Source"
                                                                         Value="{StaticResource info}" />
+                                                            </DataTrigger>
+                                                            <DataTrigger Binding="{Binding Type}"
+                                                                         Value="{x:Static model:InsightsInferenceResultModel+ContentType.ErrorMessage}">
+                                                                <Setter Property="Source"
+                                                                        Value="{StaticResource red_x}" />
                                                             </DataTrigger>
                                                         </Style.Triggers>
                                                     </Style>

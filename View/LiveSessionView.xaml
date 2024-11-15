@@ -28,7 +28,7 @@
                             <TextBlock Name="LiveSessionTabText"/>
                             <Separator Width="5"/>
                             <Button Name="LiveSessionTabCloseButton"
-                            Content="{StaticResource red_x}"
+                            Content="{StaticResource red_x_close}"
                             BorderThickness="0"
                             Margin="0"
                             Padding="0"

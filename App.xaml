@@ -45,14 +45,16 @@
         <BitmapImage x:Key="session"  UriSource="images/session.png"/>
         <BitmapImage x:Key="start"  UriSource="images/play.png"/>
         <BitmapImage x:Key="stop"  UriSource="images/stop.png"/>
-        <BitmapImage x:Key="red_x_bmp"  UriSource="images/stop.png"/>
+        <BitmapImage x:Key="red_x"  UriSource="images/red_x.png"/>
         <BitmapImage x:Key="bulletlist"  UriSource="images/bulletlist.png"/>
         <BitmapImage x:Key="lightbulb"  UriSource="images/lightbulb.png"/>
         <BitmapImage x:Key="open"  UriSource="images/open.png"/>
         <BitmapImage x:Key="user-avatar"  UriSource="images/user-avatar.png"/>
         <BitmapImage x:Key="info"  UriSource="images/info.png"/>
         <BitmapImage x:Key="newdb"  UriSource="images/newdb.png"/>
-        <Image x:Key="red_x" x:Shared="false" Source="images/red_x.png" Width="15" Height="15"/>
+        <BitmapImage x:Key="datadb"  UriSource="images/datadb.png"/>
+        <BitmapImage x:Key="provdb"  UriSource="images/provdb.png"/>
+        <Image x:Key="red_x_close" x:Shared="false" Source="images/red_x.png" Width="15" Height="15"/>
         <vm:MainWindowViewModel x:Key="g_MainWindowViewModel" />
         <converters:IsGreaterThanZero x:Key="IsGreaterThanZero"/>
         <converters:DecimalToHex x:Key="DecimalToHex"/>
@@ -63,6 +65,8 @@
         <converters:MillisecondToSecond x:Key="MillisecondToSecond"/>
         <converters:InverseBooleanConverter x:Key="InverseBooleanConverter"/>
         <converters:ByteSizeToFriendlyString x:Key="ByteSizeToFriendlyString"/>
+        <converters:ChatTopicToBool x:Key="ChatTopicToBool"/>
+        <converters:MultiValueBooleanConverterOR x:Key="MultiValueBooleanConverterOR"/>
         <!-- template for adorning errors onto input form controls -->
         <ControlTemplate x:Key="ValidationErrorTemplate">
             <DockPanel LastChildFill="True">

@@ -74,7 +74,7 @@
                                     <TextBlock Name="ProviderContextTabText"/>
                                     <Separator Width="5"/>
                                     <Button Name="ProviderContextTabCloseButton"
-                                            Content="{StaticResource red_x}"
+                                            Content="{StaticResource red_x_close}"
                                             BorderThickness="0"
                                             Margin="0"
                                             Padding="0"
@@ -94,7 +94,7 @@
                                     <TextBlock Name="SessionContextTabText"/>
                                     <Separator Width="5"/>
                                     <Button Name="SessionContextTabCloseButton"
-                                            Content="{StaticResource red_x}"
+                                            Content="{StaticResource red_x_close}"
                                             BorderThickness="0"
                                             Margin="0"
                                             Padding="0"
@@ -214,22 +214,60 @@
                                   Name="InsightsTab"
                                   DataContext="{Binding m_InsightsViewModel,ValidatesOnNotifyDataErrors=False}">
                 <Fluent:RibbonGroupBox Header="Actions" Width="Auto">
-                    <Fluent:ToggleButton Header="Chat only"
-                                   Icon="{DynamicResource user-avatar}"
-                                   Command="{Binding ToggleChatOnlyModeCommand,ValidatesOnNotifyDataErrors=False}"/>
-                    <Fluent:Button Header="Reload Model"
+                    <Fluent:Button Header="Reinitialize"
                                    Icon="{DynamicResource refresh}"
-                                   Command="{Binding ReloadModelCommand,ValidatesOnNotifyDataErrors=False}"/>
+                                   Command="{Binding ReinitializeCommand,ValidatesOnNotifyDataErrors=False}"/>
                 </Fluent:RibbonGroupBox>
-                <Fluent:RibbonGroupBox Header="Provider" Width="Auto">
-                    <Fluent:Button Header="New"
-                                   Icon="{DynamicResource newdb}"
-                                   IsEnabled="{Binding ChatOnlyMode,Converter={StaticResource InverseBooleanConverter}}"
-                                   Command="{Binding NewProviderVecDbCommand,ValidatesOnNotifyDataErrors=False}"/>
-                    <Fluent:Button Header="Load"
-                                   Icon="{DynamicResource open}"
-                                   IsEnabled="{Binding ChatOnlyMode,Converter={StaticResource InverseBooleanConverter}}"
-                                   Command="{Binding LoadProviderVecDbCommand,ValidatesOnNotifyDataErrors=False}"/>
+                <Fluent:RibbonGroupBox Header="Topic" Width="Auto">
+                    <Fluent:ToggleButton Header="General"
+                        Name="GeneralToggleButton"
+                        Icon="{DynamicResource user-avatar}"
+                        GroupName="TopicGroup"
+                        IsChecked="{Binding Topic,Converter={StaticResource ChatTopicToBool}, ConverterParameter=General,ValidatesOnNotifyDataErrors=False}"
+                        Command="{Binding SetChatTopicCommand,ValidatesOnNotifyDataErrors=False}"
+                        CommandParameter="{x:Static vm:InsightsViewModel+ChatTopic.General}"/>
+                    <Fluent:ToggleButton Header="Manifests"
+                        Name="ManifestsToggleButton"
+                        Icon="{DynamicResource provdb}"
+                        GroupName="TopicGroup"
+                        IsChecked="{Binding Topic,Converter={StaticResource ChatTopicToBool}, ConverterParameter=Manifests,ValidatesOnNotifyDataErrors=False}"
+                        Command="{Binding SetChatTopicCommand,ValidatesOnNotifyDataErrors=False}"
+                        CommandParameter="{x:Static vm:InsightsViewModel+ChatTopic.Manifests}"/>
+                    <Fluent:ToggleButton Header="Data"
+                        Name="DataToggleButton"
+                        Icon="{DynamicResource datadb}"
+                        GroupName="TopicGroup"
+                        IsChecked="{Binding Topic,Converter={StaticResource ChatTopicToBool}, ConverterParameter=Data,ValidatesOnNotifyDataErrors=False}"
+                        Command="{Binding SetChatTopicCommand,ValidatesOnNotifyDataErrors=False}"
+                        CommandParameter="{x:Static vm:InsightsViewModel+ChatTopic.Data}"/>
+
+                </Fluent:RibbonGroupBox>
+                <Fluent:RibbonGroupBox Header="Model Input" Width="Auto">
+                    <Fluent:DropDownButton Header="Import"
+                        Width="Auto"
+                        Icon="{DynamicResource plus}"
+                        IsEnabled="{Binding VecDbCommandsAllowed,ValidatesOnNotifyDataErrors=False}">
+                        <Fluent:Button
+                            Header="From file..."
+                            Width="Auto"
+                            Command="{Binding ImportVectorDbDataCommand,ValidatesOnNotifyDataErrors=False}"
+                            CommandParameter="{x:Static vm:InsightsViewModel+DataSource.File}"/>
+                        <Fluent:Button
+                            Header="Live..."
+                            Width="Auto"
+                            Command="{Binding ImportVectorDbDataCommand,ValidatesOnNotifyDataErrors=False}"
+                            CommandParameter="{x:Static vm:InsightsViewModel+DataSource.Live}"/>
+                    </Fluent:DropDownButton>
+                    <Fluent:Button
+                        Header="Restore"
+                        Width="Auto"
+                        Icon="{DynamicResource open}"
+                        Command="{Binding RestoreVectorDbCollectionCommand,ValidatesOnNotifyDataErrors=False}"/>
+                    <Fluent:Button
+                        Header="Save"
+                        Width="Auto"
+                        Icon="{DynamicResource diskette}"
+                        Command="{Binding SaveVectorDbCollectionCommand,ValidatesOnNotifyDataErrors=False}"/>
                 </Fluent:RibbonGroupBox>
             </Fluent:RibbonTabItem>
 

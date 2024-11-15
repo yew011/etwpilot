@@ -20,6 +20,7 @@ using System.Diagnostics;
 using System.IO;
 using CommunityToolkit.Mvvm.Input;
 using EtwPilot.Model;
+using Microsoft.Extensions.Logging.Abstractions;
 using Newtonsoft.Json;
 
 namespace EtwPilot.ViewModel
@@ -163,6 +164,20 @@ namespace EtwPilot.ViewModel
             }
         }
 
+        private string _QdrantHostUri;
+        public string QdrantHostUri
+        {
+            get => _QdrantHostUri;
+            set
+            {
+                if (_QdrantHostUri != value)
+                {
+                    _QdrantHostUri = value;
+                    OnPropertyChanged("QdrantHostUri");
+                }
+            }
+        }
+
         private string _ModelPath;
         public string ModelPath
         {
@@ -176,14 +191,14 @@ namespace EtwPilot.ViewModel
                     OnPropertyChanged("ModelPath");
                     if (!string.IsNullOrEmpty(value))
                     {
-                        if (!InsightsConfigurationModel.ValidateModelPath(value))
+                        if (!OnnxGenAIConfigModel.ValidateModelPath(ModelPath))
                         {
                             AddError(nameof(ModelPath), "Model path is invalid");
                         }
-                        if (!InsightsConfigurationModel.ValidateEmbeddingsModelFile(EmbeddingsModelFile))
-                        {
-                            AddError(nameof(EmbeddingsModelFile), "Embeddings model file is invalid");
-                        }
+                    }
+                    else
+                    {
+                        ModelConfig = null;
                     }
                 }
             }
@@ -202,30 +217,29 @@ namespace EtwPilot.ViewModel
                     OnPropertyChanged("EmbeddingsModelFile");
                     if (!string.IsNullOrEmpty(value))
                     {
-                        if (!InsightsConfigurationModel.ValidateModelPath(ModelPath))
-                        {
-                            AddError(nameof(ModelPath), "Model path is invalid");
-                        }
-                        if (!InsightsConfigurationModel.ValidateEmbeddingsModelFile(value))
+                        if (!OnnxGenAIConfigModel.ValidateEmbeddingsModelFile(EmbeddingsModelFile))
                         {
                             AddError(nameof(EmbeddingsModelFile), "Embeddings model file is invalid");
                         }
+                    }
+                    else
+                    {
+                        ModelConfig = null;
                     }
                 }
             }
         }
 
-        private OnnxGenAISearchOptionsModel _SearchOptions;
-        public OnnxGenAISearchOptionsModel SearchOptions
+        private OnnxGenAIConfigModel? _ModelConfig;
+        public OnnxGenAIConfigModel? ModelConfig
         {
-            get => _SearchOptions;
+            get => _ModelConfig;
             set
             {
-                if (_SearchOptions != value)
+                if (_ModelConfig != value)
                 {
-                    ClearErrors(nameof(SearchOptions));
-                    _SearchOptions = value;
-                    OnPropertyChanged("SearchOptions");
+                    _ModelConfig = value;
+                    OnPropertyChanged("ModelConfig");
                 }
             }
         }
@@ -234,6 +248,25 @@ namespace EtwPilot.ViewModel
 
         [JsonIgnore]
         public bool HasUnsavedChanges { get; set; }
+
+        [JsonIgnore]
+        public bool HasModelRelatedUnsavedChanges { get; set; }
+
+        [JsonIgnore]
+        private bool _NewSettingsReady;
+        [JsonIgnore]
+        public bool NewSettingsReady
+        {
+            get => _NewSettingsReady;
+            set
+            {
+                if (_NewSettingsReady != value)
+                {
+                    _NewSettingsReady = value;
+                    OnPropertyChanged("NewSettingsReady");
+                }
+            }
+        }
 
         #region commands
         [JsonIgnore]
@@ -346,6 +379,7 @@ namespace EtwPilot.ViewModel
                 System.Windows.Forms.MessageBox.Show($"Unable to save settings: {ex.Message}");
                 return;
             }
+            NewSettingsReady = true; // cheap way to trigger listeners that new settings are ready
             StateManager.ProgressState.InitializeProgress(1);
             StateManager.ProgressState.FinalizeProgress($"Successfully saved settings to {target}");
         }
@@ -380,12 +414,57 @@ namespace EtwPilot.ViewModel
             try
             {
                 var json = File.ReadAllText(Location);
-                return (SettingsFormViewModel)JsonConvert.DeserializeObject(
+                var settings = (SettingsFormViewModel)JsonConvert.DeserializeObject(
                     json, typeof(SettingsFormViewModel))!;
+                if (settings.ModelConfig != null)
+                {
+                    //
+                    // Add a listener for any property change in the UI sliders
+                    // and remember to save it later.
+                    //
+                    settings.ModelConfig.SearchOptions.PropertyChanged += (obj, p) =>
+                    {
+                        settings.HasUnsavedChanges = true;
+                        settings.HasModelRelatedUnsavedChanges = true;
+                    };
+                }
+                return settings;
             }
             catch (Exception ex)
             {
                 throw new Exception($"Could not deserialize settings: {ex.Message}");
+            }
+        }
+
+        public void TryCreateModelConfig()
+        {
+            //
+            // This routine is invoked only from XAML code-behind for the form,
+            // after a user has browsed to a new model path or embeddings model,
+            // so that the proper config can be loaded and parsed. This cannot
+            // be done from within setters in this class because it would interfere
+            // with deserialization during the loading process.
+            //
+            if (!PropertyHasErrors(nameof(ModelPath)) &&
+                !PropertyHasErrors(nameof(EmbeddingsModelFile)))
+            {
+                ModelConfig = OnnxGenAIConfigModel.Load(ModelPath, EmbeddingsModelFile);
+                if (ModelConfig == null)
+                {
+                    AddError(nameof(ModelPath), "Unable to load model config JSON");
+                }
+                else
+                {
+                    //
+                    // Add a listener for any property change in the UI sliders
+                    // and remember to save it later.
+                    //
+                    ModelConfig.SearchOptions.PropertyChanged += (obj, p) =>
+                    {
+                        HasUnsavedChanges = true;
+                        HasModelRelatedUnsavedChanges = true;
+                    };
+                }
             }
         }
     }
