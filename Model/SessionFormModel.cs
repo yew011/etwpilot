@@ -24,13 +24,13 @@ namespace EtwPilot.Model
     using StopCondition = ViewModel.LiveSessionViewModel.StopCondition;
     using static EtwPilot.Utilities.TraceLogger;
 
-    internal class ConfiguredProvider
+    public class ConfiguredProvider
     {
         public EnabledProvider _EnabledProvider { get; set; }
         public List<EtwColumnViewModel> Columns { get; set; }
     }
 
-    internal class SessionFormModel
+    public class SessionFormModel
     {
         public Guid Id { get; set; }
         public string Name { get; set; }

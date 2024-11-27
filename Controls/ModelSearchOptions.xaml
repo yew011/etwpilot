@@ -3,11 +3,13 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" 
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:vm="clr-namespace:EtwPilot.ViewModel"
              mc:Ignorable="d"
              d:DesignWidth="300"
              Name="UI"
-             DataContext="{StaticResource g_MainWindowViewModel}">
-    <Grid DataContext="{Binding StateManager.Settings.ModelConfig.SearchOptions}">
+             DataContext="{Binding Source={x:Static vm:GlobalStateViewModel.Instance}, 
+               Path=Settings, ValidatesOnNotifyDataErrors=False}">
+    <Grid DataContext="{Binding ModelConfig.SearchOptions}">
         <StackPanel Margin="3">
             <UniformGrid Columns="2" >
                 <StackPanel Margin="0,0,4,0">

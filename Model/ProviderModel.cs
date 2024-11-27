@@ -20,7 +20,6 @@ using etwlib;
 using System.Diagnostics;
 using System.IO;
 using Newtonsoft.Json;
-using EtwPilot.ViewModel;
 
 namespace EtwPilot.Model
 {
@@ -28,11 +27,11 @@ namespace EtwPilot.Model
 
     internal class ProviderModel
     {
-        private readonly StateManager StateManager;
+        private readonly string CacheLocation;
 
-        public ProviderModel(StateManager Manager)
+        public ProviderModel(string _CacheLocation)
         {
-            StateManager = Manager;
+            CacheLocation = _CacheLocation;
         }
 
         public async Task<List<ParsedEtwProvider>?> GetProviders()
@@ -71,15 +70,17 @@ namespace EtwPilot.Model
 
         private async Task<List<ParsedEtwProvider>?> LoadFromCache(bool ForceRefresh = false)
         {
-            var cache = StateManager.Settings.ProviderCacheLocation;
-            Debug.Assert(!string.IsNullOrEmpty(cache));
+            Debug.Assert(!string.IsNullOrEmpty(CacheLocation));
+            Trace(TraceLoggerType.Providers, TraceEventType.Verbose, $"Cache location {CacheLocation}");
 
-            if (!File.Exists(cache) || ForceRefresh)
+            if (!File.Exists(CacheLocation) || ForceRefresh)
             {
-                StateManager.ProgressState.UpdateProgressMessage("Querying providers...");
+                Trace(TraceLoggerType.Providers, TraceEventType.Verbose, "Creating cache...");
+                Trace(TraceLoggerType.Providers, TraceEventType.Verbose, "Querying providers...");
                 var providers = await QueryProviders();
                 if (providers == null)
                 {
+                    Trace(TraceLoggerType.Providers, TraceEventType.Verbose, "No providers found.");
                     return null;
                 }
 
@@ -88,9 +89,8 @@ namespace EtwPilot.Model
                 //
                 try
                 {
-                    StateManager.ProgressState.UpdateProgressMessage("Writing cache...");
                     var json = JsonConvert.SerializeObject(providers, Formatting.Indented);
-                    File.WriteAllText(cache, json);
+                    File.WriteAllText(CacheLocation, json);
                 }
                 catch (Exception ex)
                 {
@@ -101,13 +101,13 @@ namespace EtwPilot.Model
             }
             else
             {
-                StateManager.ProgressState.UpdateProgressMessage("Reading cache...");
+                Trace(TraceLoggerType.Providers, TraceEventType.Verbose, "Reading cache...");
                 //
                 // Read from the cache
                 //
                 try
                 {
-                    var json = File.ReadAllText(cache);
+                    var json = File.ReadAllText(CacheLocation);
                     var result = (List<ParsedEtwProvider>)JsonConvert.DeserializeObject(
                         json, typeof(List<ParsedEtwProvider>))!;
                     return result;

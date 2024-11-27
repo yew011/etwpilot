@@ -20,14 +20,14 @@ using System.Diagnostics;
 using System.IO;
 using CommunityToolkit.Mvvm.Input;
 using EtwPilot.Model;
-using Microsoft.Extensions.Logging.Abstractions;
+using EtwPilot.Utilities;
 using Newtonsoft.Json;
 
 namespace EtwPilot.ViewModel
 {
     using static EtwPilot.Utilities.TraceLogger;
 
-    internal class SettingsFormViewModel : ViewModelBase
+    public class SettingsFormViewModel : ViewModelBase
     {
         public static readonly string DefaultWorkingDirectory = Path.Combine(
             new string[] { Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
@@ -195,6 +195,10 @@ namespace EtwPilot.ViewModel
                         {
                             AddError(nameof(ModelPath), "Model path is invalid");
                         }
+                        else if (!OnnxGenAIConfigModel.ValidateEmbeddingsModelFile(EmbeddingsModelFile))
+                        {
+                            AddError(nameof(EmbeddingsModelFile), "Embeddings model file is invalid");
+                        }
                     }
                     else
                     {
@@ -217,7 +221,11 @@ namespace EtwPilot.ViewModel
                     OnPropertyChanged("EmbeddingsModelFile");
                     if (!string.IsNullOrEmpty(value))
                     {
-                        if (!OnnxGenAIConfigModel.ValidateEmbeddingsModelFile(EmbeddingsModelFile))
+                        if (!OnnxGenAIConfigModel.ValidateModelPath(ModelPath))
+                        {
+                            AddError(nameof(ModelPath), "Model path is invalid");
+                        }
+                        else if (!OnnxGenAIConfigModel.ValidateEmbeddingsModelFile(EmbeddingsModelFile))
                         {
                             AddError(nameof(EmbeddingsModelFile), "Embeddings model file is invalid");
                         }
@@ -244,14 +252,6 @@ namespace EtwPilot.ViewModel
             }
         }
 
-        #endregion
-
-        [JsonIgnore]
-        public bool HasUnsavedChanges { get; set; }
-
-        [JsonIgnore]
-        public bool HasModelRelatedUnsavedChanges { get; set; }
-
         [JsonIgnore]
         private bool _NewSettingsReady;
         [JsonIgnore]
@@ -267,6 +267,13 @@ namespace EtwPilot.ViewModel
                 }
             }
         }
+        #endregion
+
+        [JsonIgnore]
+        public bool HasUnsavedChanges { get; set; }
+
+        [JsonIgnore]
+        public bool HasModelRelatedUnsavedChanges { get; set; }
 
         #region commands
         [JsonIgnore]
@@ -276,10 +283,16 @@ namespace EtwPilot.ViewModel
 
         #endregion
 
-        public SettingsFormViewModel()
+        public SettingsFormViewModel() : base()
         {
             LoadSettingsCommand = new AsyncRelayCommand(Command_LoadSettings, () => { return true; });
             SaveSettingsCommand = new AsyncRelayCommand(Command_SaveSettings, () => { return !HasErrors; });
+
+            PropertyChanged += (obj, args) =>
+            {
+                LoadSettingsCommand.NotifyCanExecuteChanged();
+                SaveSettingsCommand.NotifyCanExecuteChanged();
+            };
 
             if (!Directory.Exists(DefaultWorkingDirectory))
             {
@@ -304,6 +317,10 @@ namespace EtwPilot.ViewModel
             TraceLevelSymbolresolver = SourceLevels.Critical;
         }
 
+        protected override Task ExportData(DataExporter.ExportFormat Format, CancellationToken Token)
+        {
+            throw new NotImplementedException();
+        }
         public static SettingsFormViewModel LoadDefault()
         {
             var target = Path.Combine(DefaultWorkingDirectory, DefaultSettingsFileName);
@@ -337,7 +354,7 @@ namespace EtwPilot.ViewModel
 
             try
             {
-                StateManager.Settings = Load(dialog.FileName);
+                GlobalStateViewModel.Instance.Settings = Load(dialog.FileName);
             }
             catch (Exception ex)
             {
@@ -345,8 +362,7 @@ namespace EtwPilot.ViewModel
                     $"Unable to load settings from {dialog.FileName}: {ex.Message}");
                 return;
             }
-            StateManager.ProgressState.InitializeProgress(1);
-            StateManager.ProgressState.FinalizeProgress($"Successfully loaded settings from {dialog.FileName}");
+            ProgressState.FinalizeProgress($"Successfully loaded settings from {dialog.FileName}");
         }
 
         private async Task Command_SaveSettings()
@@ -380,8 +396,7 @@ namespace EtwPilot.ViewModel
                 return;
             }
             NewSettingsReady = true; // cheap way to trigger listeners that new settings are ready
-            StateManager.ProgressState.InitializeProgress(1);
-            StateManager.ProgressState.FinalizeProgress($"Successfully saved settings to {target}");
+            ProgressState.FinalizeProgress($"Successfully saved settings to {target}");
         }
 
         private void SaveInternal(string Target)

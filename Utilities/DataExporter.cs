@@ -16,9 +16,7 @@ KIND, either express or implied.  See the License for the
 specific language governing permissions and limitations
 under the License.
 */
-using EtwPilot.ViewModel;
 using Newtonsoft.Json;
-using static EtwPilot.ViewModel.MainWindowViewModel;
 using System.IO;
 using System.Windows.Forms;
 using System.Xml.Serialization;
@@ -29,50 +27,85 @@ using System.Diagnostics;
 
 namespace EtwPilot.Utilities
 {
-    internal static class DataExporter
+    public static class DataExporter
     {
-        public static async Task Export<T>(List<T> Data, ExportFormat Format, StateManager State, string DataTypeName)
+        public enum ExportFormat
         {
-            var browser = new FolderBrowserDialog();
-            browser.Description = "Select a location to export the data";
-            browser.RootFolder = Environment.SpecialFolder.MyComputer;
-            var result = browser.ShowDialog();
-            if (result != DialogResult.OK)
-            {
-                return;
-            }
-            var location = Path.Combine(browser.SelectedPath,
-                $"{DataTypeName}-{DateTime.Now:yyyy-MM-dd-HHmmss}.{Format}");
+            Csv = 1,
+            Xml,
+            Json,
+            Clip,
+            Custom
+        }
 
-            State.ProgressState.InitializeProgress(1);
+        public static async Task<(int, string?)> Export<T>(dynamic Data, ExportFormat Format, string DataTypeName, CancellationToken Token)
+        {
+            bool isListType = MiscHelper.IsListType(typeof(T));
+            string location;
+            if (Format != ExportFormat.Clip)
+            {
+                var browser = new FolderBrowserDialog();
+                browser.Description = "Select a location to export the data";
+                browser.RootFolder = Environment.SpecialFolder.MyComputer;
+                var result = browser.ShowDialog();
+                if (result != DialogResult.OK)
+                {
+                    return (0, null);
+                }
+                location = Path.Combine(browser.SelectedPath,
+                    $"{DataTypeName}-{DateTime.Now:yyyy-MM-dd-HHmmss}.{Format}");
+            }
+            else
+            {
+                location = "Clipboard";
+            }
             switch (Format)
             {
                 case ExportFormat.Json:
                     {
                         var json = JsonConvert.SerializeObject(Data,
                             Newtonsoft.Json.Formatting.Indented);
-                        File.WriteAllText(location, json);
+                        await File.WriteAllTextAsync(location, json, Token);
                         break;
                     }
                 case ExportFormat.Xml:
                     {
-                        var serializer = new XmlSerializer(typeof(List<T>));
+                        var serializer = new XmlSerializer(typeof(T));
                         using (var sw = new StringWriter())
                         {
                             using (var writer = new XmlTextWriter(sw)
                             {
-                                Formatting = System.Xml.Formatting.Indented
+                                Formatting = System.Xml.Formatting.Indented,
                             })
                             {
                                 serializer.Serialize(writer, Data);
-                                File.WriteAllText(location, sw.ToString());
+                                await File.WriteAllTextAsync(location, sw.ToString(), Token);
                             }
                         }
                         break;
                     }
                 case ExportFormat.Csv:
                     {
-                        File.WriteAllText(location, GetDataAsCsv(Data));
+                        if (isListType)
+                        {
+                            await File.WriteAllTextAsync(location, GetDataAsCsv(Data), Token);
+                        }
+                        else
+                        {
+                            await File.WriteAllTextAsync(location, $"{Data}", Token);
+                        }
+                        break;
+                    }
+                case ExportFormat.Clip:
+                    {
+                        if (isListType)
+                        {
+                            System.Windows.Clipboard.SetText(GetDataAsCsv(Data));
+                        }
+                        else
+                        {
+                            System.Windows.Clipboard.SetText($"{Data}");
+                        }
                         break;
                     }
                 case ExportFormat.Custom:
@@ -80,18 +113,17 @@ namespace EtwPilot.Utilities
                         var lines = Data as List<string>;
                         if (lines == null)
                         {
-                            State.ProgressState.FinalizeProgress("Invalid data format");
-                            return;
+                            throw new Exception("Invalid custom data format");
                         }
                         File.WriteAllLines(location, lines);
                         break;
                     }
                 default:
                     {
-                        break;
+                        throw new Exception($"Invalid export format {Format}");
                     }
             }
-            State.ProgressState.FinalizeProgress($"Exported {Data.Count} rows to {location}");
+            return (isListType? Data.Count : 1, location);
         }
 
         public static string GetDataAsCsv<T>(List<T> Data)

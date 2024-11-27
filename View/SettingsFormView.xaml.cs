@@ -47,15 +47,15 @@ namespace EtwPilot.View
 
         private void BrowseDbgHelpDllPathButton_Click(object sender, RoutedEventArgs e)
         {
-            var browser = new FolderBrowserDialog();
-            browser.Description = "Select a location";
-            browser.RootFolder = Environment.SpecialFolder.MyComputer;
+            var browser = new OpenFileDialog();
+            browser.Title = "Select a dbghelp.dll file";
+            browser.Filter = "DLL files (*.dll)|*.dll";
             var result = browser.ShowDialog();
             if (result != DialogResult.OK)
             {
                 return;
             }
-            DbgHelpDllPathTextBox.Text = browser.SelectedPath;
+            DbgHelpDllPathTextBox.Text = browser.FileName;
         }
 
         private void BrowseProviderCachePathButton_Click(object sender, RoutedEventArgs e)
@@ -87,8 +87,8 @@ namespace EtwPilot.View
             {
                 return;
             }
-            vm.TryCreateModelConfig();
             ModelPathTextbox.Text = browser.SelectedPath;
+            vm.TryCreateModelConfig();
         }
 
         private void BrowseEmbeddingsModelFileButton_Click(object sender, RoutedEventArgs e)
@@ -107,8 +107,8 @@ namespace EtwPilot.View
             {
                 return;
             }
-            vm.TryCreateModelConfig();
             EmbeddingsModelPathTextbox.Text = browser.FileName;
+            vm.TryCreateModelConfig();
         }
     }
 }

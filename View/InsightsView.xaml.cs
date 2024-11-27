@@ -16,8 +16,6 @@ KIND, either express or implied.  See the License for the
 specific language governing permissions and limitations
 under the License.
 */
-
-using EtwPilot.Utilities;
 using EtwPilot.ViewModel;
 using System.Windows;
 using System.Windows.Controls;
@@ -33,29 +31,17 @@ namespace EtwPilot.View
 
         private async void PromptTextbox_KeyUp(object sender, System.Windows.Input.KeyEventArgs e)
         {
-            var vm = UiHelper.GetViewModelFromFrameworkElement<
-                MainWindowViewModel>(sender as FrameworkElement);
-            if (vm == null)
-            {
-                return;
-            }
             if (e.Key == System.Windows.Input.Key.Enter)
             {
-                await vm.m_InsightsViewModel.GenerateCommand.ExecuteAsync(null);
+                await GlobalStateViewModel.Instance.g_InsightsViewModel.GenerateCommand.ExecuteAsync(null);
                 return;
             }
-            vm.m_InsightsViewModel.Prompt += e.Key;
+            GlobalStateViewModel.Instance.g_InsightsViewModel.Prompt += e.Key;
         }
 
         private async void InsightsControl_Loaded(object sender, RoutedEventArgs e)
         {
-            var vm = UiHelper.GetViewModelFromFrameworkElement<
-                MainWindowViewModel>(sender as FrameworkElement);
-            if (vm == null)
-            {
-                return;
-            }
-            await vm.m_InsightsViewModel.Initialize();
+            await GlobalStateViewModel.Instance.g_InsightsViewModel.Initialize();
         }
     }
 }

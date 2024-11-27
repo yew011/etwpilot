@@ -11,7 +11,7 @@
              xmlns:view="clr-namespace:EtwPilot.View"
              mc:Ignorable="d" 
              d:DesignHeight="450" d:DesignWidth="800"
-             DataContext="{StaticResource g_MainWindowViewModel}"
+             DataContext="{Binding Source={x:Static vm:GlobalStateViewModel.Instance}}"
              Name="SessionViewControl">
     <UserControl.Resources>
         <view:SessionFormView x:Key="Form"/>
@@ -24,7 +24,7 @@
           DockPanel.Dock="Left"
           IsReadOnly="true"
           AutoGenerateColumns="false"
-          ItemsSource="{Binding m_SessionViewModel.Sessions}"
+          ItemsSource="{Binding g_SessionViewModel.Sessions}"
           SelectionChanged="SessionsDataGrid_SelectionChanged">
             <DataGrid.Columns>
                 <DataGridTextColumn Header="Logger ID" Binding="{Binding LoggerId}"/>
@@ -59,7 +59,7 @@
             </DataGrid.RowDetailsTemplate>
         </DataGrid>
         <ContentControl Name="SessionFormContentControl"
-                        Content="{Binding m_SessionFormViewModel,ValidatesOnNotifyDataErrors=False}" 
+                        Content="{Binding g_SessionFormViewModel,ValidatesOnNotifyDataErrors=False}" 
                         DockPanel.Dock="Left"/>
     </DockPanel>
 </UserControl>

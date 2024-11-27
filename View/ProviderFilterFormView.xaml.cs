@@ -17,9 +17,7 @@ specific language governing permissions and limitations
 under the License.
 */
 using etwlib;
-using EtwPilot.Utilities;
 using EtwPilot.ViewModel;
-using Fluent;
 using System.Data;
 using System.Diagnostics;
 using System.Windows;
@@ -38,7 +36,7 @@ namespace EtwPilot.View
 
         private void ScopeFilterProcess_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
-            var vm = GetVmFromMainWindowDataContext(sender);
+            var vm = GlobalStateViewModel.Instance.g_SessionFormViewModel.CurrentProviderFilterForm;
             if (ScopeFilterProcesses.SelectedItems == null || vm == null)
             {
                 return;
@@ -49,7 +47,7 @@ namespace EtwPilot.View
 
         private void ScopeFilterExes_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
-            var vm = GetVmFromMainWindowDataContext(sender);
+            var vm = GlobalStateViewModel.Instance.g_SessionFormViewModel.CurrentProviderFilterForm;
             if (ScopeFilterExes.SelectedItems == null || vm == null)
             {
                 return;
@@ -60,7 +58,7 @@ namespace EtwPilot.View
 
         private void ScopeFilterAppIds_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
-            var vm = GetVmFromMainWindowDataContext(sender);
+            var vm = GlobalStateViewModel.Instance.g_SessionFormViewModel.CurrentProviderFilterForm;
             if (ScopeFilterAppIds.SelectedItems == null || vm == null)
             {
                 return;
@@ -71,7 +69,7 @@ namespace EtwPilot.View
 
         private void ScopeFilterPackageIds_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
-            var vm = GetVmFromMainWindowDataContext(sender);
+            var vm = GlobalStateViewModel.Instance.g_SessionFormViewModel.CurrentProviderFilterForm;
             if (ScopeFilterPackageIds.SelectedItems == null || vm == null)
             {
                 return;
@@ -85,7 +83,7 @@ namespace EtwPilot.View
         #region AttributeFilter
         private void AttributeFilterEvents_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
-            var vm = GetVmFromProviderFilterFormContext(sender);
+            var vm = GlobalStateViewModel.Instance.g_SessionFormViewModel.CurrentProviderFilterForm;
             if (AttributeFilterEvents.SelectedItems == null || vm == null)
             {
                 return;
@@ -97,7 +95,7 @@ namespace EtwPilot.View
 
         private void AttributeFilterAnyKeywords_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
-            var vm = GetVmFromProviderFilterFormContext(sender);
+            var vm = GlobalStateViewModel.Instance.g_SessionFormViewModel.CurrentProviderFilterForm;
             if (AttributeFilterAnyKeywords.SelectedItems == null || vm == null)
             {
                 return;
@@ -109,7 +107,7 @@ namespace EtwPilot.View
 
         private void AttributeFilterAllKeywords_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
-            var vm = GetVmFromProviderFilterFormContext(sender);
+            var vm = GlobalStateViewModel.Instance.g_SessionFormViewModel.CurrentProviderFilterForm;
             if (AttributeFilterAllKeywords.SelectedItems == null || vm == null)
             {
                 return;
@@ -123,7 +121,7 @@ namespace EtwPilot.View
         #region StackwalkFilter
         private void StackwalkFilterEvents_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
-            var vm = GetVmFromProviderFilterFormContext(sender);
+            var vm = GlobalStateViewModel.Instance.g_SessionFormViewModel.CurrentProviderFilterForm;
             if (AttributeFilterAllKeywords.SelectedItems == null || vm == null)
             {
                 return;
@@ -135,7 +133,7 @@ namespace EtwPilot.View
 
         private void StackwalkLevelKeywordFilterAnyKeywords_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
-            var vm = GetVmFromProviderFilterFormContext(sender);
+            var vm = GlobalStateViewModel.Instance.g_SessionFormViewModel.CurrentProviderFilterForm;
             if (StackwalkLevelKeywordFilterAnyKeywords.SelectedItems == null || vm == null)
             {
                 return;
@@ -147,7 +145,7 @@ namespace EtwPilot.View
 
         private void StackwalkLevelKeywordFilterAllKeywords_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
-            var vm = GetVmFromProviderFilterFormContext(sender);
+            var vm = GlobalStateViewModel.Instance.g_SessionFormViewModel.CurrentProviderFilterForm;
             if (StackwalkLevelKeywordFilterAllKeywords.SelectedItems == null || vm == null)
             {
                 return;
@@ -162,7 +160,7 @@ namespace EtwPilot.View
 
         private void PayloadFilterEvents_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
-            var vm = GetVmFromProviderFilterFormContext(sender);
+            var vm = GlobalStateViewModel.Instance.g_SessionFormViewModel.CurrentProviderFilterForm;
             if (vm == null)
             {
                 return;
@@ -192,7 +190,7 @@ namespace EtwPilot.View
 
         private void PayloadFilterPredicates_MouseDoubleClick(object sender, System.Windows.Input.MouseButtonEventArgs e)
         {
-            var vm = GetVmFromProviderFilterFormContext(sender);
+            var vm = GlobalStateViewModel.Instance.g_SessionFormViewModel.CurrentProviderFilterForm;
             if (vm == null)
             {
                 return;
@@ -208,7 +206,7 @@ namespace EtwPilot.View
 
         private void PayloadFilterPredicates_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
-            var vm = GetVmFromProviderFilterFormContext(sender);
+            var vm = GlobalStateViewModel.Instance.g_SessionFormViewModel.CurrentProviderFilterForm;
             if (vm == null)
             {
                 return;
@@ -255,11 +253,7 @@ namespace EtwPilot.View
 
         private void RefreshAvailableEtwColumns(object sender)
         {
-            var vm = GetVmFromMainWindowDataContext(sender);
-            if (vm == null)
-            {
-                return;
-            }
+            var vm = GlobalStateViewModel.Instance.g_SessionFormViewModel.CurrentProviderFilterForm;
             var uniqueEvents = new List<ParsedEtwManifestEvent>();
             if (AttributeFilterEvents.SelectedItems != null)
             {
@@ -297,7 +291,7 @@ namespace EtwPilot.View
         private void ChosenEtwColumnsDataGrid_DataGridCellDoubleClick(object sender, System.Windows.Input.MouseButtonEventArgs e)
         {
             var cell = sender as DataGridCell;
-            var vm = GetVmFromProviderFilterFormContext(ChosenEtwColumnsDataGrid);
+            var vm = GlobalStateViewModel.Instance.g_SessionFormViewModel.CurrentProviderFilterForm;
             if (vm == null || cell == null || cell.Column.Header.ToString() != "IConverter")
             {
                 return;
@@ -314,32 +308,20 @@ namespace EtwPilot.View
 
         private void ChosenEtwColumnsDataGrid_CellEditEnding(object sender, DataGridCellEditEndingEventArgs e)
         {
-            var vm = GetVmFromProviderFilterFormContext(sender);
-            if (vm == null)
-            {
-                return;
-            }
+            var vm = GlobalStateViewModel.Instance.g_SessionFormViewModel.CurrentProviderFilterForm;
             vm.EditingEtwColumn = false;
             NotifyCanExecuteChangedCommandButtons(vm);
         }
 
         private void ChosenEtwColumnsDataGrid_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
-            var vm = GetVmFromProviderFilterFormContext(sender);
-            if (vm == null)
-            {
-                return;
-            }
+            var vm = GlobalStateViewModel.Instance.g_SessionFormViewModel.CurrentProviderFilterForm;
             NotifyCanExecuteChangedCommandButtons(vm);
         }
 
         private void AvailableEtwColumnsDataGrid_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
-            var vm = GetVmFromProviderFilterFormContext(sender);
-            if (vm == null)
-            {
-                return;
-            }
+            var vm = GlobalStateViewModel.Instance.g_SessionFormViewModel.CurrentProviderFilterForm;
             NotifyCanExecuteChangedCommandButtons(vm);
         }
 
@@ -353,30 +335,5 @@ namespace EtwPilot.View
 
         #endregion
 
-        private ProviderFilterFormViewModel? GetVmFromMainWindowDataContext(object sender)
-        {
-            //
-            // Some user controls in ProviderFilterFormView have their data context set
-            // to MainWindowViewModel, such as the scope filter tab which needs to access
-            // the SessionFormViewModel hanging off g_MainWindowViewModel. We get to the
-            // current ProviderFilterFormViewModel by that instance.
-            //
-            var vm = UiHelper.GetViewModelFromFrameworkElement<
-                MainWindowViewModel>(sender as FrameworkElement);
-            if (vm == null)
-            {
-                return null;
-            }
-            return vm.m_SessionFormViewModel.CurrentProviderFilterForm;
-        }
-
-        private ProviderFilterFormViewModel? GetVmFromProviderFilterFormContext(object sender)
-        {
-            //
-            // Other UI controls have their DataContext set to the current ProviderFilterFormViewModel
-            //
-            return UiHelper.GetViewModelFromFrameworkElement<
-                ProviderFilterFormViewModel>(sender as FrameworkElement);
-        }
     }
 }

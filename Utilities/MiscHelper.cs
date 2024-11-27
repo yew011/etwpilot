@@ -24,6 +24,11 @@ namespace EtwPilot.Utilities
 {
     internal static class MiscHelper
     {
+        public static bool IsListType(Type type)
+        {
+            return type.GetTypeInfo().IsGenericType && type.GetGenericTypeDefinition() == typeof(List<>);
+        }
+
         public static string FormatByteSizeString(double Value, int DecimalPlaces = 1)
         {
             string[] sizes =

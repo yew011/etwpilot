@@ -16,21 +16,17 @@ KIND, either express or implied.  See the License for the
 specific language governing permissions and limitations
 under the License.
 */
+using etwlib;
+using System.Diagnostics;
 
 namespace EtwPilot.Model
 {
-    using etwlib;
-    using EtwPilot.ViewModel;
-    using System.Diagnostics;
     using static EtwPilot.Utilities.TraceLogger;
 
     internal class SessionModel
     {
-        private readonly StateManager StateManager;
-
-        public SessionModel(StateManager Manager)
+        public SessionModel()
         {
-            StateManager = Manager;
         }
 
         public async Task<List<ParsedEtwSession>?> GetSessions()

@@ -22,19 +22,23 @@ using System.Windows.Controls;
 using EtwPilot.Utilities;
 using System.Windows.Data;
 using System.Diagnostics;
-using EtwPilot.Model;
 
 namespace EtwPilot.View
 {
-    using static EtwPilot.Utilities.TraceLogger;
-
     public partial class LiveSessionView : UserControl
     {
-        private LiveSessionViewModel _ViewModel; // hack
-
         public LiveSessionView()
         {
             InitializeComponent();
+            //
+            // EtwPilot creates some UI elements dynamically. This is one of them. When a user
+            // creates a live session, each enabled provider in the ETW session has its own tab
+            // that contains a datagrid of logged etw data. All of that logic belongs in the ViewModel,
+            // not here in the code-behind. But that means the VM also has to create the UI
+            // element (ie, the new tab). It can only do that with the actual TabControl container,
+            // which is why we're exposing it here.
+            //
+            GlobalStateViewModel.Instance.g_SessionFormViewModel.TabControl = LiveSessionTabControl;
         }
 
         private void Expander_Expanded(object sender, RoutedEventArgs e)
@@ -47,86 +51,20 @@ namespace EtwPilot.View
             UiHelper.Expander_Collapsed(sender, e);
         }
 
-        private void LiveSessionTabControl_Unloaded(object sender, RoutedEventArgs e)
-        {
-        }
-
-        private void LiveSessionTabControl_Loaded(object sender, RoutedEventArgs e)
+        private async void LiveSessionTabControl_Loaded(object sender, RoutedEventArgs e)
         {
             //
             // Every time the user switches away from the TabControl, the tabs and their
             // contents are destroyed (this is by design in WPF), so we have to recreate
             // them. Luckily this is not an expensive operation.
             //
-
             var vm = UiHelper.GetViewModelFromFrameworkElement<
                 LiveSessionViewModel>(sender as FrameworkElement);
             if (vm == null)
             {
                 return;
             }
-            _ViewModel = vm;
-
-            foreach (var provider in vm.Configuration.ConfiguredProviders)
-            {
-                var data = vm.RegisterProviderTab(provider);
-                if (data == null)
-                {
-                    return;
-                }
-                if (!CreateTab(provider, data))
-                {
-                    return;
-                }
-            }
-        }
-
-        private bool CreateTab(ConfiguredProvider Provider, ProviderTraceData Data)
-        {
-            var tabName = UiHelper.GetUniqueTabName(Provider._EnabledProvider.Id, "ProviderLiveSession");
-            Func<Task<bool>> tabClosedCallback = async delegate ()
-            {
-                Data.IsEnabled = false;
-                return true;
-            };
-            var providerDataGrid = new DataGrid()
-            {
-                //
-                // Important: Fixing the control to a MaxHeight and MaxWidth
-                // is required, as otherwise the Grid will attempt to re-calculate
-                // control bounds on every single row/ column.Etw captures are
-                // noisy and will hang the UI.
-                //
-                Name = UiHelper.GetUniqueTabName(Provider._EnabledProvider.Id,"ProviderData"),
-                AlternatingRowBackground = System.Windows.Media.Brushes.AliceBlue,
-                EnableColumnVirtualization = true,
-                EnableRowVirtualization = true,
-                IsReadOnly = true,
-                AutoGenerateColumns = true,
-                RowHeight = 25,
-                MaxHeight = 1600,
-                MaxWidth = 1600,
-                ItemsSource = Data.Data.AsObservable,
-                DataContext = Data,
-            };
-            providerDataGrid.AutoGeneratingColumn += ProviderDataGrid_AutoGeneratingColumn;
-            if (!UiHelper.CreateTabControlContextualTab(
-                    LiveSessionTabControl,
-                    providerDataGrid,
-                    tabName,
-                    Provider._EnabledProvider.Name!,
-                    "LiveSessionTabStyle",
-                    "LiveSessionTabText",
-                    "LiveSessionTabCloseButton",
-                    Data,
-                    tabClosedCallback))
-            {
-                Trace(TraceLoggerType.LiveSession,
-                      TraceEventType.Error,
-                      $"Unable to create live session tab {tabName}");
-                return false;
-            }
-            return true;
+            await vm.CreateTabsForProvidersCommand.ExecuteAsync(ProviderDataGrid_AutoGeneratingColumn);
         }
 
         private void ProviderDataGrid_AutoGeneratingColumn(object? sender, DataGridAutoGeneratingColumnEventArgs e)
@@ -157,7 +95,8 @@ namespace EtwPilot.View
                 var textColumn = e.Column as DataGridTextColumn;
                 if (textColumn != null)
                 {
-                    var iconverter = _ViewModel.GetIConverter(matchedColumn.UniqueName);
+                    var iconverter = GlobalStateViewModel.Instance.g_ConverterLibrary.GetIConverter(
+                        matchedColumn.UniqueName);
                     if (iconverter != null)
                     {
                         textColumn.Binding = new Binding()

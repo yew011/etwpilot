@@ -1,9 +1,9 @@
 ﻿<Application x:Class="EtwPilot.App"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-             xmlns:local="clr-namespace:EtwPilot"
              xmlns:converters="clr-namespace:EtwPilot.Utilities.Converters"
              xmlns:vm="clr-namespace:EtwPilot.ViewModel"
+             xmlns:utils="clr-namespace:EtwPilot.Utilities"
              xmlns:System="clr-namespace:System;assembly=mscorlib"
              xmlns:Diagnostics="clr-namespace:System.Diagnostics;assembly=System.Diagnostics.TraceSource"
              xmlns:etw="clr-namespace:etwlib;assembly=etwlib"
@@ -33,6 +33,7 @@
                 <x:Type TypeName="model:InsightsInferenceResultModel+ContentType"/>
             </ObjectDataProvider.MethodParameters>
         </ObjectDataProvider>
+        <vm:MainWindowViewModel x:Key="g_MainWindowViewModel" />
         <BitmapImage x:Key="refresh"  UriSource="images/refresh.png"/>
         <BitmapImage x:Key="plus"  UriSource="images/plus.png"/>
         <BitmapImage x:Key="logo"  UriSource="images/logo.png"/>
@@ -55,7 +56,6 @@
         <BitmapImage x:Key="datadb"  UriSource="images/datadb.png"/>
         <BitmapImage x:Key="provdb"  UriSource="images/provdb.png"/>
         <Image x:Key="red_x_close" x:Shared="false" Source="images/red_x.png" Width="15" Height="15"/>
-        <vm:MainWindowViewModel x:Key="g_MainWindowViewModel" />
         <converters:IsGreaterThanZero x:Key="IsGreaterThanZero"/>
         <converters:DecimalToHex x:Key="DecimalToHex"/>
         <converters:StopConditionToBool x:Key="StopConditionToBool"/>
@@ -127,7 +127,7 @@
         <!-- Fluent Ribbon groupbox buttons that are added to Fluent Context Tabs for LiveSessions -->
         <Style x:Key="LiveSessionStopButtonStyle" TargetType="{x:Type Fluent:Button}">
             <Setter Property="Icon" Value="{DynamicResource stop}" />
-            <Setter Property="Command" Value="{Binding StopSessionCommand}" />
+            <Setter Property="Command" Value="{Binding StopLiveSessionCommand}" />
             <Setter Property="Header" Value="Stop" />
         </Style>
         <Style x:Key="LiveSessionInsightsButtonStyle" TargetType="{x:Type Fluent:Button}">
@@ -135,27 +135,29 @@
             <Setter Property="Command" Value="{Binding SendToInsightsCommand}" />
             <Setter Property="Header" Value="Insights" />
         </Style>
-        <Style x:Key="LiveSessionExportJSONButtonStyle" TargetType="{x:Type Fluent:Button}">
+        <!-- Fluent Ribbon groupbox buttons added to various context tabs -->
+        <Style x:Key="ExportJSONButtonStyle" TargetType="{x:Type Fluent:Button}">
             <Setter Property="Icon" Value="{DynamicResource json}" />
-            <Setter Property="Command" Value="{Binding ExportLiveSessionDataCommand}" />
-            <Setter Property="CommandParameter" Value="{x:Static vm:MainWindowViewModel+ExportFormat.Json}"/>
+            <Setter Property="Command" Value="{Binding ExportDataCommand}" />
+            <Setter Property="CommandParameter" Value="{x:Static utils:DataExporter+ExportFormat.Json}"/>
             <Setter Property="Header" Value="JSON" />
         </Style>
-        <Style x:Key="LiveSessionExportCSVButtonStyle" TargetType="{x:Type Fluent:Button}">
+        <Style x:Key="ExportCSVButtonStyle" TargetType="{x:Type Fluent:Button}">
             <Setter Property="Icon" Value="{DynamicResource csv}" />
-            <Setter Property="Command" Value="{Binding ExportLiveSessionDataCommand}" />
-            <Setter Property="CommandParameter" Value="{x:Static vm:MainWindowViewModel+ExportFormat.Csv}"/>
+            <Setter Property="Command" Value="{Binding ExportDataCommand}" />
+            <Setter Property="CommandParameter" Value="{x:Static utils:DataExporter+ExportFormat.Csv}"/>
             <Setter Property="Header" Value="CSV" />
         </Style>
-        <Style x:Key="LiveSessionExportXMLButtonStyle" TargetType="{x:Type Fluent:Button}">
+        <Style x:Key="ExportXMLButtonStyle" TargetType="{x:Type Fluent:Button}">
             <Setter Property="Icon" Value="{DynamicResource xml}" />
-            <Setter Property="Command" Value="{Binding ExportLiveSessionDataCommand}" />
-            <Setter Property="CommandParameter" Value="{x:Static vm:MainWindowViewModel+ExportFormat.Xml}"/>
+            <Setter Property="Command" Value="{Binding ExportDataCommand}" />
+            <Setter Property="CommandParameter" Value="{x:Static utils:DataExporter+ExportFormat.Xml}"/>
             <Setter Property="Header" Value="XML" />
         </Style>
-        <Style x:Key="LiveSessionExportClipboardButtonStyle" TargetType="{x:Type Fluent:Button}">
+        <Style x:Key="ExportClipboardButtonStyle" TargetType="{x:Type Fluent:Button}">
             <Setter Property="Icon" Value="{DynamicResource clipboard}" />
-            <Setter Property="Command" Value="{Binding SaveLiveSessionDataToClipboardCommand}" />
+            <Setter Property="Command" Value="{Binding ExportDataCommand}" />
+            <Setter Property="CommandParameter" Value="{x:Static utils:DataExporter+ExportFormat.Clip}"/>
             <Setter Property="Header" Value="Clip" />
         </Style>
         

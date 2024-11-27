@@ -3,10 +3,11 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" 
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008" 
-             xmlns:local="clr-namespace:EtwPilot.View"
+             xmlns:view="clr-namespace:EtwPilot.View"
+             xmlns:vm="clr-namespace:EtwPilot.ViewModel"
              mc:Ignorable="d" 
              d:DesignHeight="450" d:DesignWidth="800"
-             DataContext="{StaticResource g_MainWindowViewModel}">
+             DataContext="{Binding Source={x:Static vm:GlobalStateViewModel.Instance},Path=g_SessionFormViewModel}">
     <Grid>
         <TabControl SelectionChanged="TabControl_SelectionChanged"
                     GotFocus="TabControl_GotFocus">
@@ -14,7 +15,7 @@
                 <StackPanel Orientation="Vertical" Margin="5">
                     <StackPanel Orientation="Horizontal" Margin="5" VerticalAlignment="Top">
                         <Label Width="150">Process ID:</Label>
-                        <ListBox ItemsSource="{Binding m_SessionFormViewModel.ActiveProcessList}"
+                        <ListBox ItemsSource="{Binding SystemInfo.ActiveProcessList}"
                                   Name="ScopeFilterProcesses"
                                   SelectedIndex="0"
                                   SelectionMode="Multiple"
@@ -36,7 +37,7 @@
                     </StackPanel>
                     <StackPanel Orientation="Horizontal" Margin="5" VerticalAlignment="Top">
                         <Label Width="150">EXE Name:</Label>
-                        <ListBox ItemsSource="{Binding m_SessionFormViewModel.UniqueExeNames}"
+                        <ListBox ItemsSource="{Binding SystemInfo.UniqueExeNames}"
                                   Name="ScopeFilterExes"
                                   SelectedIndex="0"
                                   SelectionMode="Multiple"
@@ -45,7 +46,7 @@
                     </StackPanel>
                     <StackPanel Orientation="Horizontal" Margin="5" VerticalAlignment="Top">
                         <Label Width="150">App ID:</Label>
-                        <ListBox ItemsSource="{Binding m_SessionFormViewModel.UniqueAppIds}"
+                        <ListBox ItemsSource="{Binding SystemInfo.UniqueAppIds}"
                                   Name="ScopeFilterAppIds"
                                   SelectedIndex="0"
                                   SelectionMode="Multiple"
@@ -54,7 +55,7 @@
                     </StackPanel>
                     <StackPanel Orientation="Horizontal" Margin="5" VerticalAlignment="Top">
                         <Label Width="150">Package ID:</Label>
-                        <ListBox ItemsSource="{Binding m_SessionFormViewModel.UniquePackageIds}"
+                        <ListBox ItemsSource="{Binding SystemInfo.UniquePackageIds}"
                                   Name="ScopeFilterPackageIds"
                                   SelectedIndex="0"
                                   SelectionMode="Multiple"
@@ -65,7 +66,7 @@
             </TabItem>
             <TabItem Header="Attribute" 
                      Name="AttributeTab"
-                     DataContext="{Binding m_SessionFormViewModel.CurrentProviderFilterForm,Mode=TwoWay,ValidatesOnNotifyDataErrors=False}">
+                     DataContext="{Binding CurrentProviderFilterForm,Mode=TwoWay,ValidatesOnNotifyDataErrors=False}">
                 <StackPanel Orientation="Vertical" Margin="5">
                     <StackPanel Orientation="Horizontal" Margin="5">
                         <Label Width="150">Events:</Label>
@@ -120,7 +121,7 @@
                 </StackPanel>
             </TabItem>
             <TabItem Header="Stackwalk"
-                     DataContext="{Binding m_SessionFormViewModel.CurrentProviderFilterForm,Mode=TwoWay,ValidatesOnNotifyDataErrors=False}">
+                     DataContext="{Binding CurrentProviderFilterForm,Mode=TwoWay,ValidatesOnNotifyDataErrors=False}">
                 <StackPanel Orientation="Vertical" Margin="5">
                     <StackPanel Orientation="Horizontal" Margin="5">
                         <Label Width="150">Events:</Label>
@@ -190,7 +191,7 @@
                 </StackPanel>
             </TabItem>
             <TabItem Header="Payload"
-                     DataContext="{Binding m_SessionFormViewModel.CurrentProviderFilterForm,Mode=TwoWay,ValidatesOnNotifyDataErrors=False}">
+                     DataContext="{Binding CurrentProviderFilterForm,Mode=TwoWay,ValidatesOnNotifyDataErrors=False}">
                 <StackPanel Orientation="Vertical" Margin="5">
                     <StackPanel Orientation="Horizontal">
                         <Label Width="100">Event:</Label>
@@ -296,7 +297,7 @@
             </TabItem>
             <TabItem Header="Choose Columns"
                      Name="ChooseEtwColumnsTab"
-                     DataContext="{Binding m_SessionFormViewModel.CurrentProviderFilterForm,Mode=TwoWay,ValidatesOnNotifyDataErrors=True}">
+                     DataContext="{Binding CurrentProviderFilterForm,Mode=TwoWay,ValidatesOnNotifyDataErrors=True}">
                 <StackPanel Orientation="Horizontal" Margin="5">
                     <StackPanel Orientation="Vertical" Margin="5">
                         <StackPanel Orientation="Horizontal">

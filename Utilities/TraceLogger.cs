@@ -41,6 +41,7 @@ namespace EtwPilot.Utilities
             new TraceSource("Sessions", SourceLevels.Verbose),
             new TraceSource("UiHelper", SourceLevels.Verbose),
             new TraceSource("Inference", SourceLevels.Verbose),
+            new TraceSource("Vector", SourceLevels.Verbose),
         };
 
         public enum TraceLoggerType
@@ -52,6 +53,7 @@ namespace EtwPilot.Utilities
             Sessions,
             UiHelper,
             Inference,
+            Vector,
             Max
         }
 

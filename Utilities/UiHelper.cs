@@ -34,6 +34,10 @@ namespace EtwPilot.Utilities
         public static T? GetGlobalResource<T>(string Name)
         {
             var window = Application.Current.MainWindow;
+            if (window == null)
+            {
+                return default;
+            }
             return (T)window.FindResource(Name);
         }
 
@@ -203,7 +207,8 @@ namespace EtwPilot.Utilities
             string TabStyleTemplateName,
             string TabHeaderTextBlockName,
             string TabCloseButtonName,
-            Func<Task<bool>> TabClosedCallback)
+            object? DataContext,
+            Func<string, Task<bool>> TabClosedCallback)
         {
             var ribbon = FindChild<Ribbon>(
                     Application.Current.MainWindow, "MainWindowRibbon");
@@ -280,6 +285,11 @@ namespace EtwPilot.Utilities
                 }
             }
 
+            if (DataContext != null)
+            {
+                newTab.DataContext = DataContext;
+            }
+
             //
             // Note: we're not done, we need to override parts of the HeaderTemplate for
             // the tab title and plumb up the "X" close button, but these are UI element
@@ -309,7 +319,7 @@ namespace EtwPilot.Utilities
             string TabHeaderTextBlockName,
             string TabCloseButtonName,
             object? DataContext,
-            Func<Task<bool>> TabClosedCallback)
+            Func<string, Task<bool>> TabClosedCallback)
         {
             var existingTabs = TabControl.Items.Cast<TabItem>().ToList();
             var tab = existingTabs.Where(tab => tab.Name == TabName).FirstOrDefault();
@@ -379,7 +389,7 @@ namespace EtwPilot.Utilities
             string TabTitle,
             string TabHeaderTextBlockName,
             string TabCloseButtonName,
-            Func<Task<bool>> TabClosedCallback)
+            Func<string,Task<bool>> TabClosedCallback)
         {
             var headerTextBlock = (TextBlock)FindControlFromDataTemplate<TextBlock>(NewTab, TabHeaderTextBlockName);
             var headerCloseButton = (Button)FindControlFromDataTemplate<Button>(NewTab, TabCloseButtonName);
@@ -434,7 +444,7 @@ namespace EtwPilot.Utilities
                         return;
                     }
 
-                    var result = await TabClosedCallback.Invoke();
+                    var result = await TabClosedCallback.Invoke(tabName);
                     if (!result)
                     {
                         Trace(TraceLoggerType.UiHelper,
@@ -475,7 +485,7 @@ namespace EtwPilot.Utilities
                         return;
                     }
 
-                    var result = await TabClosedCallback.Invoke();
+                    var result = await TabClosedCallback.Invoke(tabName);
                     if (!result)
                     {
                         Trace(TraceLoggerType.UiHelper,

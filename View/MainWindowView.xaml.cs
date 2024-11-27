@@ -31,12 +31,7 @@ namespace EtwPilot
 
         private void MainWindow_Closing(object? sender, System.ComponentModel.CancelEventArgs e)
         {
-            var vm = DataContext as MainWindowViewModel;
-            if (vm == null)
-            {
-                return;
-            }
-            if (!vm.m_SessionViewModel.HasActiveLiveSessions())
+            if (!GlobalStateViewModel.Instance.g_SessionViewModel.HasActiveLiveSessions())
             {
                 return;
             }
@@ -47,12 +42,9 @@ namespace EtwPilot
             e.Cancel = true;
             Dispatcher.InvokeAsync( async () =>
             {
-                if (await vm.m_SessionViewModel.ShutdownAllLiveSessions())
-                {
-                    Close();
-                }
+                await GlobalStateViewModel.Instance.g_SessionViewModel.StopAllSessionsCommand.ExecuteAsync(null);
+                Close();
             });
-
         }
 
         private void Backstage_IsOpenChanged(object sender, System.Windows.DependencyPropertyChangedEventArgs e)
@@ -61,14 +53,10 @@ namespace EtwPilot
             var oldvalue = (bool)e.OldValue;
             if (oldvalue && !newvalue)
             {
-                var vm = DataContext as MainWindowViewModel;
-                if (vm == null)
+                if (!GlobalStateViewModel.Instance.Settings.HasErrors &&
+                    GlobalStateViewModel.Instance.Settings.HasUnsavedChanges)
                 {
-                    return;
-                }
-                if (!vm.StateManager.Settings.HasErrors && vm.StateManager.Settings.HasUnsavedChanges)
-                {
-                    vm.StateManager.Settings.Save(null);
+                    GlobalStateViewModel.Instance.Settings.Save(null);
                 }
             }
         }

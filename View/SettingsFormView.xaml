@@ -3,13 +3,14 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-             xmlns:local="clr-namespace:EtwPilot.ViewModel"
+             xmlns:vm="clr-namespace:EtwPilot.ViewModel"
              xmlns:view="clr-namespace:EtwPilot.View"
              xmlns:Fluent="urn:fluent-ribbon"
              xmlns:controls="clr-namespace:EtwPilot.Controls"
              mc:Ignorable="d"
              Name="SettingsFormViewControl"
-             DataContext="{StaticResource g_MainWindowViewModel}">
+             DataContext="{Binding Source={x:Static vm:GlobalStateViewModel.Instance}, 
+                            Path=Settings, ValidatesOnNotifyDataErrors=False}">
     <UserControl.Resources>
         <controls:ModelSearchOptions x:Key="staticSearchOptionsControl"/>
     </UserControl.Resources>
@@ -17,8 +18,7 @@
         <Grid.RowDefinitions>
             <RowDefinition Height="*" />
         </Grid.RowDefinitions>
-        <TabControl Name="SettingsTabControl"
-                    DataContext="{Binding StateManager.Settings,ValidatesOnNotifyDataErrors=False}">
+        <TabControl Name="SettingsTabControl">
             <TabItem Header="General">
                 <StackPanel Orientation="Vertical" Margin="5">
                     <StackPanel Orientation="Horizontal" Margin="5">

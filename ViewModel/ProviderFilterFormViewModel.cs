@@ -31,7 +31,7 @@ namespace EtwPilot.ViewModel
 {
     using static EtwPilot.Utilities.TraceLogger;
 
-    internal class ProviderFilterFormViewModel : ViewModelBase
+    public class ProviderFilterFormViewModel : ViewModelBase
     {
         public Guid Id { get; set; }
         public ParsedEtwManifest Manifest { get; set; }
@@ -41,6 +41,7 @@ namespace EtwPilot.ViewModel
         public List<ParsedEtwManifestEvent> EventsWithTemplates { get; set; }
         public bool MatchAnyPredicate {get; set; }
         private static readonly int s_MaxColCount = 20;
+
         #region default etw column defs
         private static readonly List<EtwColumnViewModel> s_DefaultEtwColumns = new List<EtwColumnViewModel>()
         {
@@ -203,9 +204,8 @@ namespace EtwPilot.ViewModel
         public AsyncRelayCommand<IEnumerable<object>?> RemoveEtwColumnCommand { get; set; }
         #endregion
 
-        public ProviderFilterFormViewModel(ParsedEtwManifest Manifest2)
+        public ProviderFilterFormViewModel(ParsedEtwManifest Manifest2) : base()
         {
-            Id = Guid.NewGuid();
             Manifest = Manifest2;
             ScopeFilter = new ScopeFilterViewModel();
             AttributeFilter = new AttributeFilterViewModel();
@@ -268,7 +268,7 @@ namespace EtwPilot.ViewModel
             SetInitialChosenEtwColumns();
         }
 
-        public void Finalize()
+        public void FinalizeForm()
         {
             //
             // When the form unloads, it's important to clear all outstanding form errors,
@@ -276,6 +276,11 @@ namespace EtwPilot.ViewModel
             // would appear to have errors.
             //
             ClearErrors();
+        }
+
+        protected override Task ExportData(DataExporter.ExportFormat Format, CancellationToken Token)
+        {
+            throw new NotImplementedException();
         }
 
         private void ChosenEtwColumns_CollectionChanged(object? sender, System.Collections.Specialized.NotifyCollectionChangedEventArgs e)
@@ -293,7 +298,7 @@ namespace EtwPilot.ViewModel
 
         private void SetInitialChosenEtwColumns()
         {
-            if (!StateManager.Settings.UseDefaultEtwColumns)
+            if (!GlobalStateViewModel.Instance.Settings.UseDefaultEtwColumns)
             {
                 return;
             }
@@ -509,7 +514,7 @@ namespace EtwPilot.ViewModel
         #endregion
     }
 
-    internal class ScopeFilterViewModel : ViewModelBase
+    public class ScopeFilterViewModel : NotifyPropertyAndErrorInfoBase
     {
         public ScopeFilterViewModel()
         {
@@ -567,7 +572,7 @@ namespace EtwPilot.ViewModel
         }
     }
 
-    internal class AttributeFilterViewModel : ViewModelBase
+    public class AttributeFilterViewModel : NotifyPropertyAndErrorInfoBase
     {
         public AttributeFilterViewModel()
         {
@@ -747,7 +752,7 @@ namespace EtwPilot.ViewModel
         }
     }
 
-    internal class StackwalkFilterViewModel : ViewModelBase
+    public class StackwalkFilterViewModel : NotifyPropertyAndErrorInfoBase
     {
         public StackwalkFilterViewModel() 
         {
@@ -955,7 +960,7 @@ namespace EtwPilot.ViewModel
         }
     }
 
-    internal class PayloadFilterPredicateViewModel : ViewModelBase
+    public class PayloadFilterPredicateViewModel : NotifyPropertyAndErrorInfoBase
     {
         public PayloadFilterPredicateViewModel() {
             Event = null; // force initial error state
@@ -1062,7 +1067,7 @@ namespace EtwPilot.ViewModel
         }
     }
 
-    internal class EtwColumnViewModel : ViewModelBase
+    public class EtwColumnViewModel : NotifyPropertyAndErrorInfoBase
     {
         #region observable properties
 

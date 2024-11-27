@@ -31,23 +31,18 @@ namespace EtwPilot.View
 
         private void SessionsDataGrid_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
-            var vm = DataContext as MainWindowViewModel;
-            if (vm == null)
-            {
-                return;
-            }
-
+            var vm = GlobalStateViewModel.Instance.g_SessionViewModel;
             //
             // Keep VM in sync with the view
             //
             if (SessionsDataGrid.SelectedItems == null ||
                 SessionsDataGrid.SelectedItems.Count == 0)
             {
-                vm.m_SessionViewModel.SelectedSessions.Clear();
+                vm.SelectedSessions.Clear();
                 return;
             }
 
-            vm.m_SessionViewModel.SelectedSessions =
+            vm.SelectedSessions =
                 SessionsDataGrid.SelectedItems.Cast<ParsedEtwSession>().ToList();
         }
 

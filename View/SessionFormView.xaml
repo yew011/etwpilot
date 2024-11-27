@@ -8,8 +8,7 @@
              xmlns:view="clr-namespace:EtwPilot.View"
              mc:Ignorable="d"
              Name="SessionFormViewControl"
-             DataContext="{StaticResource g_MainWindowViewModel}"
-             Loaded="UserControl_Loaded">
+             DataContext="{Binding Source={x:Static vm:GlobalStateViewModel.Instance},Path=g_SessionFormViewModel}">
     <UserControl.Resources>
         <!-- static provider filter form view -->
         <view:ProviderFilterFormView x:Key="StaticProviderFilterFormView"/>
@@ -52,24 +51,26 @@
                     <TextBox Name="SessionName"
                             Width="350" 
                             Validation.ErrorTemplate="{DynamicResource ValidationErrorTemplate}"
-                            Text="{Binding m_SessionFormViewModel.Name, Mode=TwoWay, ValidatesOnNotifyDataErrors=True,UpdateSourceTrigger=LostFocus}"/>
+                            Text="{Binding Name, Mode=TwoWay, ValidatesOnNotifyDataErrors=True,UpdateSourceTrigger=LostFocus}"/>
                 </StackPanel>
                 <StackPanel Orientation="Horizontal" Margin="5">
                     <Label Width="150">Enabled Providers:</Label>
-                    <ComboBox ItemsSource="{Binding m_ProviderViewModel.ProvidersWithManifest}"
+                    <ComboBox ItemsSource="{Binding Source={x:Static vm:GlobalStateViewModel.Instance},Path=g_ProviderViewModel.ProvidersWithManifest}"
                               Name="SelectedProvider"
                               SelectedIndex="0"/>
                     <Separator Opacity="0" Width="5"/>
                     <Button Name="AddProviderFilterButton"
-                            Click="AddProviderFilterButton_Click" Width="75"
+                            Width="75"
+                            Command="{Binding AddProviderToFormCommand}"
+                            CommandParameter="{Binding ElementName=SelectedProvider,Path=SelectedItem}"
                             Validation.ErrorTemplate="{DynamicResource ValidationErrorTemplate}"
-                            Tag="{Binding m_SessionFormViewModel.NumProviderFilterForms, ValidatesOnNotifyDataErrors=True,UpdateSourceTrigger=PropertyChanged}">Add
+                            Tag="{Binding NumProviderFilterForms, ValidatesOnNotifyDataErrors=True,UpdateSourceTrigger=PropertyChanged}">Add
                     </Button>
                 </StackPanel>
                 <StackPanel Orientation="Horizontal" Margin="5">
                     <CheckBox Name="RealTimeCheckbox" 
                             Padding="5"
-                            IsChecked="{Binding m_SessionFormViewModel.IsRealTime, Mode=TwoWay,UpdateSourceTrigger=PropertyChanged}"
+                            IsChecked="{Binding IsRealTime, Mode=TwoWay,UpdateSourceTrigger=PropertyChanged}"
                             />
                     <TextBlock TextWrapping="Wrap" Text="Real-time session" />
                 </StackPanel>
@@ -78,7 +79,7 @@
                     <TextBox Name="SaveTraceLogLocationTextbox" 
                          Width="350"
                          Validation.ErrorTemplate="{DynamicResource ValidationErrorTemplate}"
-                         Text="{Binding m_SessionFormViewModel.LogLocation, Mode=TwoWay,ValidatesOnNotifyDataErrors=True,UpdateSourceTrigger=LostFocus}"
+                         Text="{Binding LogLocation, Mode=TwoWay,ValidatesOnNotifyDataErrors=True,UpdateSourceTrigger=LostFocus}"
                              >
                         <TextBox.Style>
                             <Style TargetType="TextBox">
@@ -115,20 +116,20 @@
                                      Content="MB" 
                                      Validation.ErrorTemplate="{x:Null}"
                                      Validation.ValidationAdornerSite="{Binding ElementName=StopConditionTextbox}"
-                                     IsChecked="{Binding Path=m_SessionFormViewModel.StopCondition, 
+                                     IsChecked="{Binding Path=StopCondition, 
                             Mode=TwoWay,Converter={StaticResource StopConditionToBool}, ConverterParameter=SizeMb,ValidatesOnNotifyDataErrors=True}"
                                      />
                         <RadioButton GroupName="StopConditionGroup"
                                      Content="Seconds"
                                      Validation.ErrorTemplate="{x:Null}"
                                      Validation.ValidationAdornerSite="{Binding ElementName=StopConditionTextbox}"
-                                     IsChecked="{Binding Path=m_SessionFormViewModel.StopCondition, 
+                                     IsChecked="{Binding Path=StopCondition, 
 Mode=TwoWay,Converter={StaticResource StopConditionToBool}, ConverterParameter=TimeSec,ValidatesOnNotifyDataErrors=True}"/>
                     </StackPanel>
                     <TextBox Name="StopConditionTextbox"
                              Width="30" 
                              Validation.ErrorTemplate="{DynamicResource ValidationErrorTemplate}"
-                             Text="{Binding m_SessionFormViewModel.StopConditionValue,
+                             Text="{Binding StopConditionValue,
                             Mode=TwoWay, Converter={StaticResource IntegerToString},ValidatesOnNotifyDataErrors=True,UpdateSourceTrigger=LostFocus}"/>
                 </StackPanel>
             </StackPanel>

@@ -25,6 +25,7 @@ namespace EtwPilot.Model
     {
         public enum ContentType
         {
+            None,
             ModelOutput,
             UserInput,
             SystemMessage,

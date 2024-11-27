@@ -19,165 +19,84 @@ under the License.
 using System.ComponentModel;
 using System.Runtime.CompilerServices;
 using System.Windows;
-using System.Windows.Controls;
-using Newtonsoft.Json;
+using CommunityToolkit.Mvvm.Input;
+using EtwPilot.Utilities;
+using static EtwPilot.Utilities.DataExporter;
 
 namespace EtwPilot.ViewModel
 {
-    internal abstract class ViewModelBase : INotifyPropertyChanged, INotifyDataErrorInfo
+    public abstract class ViewModelBase : NotifyPropertyAndErrorInfoBase
     {
-        private Guid Id;
-        public event PropertyChangedEventHandler PropertyChanged;
+        //
+        // All derived VMs manage their own progress bar/messages
+        //
+        public ProgressState ProgressState { get; set; }
+        public dynamic m_CurrentCommand { get; set; }
 
-        public ViewModelBase()
+        private Visibility _CancelCommandButtonVisibility;
+        public Visibility CancelCommandButtonVisibility
         {
-            Id = Guid.NewGuid();
-            Errors = new Dictionary<string, IList<object>>();
-            ValidationRules = new Dictionary<string, HashSet<ValidationRule>>();
-        }
-
-        private static StateManager _stateManager = new StateManager();
-        [JsonIgnore]
-        public StateManager StateManager
-        {
-            get { return _stateManager; }
-        }
-
-        protected void OnPropertyChanged(string propertyName)
-        {
-            OnPropertyChanged(new PropertyChangedEventArgs(propertyName));
-        }
-
-        protected virtual void OnPropertyChanged(PropertyChangedEventArgs e)
-        {
-            var handler = PropertyChanged;
-            if (handler != null)
+            get => _CancelCommandButtonVisibility;
+            set
             {
-                handler(this, e);
-            }
-        }
-
-        protected void AddError(string propertyName, object newError)
-        {
-            if (!Errors.TryGetValue(propertyName, out IList<object> propertyErrors))
-            {
-                propertyErrors = new List<object>();
-                Errors.Add(propertyName, propertyErrors);
-            }
-            propertyErrors.Insert(0, newError);
-            OnErrorsChanged(propertyName);
-        }
-
-        protected void AddErrorRange(string propertyName, IEnumerable<string> newErrors, bool isWarning = false)
-        {
-            if (!newErrors.Any())
-            {
-                return;
-            }
-
-            if (!Errors.TryGetValue(propertyName, out IList<object> propertyErrors))
-            {
-                propertyErrors = new List<object>();
-                Errors.Add(propertyName, propertyErrors);
-            }
-
-            if (isWarning)
-            {
-                foreach (string error in newErrors)
+                if (_CancelCommandButtonVisibility != value)
                 {
-                    propertyErrors.Add(error);
+                    _CancelCommandButtonVisibility = value;
+                    OnPropertyChanged("CancelCommandButtonVisibility");
                 }
             }
-            else
-            {
-                foreach (string error in newErrors)
-                {
-                    propertyErrors.Insert(0, error);
-                }
-            }
-
-            OnErrorsChanged(propertyName);
         }
 
-        protected bool ClearErrors(string propertyName = "")
-        {
-            if (string.IsNullOrEmpty(propertyName))
-            {
-                Errors.Clear();
-                OnErrorsChanged(propertyName);
-                return true;
-            }
-            if (Errors.Remove(propertyName))
-            {
-                OnErrorsChanged(propertyName);
-                return true;
-            }
-            return false;
-        }
+        #region commands
 
-        public bool PropertyHasErrors(string propertyName) =>
-            Errors.TryGetValue(propertyName, out IList<object> propertyErrors) && propertyErrors.Any();
-
-        #region INotifyDataErrorInfo implementation
-
-        public event EventHandler<DataErrorsChangedEventArgs> ErrorsChanged;
-
-        public System.Collections.IEnumerable GetErrors(string propertyName)
-          => string.IsNullOrWhiteSpace(propertyName)
-            ? Errors.SelectMany(entry => entry.Value)
-            : Errors.TryGetValue(propertyName, out IList<object> errors)
-              ? (IEnumerable<object>)errors
-              : new List<object>();
-
-        [JsonIgnore]
-        public bool HasErrors => Errors.Any();
+        public AsyncRelayCommand CancelCurrentCommandCommand { get; set; }
+        public AsyncRelayCommand<ExportFormat> ExportDataCommand { get; set; }
 
         #endregion
 
-        protected virtual void OnErrorsChanged(string propertyName)
+        public ViewModelBase() : base()
         {
-            ErrorsChanged?.Invoke(this, new DataErrorsChangedEventArgs(propertyName));
+            CancelCurrentCommandCommand = new AsyncRelayCommand(
+                Command_CancelCurrentCommand, () => { return true; });
+            ExportDataCommand = new AsyncRelayCommand<ExportFormat>(
+                Command_ExportData, _ => true);
+            CancelCommandButtonVisibility = Visibility.Hidden;
+            m_CurrentCommand = null;
+            ProgressState = new ProgressState();
         }
 
-        public void SetParentFormNotifyErrorsChanged(ViewModelBase Parent)
+        protected virtual Task ExportData(DataExporter.ExportFormat Format, CancellationToken Token)
         {
-            //
-            // Subscribe the parent form to any changes in the error state of the child.
-            //
-            ErrorsChanged += (sender, args) =>
+            throw new NotImplementedException();
+        }
+
+        public virtual Task ViewModelActivated()
+        {
+            throw new NotImplementedException();
+        }
+
+        public virtual Task ViewModelDeactivated()
+        {
+            throw new NotImplementedException();
+        }
+
+        public async Task Command_CancelCurrentCommand()
+        {
+            if (m_CurrentCommand == null || !m_CurrentCommand?.CanBeCanceled)
             {
-                //
-                // If we (the child) have experienced a change in any error on any property, we
-                // will notify the parent of that updated state. We store an error for a single
-                // imaginary property that doesn't exist on the parent's form but is used to
-                // indicate the fact that we (the child form) have an error somewhere.
-                //
-                var imaginaryPropertyName = $"{Id}";
-                if (HasErrors)
-                {
-                    if (!Parent.PropertyHasErrors(imaginaryPropertyName))
-                    {
-                        Parent.AddError($"{imaginaryPropertyName}",
-                            $"Sub-form {imaginaryPropertyName} has error(s).");
-                    }
-                }
-                else
-                {
-                    Parent.ClearErrors($"{imaginaryPropertyName}");
-                }
-                Parent.OnErrorsChanged($"{imaginaryPropertyName}");
-            };
+                return;
+            }
+            m_CurrentCommand!.Cancel();
         }
 
-        private Dictionary<string, IList<object>> Errors { get; }
-        private Dictionary<string, HashSet<ValidationRule>> ValidationRules { get; }
-    }
-
-    internal class StateManager
-    {
-        public ProgressState ProgressState { get; set; }
-        public SettingsFormViewModel Settings { get; set; }
-        public StateManager() { }
+        public async Task Command_ExportData(ExportFormat Format, CancellationToken Token)
+        {
+            m_CurrentCommand = ExportDataCommand;
+            CancelCommandButtonVisibility = Visibility.Visible;
+            await ExportData(Format, Token);
+            CancelCommandButtonVisibility = Visibility.Hidden;
+            m_CurrentCommand = null;
+        }
     }
 
     public class ProgressState : INotifyPropertyChanged
@@ -258,11 +177,6 @@ namespace EtwPilot.ViewModel
             {
                 ProgressValue++;
             }));
-        }
-
-        public bool TaskInProgress()
-        {
-            return Visible == Visibility.Visible;
         }
     }
 }

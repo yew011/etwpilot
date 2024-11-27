@@ -66,8 +66,7 @@
     <ScrollViewer VerticalScrollBarVisibility="Auto" Grid.Row="1">
         <TabControl Name="LiveSessionTabControl"
                     SelectionChanged="LiveSessionTabControl_SelectionChanged"
-                    Loaded="LiveSessionTabControl_Loaded"
-                    Unloaded="LiveSessionTabControl_Unloaded"/>
+                    Loaded="LiveSessionTabControl_Loaded"/>
         <!-- TabItems are created dynamically in UserControl_Loaded -->
     </ScrollViewer>
     </Grid>
