@@ -18,12 +18,12 @@ under the License.
 */
 using Newtonsoft.Json;
 using System.IO;
-using System.Windows.Forms;
 using System.Xml.Serialization;
 using System.Xml;
 using System.Text;
 using System.Collections;
 using System.Diagnostics;
+using Microsoft.Win32;
 
 namespace EtwPilot.Utilities
 {
@@ -44,15 +44,15 @@ namespace EtwPilot.Utilities
             string location;
             if (Format != ExportFormat.Clip)
             {
-                var browser = new FolderBrowserDialog();
-                browser.Description = "Select a location to export the data";
-                browser.RootFolder = Environment.SpecialFolder.MyComputer;
+                var browser = new OpenFolderDialog();
+                browser.Title = "Select a location to export the data";
+                browser.InitialDirectory = Environment.SpecialFolder.MyComputer.ToString();
                 var result = browser.ShowDialog();
-                if (result != DialogResult.OK)
+                if (!result.HasValue || !result.Value)
                 {
                     return (0, null);
                 }
-                location = Path.Combine(browser.SelectedPath,
+                location = Path.Combine(browser.FolderName,
                     $"{DataTypeName}-{DateTime.Now:yyyy-MM-dd-HHmmss}.{Format}");
             }
             else

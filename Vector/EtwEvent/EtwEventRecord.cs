@@ -84,7 +84,7 @@ namespace EtwPilot.Vector.EtwEvent
                     Id = new Guid(Ps.Id.Uuid),
                     Description = Ps.Payload["Description"].StringValue
                 };
-                record.Event = (ParsedEtwEvent)JsonConvert.DeserializeObject(
+                record.Event = JsonConvert.DeserializeObject<ParsedEtwEvent>(
                     Ps.Payload["EventJson"].StringValue)!;
                 return record;
             }

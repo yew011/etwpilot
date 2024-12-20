@@ -16,30 +16,15 @@ KIND, either express or implied.  See the License for the
 specific language governing permissions and limitations
 under the License.
 */
-using System.Windows.Controls;
-using Microsoft.Win32;
-using System.Windows;
+using Fluent;
 
-namespace EtwPilot.View
+namespace EtwPilot.Controls
 {
-    public partial class SessionFormView : UserControl
+    public partial class ExportButtonGroup : RibbonGroupBox
     {
-        public SessionFormView()
+        public ExportButtonGroup()
         {
             InitializeComponent();
-        }
-
-        private void BrowseLogLocationButton_Click(object sender, RoutedEventArgs e)
-        {
-            var browser = new OpenFolderDialog();
-            browser.Title = "Select a location";
-            browser.InitialDirectory = Environment.SpecialFolder.MyComputer.ToString();
-            var result = browser.ShowDialog();
-            if (!result.HasValue || !result.Value)
-            {
-                return;
-            }
-            SaveTraceLogLocationTextbox.Text = browser.FolderName;
         }
     }
 }

@@ -42,6 +42,9 @@ namespace EtwPilot.Utilities
             new TraceSource("UiHelper", SourceLevels.Verbose),
             new TraceSource("Inference", SourceLevels.Verbose),
             new TraceSource("Vector", SourceLevels.Verbose),
+            new TraceSource("FormatterLibrary", SourceLevels.Verbose),
+            new TraceSource("SymbolResolver", SourceLevels.Verbose),
+            new TraceSource("AsyncFormatter", SourceLevels.Verbose),
         };
 
         public enum TraceLoggerType
@@ -54,6 +57,9 @@ namespace EtwPilot.Utilities
             UiHelper,
             Inference,
             Vector,
+            FormatterLibrary,
+            SymbolResolver,
+            AsyncFormatter,
             Max
         }
 

@@ -56,16 +56,25 @@ namespace EtwPilot.Utilities
         public static void ListResources()
         {
             var asm = Assembly.GetEntryAssembly();
+            if (asm == null)
+            {
+                return;
+            }
             string resName = asm.GetName().Name + ".g.resources";
             using (var stream = asm.GetManifestResourceStream(resName))
-            using (var reader = new System.Resources.ResourceReader(stream))
             {
-                var stuff = reader.Cast<DictionaryEntry>().Select(entry => (string)entry.Key).ToArray();
-            }
-
-            foreach (var r in System.Windows.Application.Current.Resources)
-            {
-                var thisthing = r;
+                if (stream == null)
+                {
+                    return;
+                }
+                using (var reader = new System.Resources.ResourceReader(stream))
+                {
+                    var stuff = reader.Cast<DictionaryEntry>().Select(entry => (string)entry.Key).ToArray();
+                }
+                foreach (var r in System.Windows.Application.Current.Resources)
+                {
+                    var thisthing = r;
+                }
             }
         }
     }

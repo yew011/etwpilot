@@ -4,70 +4,21 @@
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              xmlns:Fluent="urn:fluent-ribbon"
-             xmlns:Utilities="clr-namespace:EtwPilot.Utilities"
+             xmlns:controls="clr-namespace:EtwPilot.Controls"
+             xmlns:vm="clr-namespace:EtwPilot.ViewModel"
              mc:Ignorable="d" 
              d:DesignHeight="450" d:DesignWidth="800"
-             Name="LiveSessionControl">
-    <UserControl.Resources>
-        <Style x:Key="boldSmallLabel" TargetType="{x:Type Label}">
-            <Setter Property="FontSize" Value="10" />
-            <Setter Property="FontFamily" Value="Calibri" />
-            <Setter Property="FontWeight" Value="Bold" />
-        </Style> 
-        <Style x:Key="blueText" TargetType="{x:Type TextBlock}">
-            <Setter Property="FontSize" Value="10" />
-            <Setter Property="FontFamily" Value="Calibri" />
-            <Setter Property="Foreground" Value="Blue" />
-        </Style>
-        <!-- Template for dynamic per-provider tabs. Some properties are set in code-behind. -->
-        <Style x:Key="LiveSessionTabStyle" TargetType="{x:Type TabItem}">
-            <Setter Property="HeaderTemplate">
-                <Setter.Value>
-                    <DataTemplate>
-                        <StackPanel Orientation="Horizontal">
-                            <TextBlock Name="LiveSessionTabText"/>
-                            <Separator Width="5"/>
-                            <Button Name="LiveSessionTabCloseButton"
-                            Content="{StaticResource red_x_close}"
-                            BorderThickness="0"
-                            Margin="0"
-                            Padding="0"
-                            Background="Transparent"/>
-                        </StackPanel>
-                    </DataTemplate>
-                </Setter.Value>
-            </Setter>
-        </Style>
-    </UserControl.Resources>
-    <Grid VirtualizingPanel.VirtualizationMode="Recycling">
-    <Grid.RowDefinitions>
-        <RowDefinition Height="25" />
-        <RowDefinition Height="*"/>
-    </Grid.RowDefinitions>
-    <StackPanel Orientation="Horizontal"
-                Grid.Row="0"
-                TextBlock.FontSize="10"
-                Margin="0"
-                VerticalAlignment="Center">
-        <StackPanel.Resources>
-            <Style BasedOn="{StaticResource boldSmallLabel}" TargetType="{x:Type Label}" />
-            <Style BasedOn="{StaticResource blueText}" TargetType="{x:Type TextBlock}" />
-        </StackPanel.Resources>
-        <Label Content="Elapsed:" VerticalAlignment="Center"/>
-        <TextBlock VerticalAlignment="Center"
-                   Text="{Binding Stopwatch.ElapsedMilliseconds,UpdateSourceTrigger=PropertyChanged,Converter={StaticResource MillisecondToSecond}}"/>
-        <Label Content="Events:" VerticalAlignment="Center"/>
-        <TextBlock VerticalAlignment="Center"
-                   Text="{Binding EventsConsumed}"/>
-        <Label Content="Size:" VerticalAlignment="Center"/>
-        <TextBlock VerticalAlignment="center"
-                   Text="{Binding BytesConsumed,Converter={StaticResource ByteSizeToFriendlyString}}"/>
-    </StackPanel>
-    <ScrollViewer VerticalScrollBarVisibility="Auto" Grid.Row="1">
-        <TabControl Name="LiveSessionTabControl"
-                    SelectionChanged="LiveSessionTabControl_SelectionChanged"
-                    Loaded="LiveSessionTabControl_Loaded"/>
-        <!-- TabItems are created dynamically in UserControl_Loaded -->
-    </ScrollViewer>
-    </Grid>
+             Name="LiveSessionControl"
+             DataContext="{Binding Source={x:Static vm:GlobalStateViewModel.Instance},Path=g_SessionViewModel.CurrentLiveSession,ValidatesOnNotifyDataErrors=False}">
+    <TabControl Name="LiveSessionProviderDataTabControl"
+                ItemsSource="{Binding Tabs}"
+                LostFocus="LiveSessionProviderDataTabControl_LostFocus"
+                SelectionChanged="LiveSessionProviderDataTabControl_SelectionChanged"
+                SelectedIndex="{Binding SelectedProviderIndex}">
+        <TabControl.ContentTemplate>
+            <DataTemplate DataType="{x:Type vm:ProviderTraceData}">
+                <controls:LiveSessionGrid/>
+            </DataTemplate>
+        </TabControl.ContentTemplate>
+    </TabControl>
 </UserControl>

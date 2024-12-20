@@ -17,114 +17,41 @@ specific language governing permissions and limitations
 under the License.
 */
 using etwlib;
-using EtwPilot.ViewModel;
-using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Diagnostics;
+using Meziantou.Framework.WPF.Collections;
 
 namespace EtwPilot.Utilities
 {
-    public class SystemInfo : INotifyPropertyChanged
+    public class ProcessObject
     {
-        #region observable properties
+        public int Pid { get; set; }
+        public string Name { get; set; }
+        public string Exe { get; set; }
+        public string? AppId { get; set; }
+        public string? PackageId { get; set; }
 
-        private ObservableCollection<ProcessObject> _activeProcessList;
-        public ObservableCollection<ProcessObject> ActiveProcessList
+        public ProcessObject()
         {
-            get => _activeProcessList;
-            private set
-            {
-                if (_activeProcessList != value)
-                {
-                    _activeProcessList = value;
-                    OnPropertyChanged("ActiveProcessList");
-                }
-            }
+            Pid = -1;
         }
+    }
 
-        private ObservableCollection<string> _UniqueProcessNames;
-        public ObservableCollection<string> UniqueProcessNames
-        {
-            get => _UniqueProcessNames;
-            private set
-            {
-                if (_UniqueProcessNames != value)
-                {
-                    _UniqueProcessNames = value;
-                    OnPropertyChanged("UniqueProcessNames");
-                }
-            }
-        }
-
-        private ObservableCollection<string> _UniqueExeNames;
-        public ObservableCollection<string> UniqueExeNames
-        {
-            get => _UniqueExeNames;
-            private set
-            {
-                if (_UniqueExeNames != value)
-                {
-                    _UniqueExeNames = value;
-                    OnPropertyChanged("UniqueExeNames");
-                }
-            }
-        }
-
-        private ObservableCollection<string> _UniqueAppIds;
-        public ObservableCollection<string> UniqueAppIds
-        {
-            get => _UniqueAppIds;
-            private set
-            {
-                if (_UniqueAppIds != value)
-                {
-                    _UniqueAppIds = value;
-                    OnPropertyChanged("UniqueAppIds");
-                }
-            }
-        }
-
-        private ObservableCollection<string> _UniquePackageIds;
-        public ObservableCollection<string> UniquePackageIds
-        {
-            get => _UniquePackageIds;
-            private set
-            {
-                if (_UniquePackageIds != value)
-                {
-                    _UniquePackageIds = value;
-                    OnPropertyChanged("UniquePackageIds");
-                }
-            }
-        }
-
-        #endregion
-
-        #region INotifyPropertyChanged
-        public event PropertyChangedEventHandler PropertyChanged;
-
-        protected void OnPropertyChanged(string propertyName)
-        {
-            OnPropertyChanged(new PropertyChangedEventArgs(propertyName));
-        }
-
-        protected virtual void OnPropertyChanged(PropertyChangedEventArgs e)
-        {
-            var handler = PropertyChanged;
-            if (handler != null)
-            {
-                handler(this, e);
-            }
-        }
-        #endregion
+    public class SystemInfo
+    {
+        public ConcurrentObservableCollection<ProcessObject> ActiveProcessList { get; set; }
+        public ConcurrentObservableCollection<string> UniqueProcessNames { get; set; }
+        public ConcurrentObservableCollection<string> UniqueExeNames { get; set; }
+        public ConcurrentObservableCollection<string> UniqueAppIds { get; set; }
+        public ConcurrentObservableCollection<string> UniquePackageIds { get; set; }
 
         public SystemInfo()
         {
-            ActiveProcessList = new ObservableCollection<ProcessObject>();
-            UniqueProcessNames = new ObservableCollection<string>();
-            UniqueExeNames = new ObservableCollection<string>();
-            UniqueAppIds = new ObservableCollection<string>();
-            UniquePackageIds = new ObservableCollection<string>();
+            ActiveProcessList = new ConcurrentObservableCollection<ProcessObject>();
+            UniqueProcessNames = new ConcurrentObservableCollection<string>();
+            UniqueExeNames = new ConcurrentObservableCollection<string>();
+            UniqueAppIds = new ConcurrentObservableCollection<string>();
+            UniquePackageIds = new ConcurrentObservableCollection<string>();
         }
 
         public async Task Refresh()
@@ -134,7 +61,7 @@ namespace EtwPilot.Utilities
             UniqueAppIds.Clear();
             UniquePackageIds.Clear();
 
-            ActiveProcessList.Add(new ProcessObject
+            ActiveProcessList.Add(new ProcessObject()
             {
                 Pid = 0,
                 Name = "[None]",
@@ -142,6 +69,7 @@ namespace EtwPilot.Utilities
                 AppId = "[None]",
                 PackageId = "[None]"
             });
+
             UniqueProcessNames.Add("[None]");
             UniqueExeNames.Add("[None]");
             UniqueAppIds.Add("[None]");
@@ -172,15 +100,15 @@ namespace EtwPilot.Utilities
                     // If this process is an MS Store/UWP app, save it
                     //
                     var package = MSStoreAppPackageHelper.GetPackage(process.Handle);
-                    string packageId = null;
-                    string appId = null;
+                    string? packageId = null;
+                    string? appId = null;
 
                     if (package != null)
                     {
                         (packageId, appId) = package;
                     }
 
-                    ActiveProcessList.Add(new ProcessObject
+                    ActiveProcessList.Add(new ProcessObject()
                     {
                         Pid = process.Id,
                         Name = process.ProcessName,

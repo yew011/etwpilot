@@ -16,34 +16,15 @@ KIND, either express or implied.  See the License for the
 specific language governing permissions and limitations
 under the License.
 */
-using System.Globalization;
+using System.Diagnostics;
 using System.Windows;
 using System.Windows.Data;
 using etwlib;
-using EtwPilot.ViewModel;
 
 namespace EtwPilot.Utilities.Converters
 {
     using StopCondition = ViewModel.LiveSessionViewModel.StopCondition;
     using ChatTopic = ViewModel.InsightsViewModel.ChatTopic;
-
-    public static class IConverterCode
-    {
-        //
-        // Allows users to customize IConverter code for default ETW columns
-        //
-        public static readonly string s_DecimalToHexIConverterCode = @"
-        public object Convert(object value, Type targetType, object parameter, System.Globalization.CultureInfo culture)
-        {
-            var val = System.Convert.ToInt64(value);
-            return $""0x{val:X}"";
-        }
-
-        public object ConvertBack(object value, Type targetType, object parameter, System.Globalization.CultureInfo culture)
-        {
-            throw new NotImplementedException();
-        }";
-    }
 
     public class IsGreaterThanZero :IValueConverter
     {
@@ -66,36 +47,24 @@ namespace EtwPilot.Utilities.Converters
     {
         public object Convert(object value, Type targetType, object parameter, System.Globalization.CultureInfo culture)
         {
-            var val = System.Convert.ToInt64(value);
+            var evt = value as ParsedEtwEvent;
+            var target = value;
+            if (evt != null)
+            {
+                //
+                // The column name from the DataGrid corresponds to a field name in the 'value' object.
+                // We have to use reflection to get it.
+                //
+                var fieldName = parameter as string;
+                if (fieldName == null)
+                {
+                    Debug.Assert(false);
+                    return "";
+                }
+                target = ReflectionHelper.GetPropertyValue(evt, fieldName);
+            }
+            var val = System.Convert.ToInt64(target);
             return $"0x{val:X}";
-        }
-
-        public object ConvertBack(object value, Type targetType, object parameter, System.Globalization.CultureInfo culture)
-        {
-            throw new NotImplementedException();
-        }
-    }
-
-    public class MillisecondToSecond : IValueConverter
-    {
-        public object Convert(object value, Type targetType, object parameter, System.Globalization.CultureInfo culture)
-        {
-            decimal d = (long)value;
-            var elapsedSec = (int)Math.Floor(d / 1000);
-            return $"{elapsedSec}s";
-        }
-
-        public object ConvertBack(object value, Type targetType, object parameter, System.Globalization.CultureInfo culture)
-        {
-            throw new NotImplementedException();
-        }
-    }
-
-    public class ByteSizeToFriendlyString : IValueConverter
-    {
-        public object Convert(object value, Type targetType, object parameter, System.Globalization.CultureInfo culture)
-        {
-            return FriendlyByteSize.Format(value);
         }
 
         public object ConvertBack(object value, Type targetType, object parameter, System.Globalization.CultureInfo culture)
@@ -323,34 +292,20 @@ namespace EtwPilot.Utilities.Converters
         }
     }
 
-    internal static class FriendlyByteSize
+    public class StringNullOrEmptyToVisibilityConverter : System.Windows.Markup.MarkupExtension, IValueConverter
     {
-        static readonly string[] SizeSuffixes = { "B", "KB", "MB", "GB" };
-
-        public static string Format(dynamic Value, int DecimalPlaces = 2)
+        public object Convert(object value, Type targetType, object parameter, System.Globalization.CultureInfo culture)
         {
-            if (!decimal.TryParse(Value.ToString(), out decimal value))
-            {
-                return "NaN!";
-            }
-
-            if (value > int.MaxValue)
-            {
-                return "NaN!";
-            }
-            else if (value < 0)
-            {
-                return "-" + Format(-value, DecimalPlaces);
-            }
-
-            int i = 0;
-            while (Math.Round(value, DecimalPlaces) >= 1000)
-            {
-                value /= 1024;
-                i++;
-            }
-
-            return string.Format("{0:n" + DecimalPlaces + "} {1}", value, SizeSuffixes[i]);
+            return string.IsNullOrEmpty(value as string)
+                ? Visibility.Collapsed : Visibility.Visible;
+        }
+        public object ConvertBack(object value, Type targetType, object parameter, System.Globalization.CultureInfo culture)
+        {
+            return "";
+        }
+        public override object ProvideValue(IServiceProvider serviceProvider)
+        {
+            return this;
         }
     }
 }

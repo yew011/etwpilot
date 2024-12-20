@@ -40,7 +40,7 @@ namespace EtwPilot.Vector
             var integers = Values.Select(
                 e => int.TryParse(e, out int n) ? n : (int?)null)
                 .Where(n => n.HasValue)
-                .Select(n => n.Value)
+                .Select(n => n!.Value)
                 .ToList();
             var values = new Value();
             values.ListValue = new ListValue();

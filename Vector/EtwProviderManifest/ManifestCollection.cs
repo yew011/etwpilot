@@ -16,6 +16,7 @@ KIND, either express or implied.  See the License for the
 specific language governing permissions and limitations
 under the License.
 */
+using etwlib;
 using EtwPilot.ViewModel;
 using Microsoft.Extensions.VectorData;
 using Microsoft.SemanticKernel;
@@ -65,12 +66,17 @@ namespace EtwPilot.Vector.EtwProviderManifest
 
         }
 
-        public override async Task<EtwProviderManifestRecord> CreateRecord(
-            dynamic Object,
+        public override async Task<EtwProviderManifestRecord> CreateRecord<T>(
+            T Object,
             ITextEmbeddingGenerationService EmbeddingService
             )
         {
-            return await EtwProviderManifestRecord.CreateFromParsedEtwManifest(Object, EmbeddingService);
+            var manifest = Object as ParsedEtwManifest;
+            if (manifest == null)
+            {
+                throw new Exception("Unrecognized input object type for EtwProviderManifestRecord");
+            }
+            return await EtwProviderManifestRecord.CreateFromParsedEtwManifest(manifest, EmbeddingService);
         }
     }
 }

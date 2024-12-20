@@ -9,6 +9,7 @@
              xmlns:controls="clr-namespace:EtwPilot.Controls"
              mc:Ignorable="d"
              Name="SettingsFormViewControl"
+             Loaded="SettingsFormViewControl_Loaded"
              DataContext="{Binding Source={x:Static vm:GlobalStateViewModel.Instance}, 
                             Path=Settings, ValidatesOnNotifyDataErrors=False}">
     <UserControl.Resources>
@@ -98,6 +99,7 @@
                         <Label Width="150">EtwPilot trace level:</Label>
                         <ComboBox Width="150"
                                   ItemsSource="{Binding Source={StaticResource SourceLevelsEnum}}"
+                                  Style="{StaticResource ErrorStyle}"
                                   SelectedItem="{Binding TraceLevelApp, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                                   IsSynchronizedWithCurrentItem="false"/>
                     </StackPanel>
@@ -105,6 +107,7 @@
                         <Label Width="150">Symbolresolver trace level:</Label>
                         <ComboBox Width="150"
                                   ItemsSource="{Binding Source={StaticResource SourceLevelsEnum}}"
+                                  Style="{StaticResource ErrorStyle}"
                                   SelectedItem="{Binding TraceLevelSymbolresolver, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                                   IsSynchronizedWithCurrentItem="false"/>
                     </StackPanel>
@@ -112,8 +115,74 @@
                         <Label Width="150">etwlib trace level:</Label>
                         <ComboBox Width="150"
                                   ItemsSource="{Binding Source={StaticResource SourceLevelsEnum}}"
+                                  Style="{StaticResource ErrorStyle}"
                                   SelectedItem="{Binding TraceLevelEtwlib, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                                   IsSynchronizedWithCurrentItem="false"/>
+                    </StackPanel>
+                </StackPanel>
+            </TabItem>
+            <TabItem Header="Formatters">
+                <StackPanel Orientation="Horizontal" Margin="5">
+                    <StackPanel Orientation="Vertical" Margin="5"
+                                VerticalAlignment="Top"
+                                HorizontalAlignment="Left">
+                        <Label Width="150" HorizontalAlignment="Left">Available:</Label>
+                        <ListBox ItemsSource="{Binding Formatters,Mode=TwoWay}"
+                                 Style="{StaticResource ErrorStyle}"
+                                 Name="FormattersListBox"
+                                 SelectionMode="Single"
+                                 Width="Auto">
+                            <ListBox.ItemTemplate>                                
+                                <DataTemplate>
+                                    <TextBlock Text="{Binding FunctionName}"/>
+                                </DataTemplate>
+                            </ListBox.ItemTemplate>
+                        </ListBox>
+                        <Button Name="RemoveFormatterButton"
+                            Command="{Binding RemoveFormatterCommand}"
+                            CommandParameter="{Binding ElementName=FormattersListBox,Path=SelectedItem}"
+                            Height="25"
+                            Width="75"
+                            Content="Remove"
+                            VerticalAlignment="Top" 
+                            HorizontalAlignment="Left"/>
+                        <Label Width="150" HorizontalAlignment="Left">Name:</Label>
+                        <TextBox Name="FunctionName"
+                                 Text="{Binding ElementName=FormattersListBox,Path=SelectedItem.FunctionName}"/>
+                        <Button Name="AddFormatterButton"
+                                Command="{Binding AddFormatterCommand}"
+                                CommandParameter="{Binding ElementName=FormattersListBox,Path=SelectedItem}"
+                                Height="25"
+                                Width="75"
+                                Content="Add"
+                                VerticalAlignment="Top" 
+                                HorizontalAlignment="Left"/>
+                        <Button Name="UpdateFormatterButton"
+                                Click="UpdateFormatterButton_Click"
+                                Height="25"
+                                Width="75"
+                                Content="Update"
+                                VerticalAlignment="Top" 
+                                HorizontalAlignment="Left"/>
+                        <Button Name="DefaultFormatterButton"
+                                Command="{Binding AddDefaultFormattersCommand}"
+                                Height="25"
+                                Width="75"
+                                Content="Add Default"
+                                VerticalAlignment="Top" 
+                                HorizontalAlignment="Left"/>
+                    </StackPanel>
+                    <StackPanel Orientation="Vertical" Margin="5"
+                                VerticalAlignment="Top"
+                                HorizontalAlignment="Left">
+                        <Label Width="150" HorizontalAlignment="Left">C# Code:</Label>
+                        <TextBox TextWrapping="Wrap"
+                                 Text="{Binding ElementName=FormattersListBox,Path=SelectedItem.Body}"
+                                 AcceptsReturn="True"
+                                 MinHeight="200"
+                                 MinWidth="200"
+                                 Name="FunctionBody"
+                                 Style="{StaticResource ErrorStyle}"/>
                     </StackPanel>
                 </StackPanel>
             </TabItem>

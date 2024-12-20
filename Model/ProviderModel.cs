@@ -20,6 +20,7 @@ using etwlib;
 using System.Diagnostics;
 using System.IO;
 using Newtonsoft.Json;
+using EtwPilot.ViewModel;
 
 namespace EtwPilot.Model
 {
@@ -27,11 +28,8 @@ namespace EtwPilot.Model
 
     internal class ProviderModel
     {
-        private readonly string CacheLocation;
-
-        public ProviderModel(string _CacheLocation)
+        public ProviderModel()
         {
-            CacheLocation = _CacheLocation;
         }
 
         public async Task<List<ParsedEtwProvider>?> GetProviders()
@@ -70,10 +68,11 @@ namespace EtwPilot.Model
 
         private async Task<List<ParsedEtwProvider>?> LoadFromCache(bool ForceRefresh = false)
         {
-            Debug.Assert(!string.IsNullOrEmpty(CacheLocation));
-            Trace(TraceLoggerType.Providers, TraceEventType.Verbose, $"Cache location {CacheLocation}");
+            var cacheLocation = GlobalStateViewModel.Instance.Settings.ProviderCacheLocation;
+            Debug.Assert(!string.IsNullOrEmpty(cacheLocation));
+            Trace(TraceLoggerType.Providers, TraceEventType.Verbose, $"Cache location {cacheLocation}");
 
-            if (!File.Exists(CacheLocation) || ForceRefresh)
+            if (!File.Exists(cacheLocation) || ForceRefresh)
             {
                 Trace(TraceLoggerType.Providers, TraceEventType.Verbose, "Creating cache...");
                 Trace(TraceLoggerType.Providers, TraceEventType.Verbose, "Querying providers...");
@@ -90,7 +89,7 @@ namespace EtwPilot.Model
                 try
                 {
                     var json = JsonConvert.SerializeObject(providers, Formatting.Indented);
-                    File.WriteAllText(CacheLocation, json);
+                    File.WriteAllText(cacheLocation, json);
                 }
                 catch (Exception ex)
                 {
@@ -107,7 +106,7 @@ namespace EtwPilot.Model
                 //
                 try
                 {
-                    var json = File.ReadAllText(CacheLocation);
+                    var json = File.ReadAllText(cacheLocation);
                     var result = (List<ParsedEtwProvider>)JsonConvert.DeserializeObject(
                         json, typeof(List<ParsedEtwProvider>))!;
                     return result;

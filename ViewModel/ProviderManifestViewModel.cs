@@ -18,6 +18,7 @@ under the License.
 */
 using etwlib;
 using EtwPilot.Utilities;
+using System.Diagnostics;
 using static EtwPilot.Utilities.DataExporter;
 
 namespace EtwPilot.ViewModel
@@ -26,24 +27,30 @@ namespace EtwPilot.ViewModel
     {
         #region observable properties
 
-        private ParsedEtwManifest _selectedProviderManifest;
-        public ParsedEtwManifest SelectedProviderManifest
+        private int _TabControlSelectedIndex;
+        public int TabControlSelectedIndex
         {
-            get => _selectedProviderManifest;
+            get => _TabControlSelectedIndex;
             set
             {
-                if (_selectedProviderManifest != value)
+                if (_TabControlSelectedIndex != value)
                 {
-                    _selectedProviderManifest = value;
-                    OnPropertyChanged("SelectedProviderManifest");
+                    _TabControlSelectedIndex = value;
+                    OnPropertyChanged("TabControlSelectedIndex");
                 }
             }
         }
+
         #endregion
+
+        public ParsedEtwManifest m_Manifest { get; set; }
+        public string m_TabText { get; set; }
 
         public ProviderManifestViewModel(ParsedEtwManifest Manifest) : base()
         {
-            SelectedProviderManifest = Manifest;
+            m_Manifest = Manifest;
+            m_TabText = string.IsNullOrEmpty(Manifest.Provider.Name) ? "<unnamed>" :
+                Manifest.Provider.Name;
         }
 
         public override Task ViewModelActivated()
@@ -76,9 +83,30 @@ namespace EtwPilot.ViewModel
                     throw new Exception("Exporting a provider manifest to XML isn't currently supported.");
                 }
                 var result = await DataExporter.Export<ParsedEtwManifest>(
-                        SelectedProviderManifest, Format, "ProviderManifest", Token);
+                        m_Manifest, Format, "ProviderManifest", Token);
+                if (result.Item1 == 0 || result.Item2 == null)
+                {
+                    ProgressState.FinalizeProgress("");
+                    return;
+                }
                 ProgressState.UpdateProgressValue();
                 ProgressState.FinalizeProgress($"Exported {result.Item1} records to {result.Item2}");
+                if (Format != DataExporter.ExportFormat.Clip)
+                {
+                    ProgressState.SetFollowupActionCommand.Execute(
+                    new FollowupAction()
+                    {
+                        Title = "Open",
+                        Callback = new Action<dynamic>((args) =>
+                        {
+                            var psi = new ProcessStartInfo();
+                            psi.FileName = result.Item2;
+                            psi.UseShellExecute = true;
+                            Process.Start(psi);
+                        }),
+                        CallbackArgument = null
+                    });
+                }
             }
             catch (Exception ex)
             {

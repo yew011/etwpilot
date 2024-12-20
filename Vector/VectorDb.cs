@@ -175,7 +175,7 @@ namespace EtwPilot.Vector
             return string.Empty;
         }
 
-        public async Task ImportData(ChatTopic Topic, List<dynamic> Data, CancellationToken Token)
+        public async Task ImportData<T>(ChatTopic Topic, List<T> Data, CancellationToken Token)
         {
             switch (Topic)
             {

@@ -7,24 +7,42 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "EtwPilot", "EtwPilot.csproj
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug_Cuda|Any CPU = Debug_Cuda|Any CPU
 		Debug_Cuda|x64 = Debug_Cuda|x64
+		Debug_DirectML|Any CPU = Debug_DirectML|Any CPU
 		Debug_DirectML|x64 = Debug_DirectML|x64
+		Debug|Any CPU = Debug|Any CPU
 		Debug|x64 = Debug|x64
+		Release_Cuda|Any CPU = Release_Cuda|Any CPU
 		Release_Cuda|x64 = Release_Cuda|x64
+		Release_DirectML|Any CPU = Release_DirectML|Any CPU
 		Release_DirectML|x64 = Release_DirectML|x64
+		Release|Any CPU = Release|Any CPU
 		Release|x64 = Release|x64
 	EndGlobalSection
 	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{0606126E-7DD5-43D3-9A6C-A70C05047A1E}.Debug_Cuda|Any CPU.ActiveCfg = Debug_Cuda|Any CPU
+		{0606126E-7DD5-43D3-9A6C-A70C05047A1E}.Debug_Cuda|Any CPU.Build.0 = Debug_Cuda|Any CPU
 		{0606126E-7DD5-43D3-9A6C-A70C05047A1E}.Debug_Cuda|x64.ActiveCfg = Debug_Cuda|x64
 		{0606126E-7DD5-43D3-9A6C-A70C05047A1E}.Debug_Cuda|x64.Build.0 = Debug_Cuda|x64
+		{0606126E-7DD5-43D3-9A6C-A70C05047A1E}.Debug_DirectML|Any CPU.ActiveCfg = Debug_DirectML|Any CPU
+		{0606126E-7DD5-43D3-9A6C-A70C05047A1E}.Debug_DirectML|Any CPU.Build.0 = Debug_DirectML|Any CPU
 		{0606126E-7DD5-43D3-9A6C-A70C05047A1E}.Debug_DirectML|x64.ActiveCfg = Debug_DirectML|x64
 		{0606126E-7DD5-43D3-9A6C-A70C05047A1E}.Debug_DirectML|x64.Build.0 = Debug_DirectML|x64
+		{0606126E-7DD5-43D3-9A6C-A70C05047A1E}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{0606126E-7DD5-43D3-9A6C-A70C05047A1E}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{0606126E-7DD5-43D3-9A6C-A70C05047A1E}.Debug|x64.ActiveCfg = Debug|x64
 		{0606126E-7DD5-43D3-9A6C-A70C05047A1E}.Debug|x64.Build.0 = Debug|x64
+		{0606126E-7DD5-43D3-9A6C-A70C05047A1E}.Release_Cuda|Any CPU.ActiveCfg = Release_Cuda|Any CPU
+		{0606126E-7DD5-43D3-9A6C-A70C05047A1E}.Release_Cuda|Any CPU.Build.0 = Release_Cuda|Any CPU
 		{0606126E-7DD5-43D3-9A6C-A70C05047A1E}.Release_Cuda|x64.ActiveCfg = Release_Cuda|x64
 		{0606126E-7DD5-43D3-9A6C-A70C05047A1E}.Release_Cuda|x64.Build.0 = Release_Cuda|x64
+		{0606126E-7DD5-43D3-9A6C-A70C05047A1E}.Release_DirectML|Any CPU.ActiveCfg = Release_DirectML|Any CPU
+		{0606126E-7DD5-43D3-9A6C-A70C05047A1E}.Release_DirectML|Any CPU.Build.0 = Release_DirectML|Any CPU
 		{0606126E-7DD5-43D3-9A6C-A70C05047A1E}.Release_DirectML|x64.ActiveCfg = Release_DirectML|x64
 		{0606126E-7DD5-43D3-9A6C-A70C05047A1E}.Release_DirectML|x64.Build.0 = Release_DirectML|x64
+		{0606126E-7DD5-43D3-9A6C-A70C05047A1E}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{0606126E-7DD5-43D3-9A6C-A70C05047A1E}.Release|Any CPU.Build.0 = Release|Any CPU
 		{0606126E-7DD5-43D3-9A6C-A70C05047A1E}.Release|x64.ActiveCfg = Release|x64
 		{0606126E-7DD5-43D3-9A6C-A70C05047A1E}.Release|x64.Build.0 = Release|x64
 	EndGlobalSection

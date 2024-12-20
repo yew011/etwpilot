@@ -16,10 +16,12 @@ KIND, either express or implied.  See the License for the
 specific language governing permissions and limitations
 under the License.
 */
+using EtwPilot.Model;
 using EtwPilot.Utilities;
 using EtwPilot.ViewModel;
+using Microsoft.Win32;
+using System.Diagnostics;
 using System.Windows;
-using System.Windows.Forms;
 
 namespace EtwPilot.View
 {
@@ -34,15 +36,15 @@ namespace EtwPilot.View
 
         private void BrowseSymbolPathButton_Click(object sender, RoutedEventArgs e)
         {
-            var browser = new FolderBrowserDialog();
-            browser.Description = "Select a location";
-            browser.RootFolder = Environment.SpecialFolder.MyComputer;
+            var browser = new OpenFolderDialog();
+            browser.Title = "Select a location";
+            browser.InitialDirectory = Environment.SpecialFolder.MyComputer.ToString();
             var result = browser.ShowDialog();
-            if (result != DialogResult.OK)
+            if (!result.HasValue || !result.Value)
             {
                 return;
             }
-            SymbolPathTextBox.Text = browser.SelectedPath;
+            SymbolPathTextBox.Text = browser.FolderName;
         }
 
         private void BrowseDbgHelpDllPathButton_Click(object sender, RoutedEventArgs e)
@@ -51,7 +53,7 @@ namespace EtwPilot.View
             browser.Title = "Select a dbghelp.dll file";
             browser.Filter = "DLL files (*.dll)|*.dll";
             var result = browser.ShowDialog();
-            if (result != DialogResult.OK)
+            if (!result.HasValue || !result.Value)
             {
                 return;
             }
@@ -60,24 +62,24 @@ namespace EtwPilot.View
 
         private void BrowseProviderCachePathButton_Click(object sender, RoutedEventArgs e)
         {
-            var browser = new FolderBrowserDialog();
-            browser.Description = "Select a location";
-            browser.RootFolder = Environment.SpecialFolder.MyComputer;
+            var browser = new OpenFolderDialog();
+            browser.Title = "Select a location";
+            browser.InitialDirectory = Environment.SpecialFolder.MyComputer.ToString();
             var result = browser.ShowDialog();
-            if (result != DialogResult.OK)
+            if (!result.HasValue || !result.Value)
             {
                 return;
             }
-            ProviderCachePathTextBox.Text = browser.SelectedPath;
+            ProviderCachePathTextBox.Text = browser.FolderName;
         }
 
         private void BrowseModelPathButton_Click(object sender, RoutedEventArgs e)
         {
-            var browser = new FolderBrowserDialog();
-            browser.Description = "Select a location";
-            browser.RootFolder = Environment.SpecialFolder.MyComputer;
+            var browser = new OpenFolderDialog();
+            browser.Title = "Select a location";
+            browser.InitialDirectory = Environment.SpecialFolder.MyComputer.ToString();
             var result = browser.ShowDialog();
-            if (result != DialogResult.OK)
+            if (!result.HasValue || !result.Value)
             {
                 return;
             }
@@ -87,7 +89,7 @@ namespace EtwPilot.View
             {
                 return;
             }
-            ModelPathTextbox.Text = browser.SelectedPath;
+            ModelPathTextbox.Text = browser.FolderName;
             vm.TryCreateModelConfig();
         }
 
@@ -97,7 +99,7 @@ namespace EtwPilot.View
             browser.Title = "Select a text embeddings model file";
             browser.Filter = "ONNX model files (*.onnx)|*.onnx";
             var result = browser.ShowDialog();
-            if (result != DialogResult.OK)
+            if (!result.HasValue || !result.Value)
             {
                 return;
             }
@@ -109,6 +111,52 @@ namespace EtwPilot.View
             }
             EmbeddingsModelPathTextbox.Text = browser.FileName;
             vm.TryCreateModelConfig();
+        }
+
+        private void UpdateFormatterButton_Click(object sender, RoutedEventArgs e)
+        {
+            var vm = DataContext as SettingsFormViewModel;
+            if (vm == null)
+            {
+                Debug.Assert(false);
+                return;
+            }
+            var selectedFormatter = FormattersListBox.SelectedItem as Formatter;
+            if (selectedFormatter == null)
+            {
+                Debug.Assert(false);
+                return;
+            }
+
+            //
+            // Manually build the formatter object from the form fields. If it validates,
+            // the source binding is already updated by the command.
+            //
+            var newFormatter = new Formatter()
+            {
+                Id = selectedFormatter.Id,
+                ClassName = selectedFormatter.ClassName,
+                Namespace = selectedFormatter.Namespace,
+                Inheritence = selectedFormatter.Inheritence,
+                FunctionName = FunctionName.Text,
+                Body = FunctionBody.Text
+            };
+
+            if (vm.UpdateFormatterCommand.CanExecute(newFormatter))
+            {
+                vm.UpdateFormatterCommand.Execute(newFormatter);
+            }
+        }
+
+        private void SettingsFormViewControl_Loaded(object sender, RoutedEventArgs e)
+        {
+            var vm = DataContext as SettingsFormViewModel;
+            if (vm == null)
+            {
+                Debug.Assert(false);
+                return;
+            }
+            vm.InitializeFromCodeBehind();
         }
     }
 }

@@ -21,14 +21,12 @@ using System.Windows;
 using System.Windows.Controls;
 using Fluent;
 using System.Diagnostics;
-
+using System.Windows.Data;
+using EtwPilot.ViewModel;
+using etwlib;
 
 namespace EtwPilot.Utilities
 {
-    using static TraceLogger;
-    using Ribbon = Fluent.Ribbon;
-    using Button = System.Windows.Controls.Button;
-
     public static class UiHelper
     {
         public static T? GetGlobalResource<T>(string Name)
@@ -52,120 +50,6 @@ namespace EtwPilot.Utilities
                 return default;
             }
             return vm;
-        }
-
-        public static T? FindChild<T>(DependencyObject parent, string? ChildName) where T : DependencyObject
-        {
-            if (parent == null)
-            {
-                return null;
-            }
-
-            T? foundChild = null;
-
-            int childrenCount = VisualTreeHelper.GetChildrenCount(parent);
-            for (int i = 0; i < childrenCount; i++)
-            {
-                var child = VisualTreeHelper.GetChild(parent, i);
-                T? childType = child as T;
-                if (childType == null)
-                {
-                    foundChild = FindChild<T>(child, ChildName);
-                    if (foundChild != null)
-                    {
-                        break;
-                    }
-                }
-                else if (!string.IsNullOrEmpty(ChildName))
-                {
-                    var frameworkElement = child as FrameworkElement;
-                    if (frameworkElement != null && frameworkElement.Name == ChildName)
-                    {
-                        foundChild = (T)child;
-                        break;
-                    }
-                    foundChild = FindChild<T>(child, ChildName);
-                    if (foundChild != null)
-                    {
-                        break;
-                    }
-                }
-                else
-                {
-                    foundChild = (T)child;
-                    break;
-                }
-            }
-
-            return foundChild;
-        }
-
-        public static IEnumerable<T> FindLogicalChildren<T>(DependencyObject depObj, string ChildName) where T : DependencyObject
-        {
-            if (depObj != null)
-            {
-                foreach (object rawChild in LogicalTreeHelper.GetChildren(depObj))
-                {
-                    if (rawChild is DependencyObject)
-                    {
-                        DependencyObject child = (DependencyObject)rawChild;
-                        if (child is T)
-                        {
-                            var frameworkElement = child as FrameworkElement;
-                            if (frameworkElement != null && frameworkElement.Name == ChildName)
-                            {
-                                yield return (T)child;
-                            }
-                        }
-
-                        foreach (T childOfChild in FindLogicalChildren<T>(child, ChildName))
-                        {
-                            yield return childOfChild;
-                        }
-                    }
-                }
-            }
-        }
-
-        public static T? FindLogicalParent<T>(DependencyObject depObj, string ParentName) where T : DependencyObject
-        {
-            if (depObj != null)
-            {
-                var parent = LogicalTreeHelper.GetParent(depObj);
-                if (parent is null)
-                {
-                    return null;
-                }
-                if (parent is DependencyObject)
-                {
-                    if (parent is T)
-                    {
-                        var frameworkElement = parent as FrameworkElement;
-                        if (frameworkElement != null && frameworkElement.Name == ParentName)
-                        {
-                            return (T)parent;
-                        }
-                    }
-                }
-                return FindLogicalParent<T>(parent, ParentName);
-            }
-            return null;
-        }
-
-        public static T? FindControlFromDataTemplate<T>(DependencyObject Control, string ChildControlName)
-        {
-            //
-            // Locates an instance of a control created as a result of a DataTemplate.
-            //
-            // See: https://learn.microsoft.com/en-us/dotnet/desktop/wpf/data/how-to-find-datatemplate-generated-elements?view=netframeworkdesktop-4.8
-            //
-            var contentPresenter = FindChild<ContentPresenter>(Control, null);
-            if (contentPresenter == null)
-            {
-                return default(T);
-            }
-            var dataTemplate = contentPresenter.ContentTemplate;
-            return (T)dataTemplate.FindName(ChildControlName, contentPresenter);
         }
 
         public static void Expander_Expanded(object sender, RoutedEventArgs e)
@@ -199,45 +83,124 @@ namespace EtwPilot.Utilities
             return $"{Prefix}_{Id}".Replace("-", "_");
         }
 
-        public static RibbonTabItem? CreateRibbonContextualTab(
+        public static bool CreateTabControlTab(
+            string TabControlName,
+            dynamic TabContent,
+            string TabName,
+            object? DataContext,
+            bool HasCloseButton = true
+            )
+        {
+            var tabControl = FindVisualChild<TabControl>(Application.Current.MainWindow, TabControlName);
+            if (tabControl == null)
+            {
+                Debug.Assert(false);
+                return false;
+            }
+
+            var existingTabs = tabControl.Items.Cast<TabItem>().ToList();
+            var tab = existingTabs.Where(tab => tab.Name == TabName).FirstOrDefault();
+            if (tab != null)
+            {
+                Debug.Assert(false); // this is likely unexpected
+                return false;
+            }
+
+            //
+            // Locate the dynamic contextual tab header style template to apply to the tab.
+            //
+            var ribbon = FindVisualChild<Ribbon>(
+                    Application.Current.MainWindow, "MainWindowRibbon");
+            if (ribbon == null)
+            {
+                Debug.Assert(false);
+                return false;
+            }
+
+            var styleName = "DynamicTabItemHeaderStyle";
+            if (!HasCloseButton)
+            {
+                styleName = "DynamicTabItemNoCloseButtonHeaderStyle";
+            }
+            var style = ribbon.FindResource(styleName) as Style;
+            if (style == null)
+            {
+                Debug.Assert(false);
+                return false;
+            }
+
+            //
+            // The TabItem content is wrapped in a ScrollViewer.
+            //
+            var scrollViewer = new ScrollViewer()
+            {
+                VerticalScrollBarVisibility = ScrollBarVisibility.Visible,
+                HorizontalScrollBarVisibility = ScrollBarVisibility.Auto,
+                Content = TabContent // likely a viewmodel
+            };
+            var newTab = new TabItem
+            {
+                Name = TabName,
+                Style = style,
+                IsSelected = true,
+                Content = scrollViewer,
+                DataContext = DataContext
+            };
+
+            tabControl.Items.Add(newTab);
+            return true;
+        }
+
+        public static TabItem? CreateEmptyTab(string TabName, string Header, object DataContext)
+        {
+            //
+            // Locate the dynamic contextual tab header style template to apply to the tab.
+            //
+            var ribbon = FindVisualChild<Ribbon>(
+                    Application.Current.MainWindow, "MainWindowRibbon");
+            if (ribbon == null)
+            {
+                Debug.Assert(false);
+                return null;
+            }
+
+            return new TabItem
+            {
+                Name = TabName,
+                Header = Header,
+                DataContext = DataContext
+            };
+        }
+
+        public static bool CreateRibbonContextualTab(
             string TabName,
             string TabText,
             int ContextualGroupIndex,
             Dictionary<string, List<string>>? GroupButtons,
-            string TabStyleTemplateName,
-            string TabHeaderTextBlockName,
-            string TabCloseButtonName,
-            object? DataContext,
-            Func<string, Task<bool>> TabClosedCallback)
+            object? DataContext)
         {
-            var ribbon = FindChild<Ribbon>(
+            var ribbon = FindVisualChild<Ribbon>(
                     Application.Current.MainWindow, "MainWindowRibbon");
             if (ribbon == null)
             {
-                Trace(TraceLoggerType.UiHelper,
-                      TraceEventType.Error,
-                      $"Unable to locate MainWindowRibbon");
-                return null;
-            }
-            if (ribbon.Tabs.Any(tab => tab.Name == TabName))
-            {
                 Debug.Assert(false);
-                Trace(TraceLoggerType.UiHelper,
-                      TraceEventType.Error,
-                      $"Cannot create tab, name {TabName} already exists.");
-                return null;
+                return false;
+            }
+            var existingTab = ribbon.Tabs.FirstOrDefault( t => t.Name == TabName );
+            if (existingTab != default)
+            {
+                existingTab.IsSelected = true;
+                return true;
             }
 
             //
-            // Locate the style template to apply to the tab.
+            // Locate the dynamic contextual tab header style template to apply to the tab.
             //
-            var style = ribbon.FindResource(TabStyleTemplateName) as Style;
+            var style = ribbon.FindResource("DynamicContextualRibbonTabItemHeaderStyle") as Style;
             if (style == null)
             {
-                Trace(TraceLoggerType.UiHelper,
-                      TraceEventType.Error,
-                      $"Unable to locate tab style {TabStyleTemplateName}");
-                return null;
+                Debug.Assert(false);
+                return false;
             }
 
             Debug.Assert(ContextualGroupIndex < ribbon.ContextualGroups.Count);
@@ -247,10 +210,35 @@ namespace EtwPilot.Utilities
                 Style = style,
                 IsSelected = true,
                 Group = ribbon.ContextualGroups[ContextualGroupIndex],
+                DataContext = DataContext
                 //
                 // Important: Ribbon tab controls contain no content.
                 //
             };
+
+            //
+            // Bind the tab's visibility property to global state for the contextual tab group.
+            // Also note that we disable notify on data errors to remove red box adorner.
+            //
+            string visibilityParameter;
+            if (ContextualGroupIndex == 0)
+            {
+                visibilityParameter = "ProviderManifestVisible";
+            }
+            else if (ContextualGroupIndex == 1)
+            {
+                visibilityParameter = "LiveSessionsVisible";
+            }
+            else
+            {
+                Debug.Assert(false);
+                return false;
+            }
+
+            var binding = new Binding(visibilityParameter);
+            binding.Source = GlobalStateViewModel.Instance.g_MainWindowViewModel;
+            binding.ValidatesOnNotifyDataErrors = false;
+            newTab.SetBinding(RibbonTabItem.VisibilityProperty, binding);
 
             //
             // Add group buttons if any
@@ -270,10 +258,7 @@ namespace EtwPilot.Utilities
                         style = ribbon.FindResource(buttonStyle) as Style;
                         if (style == null)
                         {
-                            Trace(TraceLoggerType.UiHelper,
-                                  TraceEventType.Error,
-                                  $"Unable to locate button style {buttonStyle}");
-                            return null;
+                            return false;
                         }
                         var button = new Fluent.Button
                         {
@@ -285,229 +270,145 @@ namespace EtwPilot.Utilities
                 }
             }
 
-            if (DataContext != null)
-            {
-                newTab.DataContext = DataContext;
-            }
-
             //
-            // Note: we're not done, we need to override parts of the HeaderTemplate for
-            // the tab title and plumb up the "X" close button, but these are UI element
-            // operations that cannot be done until the template is applied. These are
-            // handled from within the tab's Loaded callback.
+            // Add export button groupbox - if underlying VM doesn't implement export
+            // data capabilities, these will just be disabled/grayed out.
             //
-            newTab.Loaded += (s, e) =>
-            {
-                FixupDynamicTab(ribbon,
-                    newTab,
-                    TabText,
-                    TabHeaderTextBlockName,
-                    TabCloseButtonName,
-                    TabClosedCallback);
-            };
+            newTab.Groups.Add(new Controls.ExportButtonGroup());
 
             ribbon.Tabs.Add(newTab);
-            return newTab;
-        }
-
-        public static bool CreateTabControlContextualTab(
-            TabControl TabControl,
-            dynamic TabContent,
-            string TabName,
-            string TabText,
-            string TabStyleTemplateName,
-            string TabHeaderTextBlockName,
-            string TabCloseButtonName,
-            object? DataContext,
-            Func<string, Task<bool>> TabClosedCallback)
-        {
-            var existingTabs = TabControl.Items.Cast<TabItem>().ToList();
-            var tab = existingTabs.Where(tab => tab.Name == TabName).FirstOrDefault();
-            if (tab != null)
-            {
-                tab.IsSelected = true;
-                return true;
-            }
-
-            //
-            // Locate the style template to apply to the tab.
-            //
-            var style = TabControl.FindResource(TabStyleTemplateName) as Style;
-            if (style == null)
-            {
-                Trace(TraceLoggerType.UiHelper,
-                      TraceEventType.Error,
-                      $"Unable to locate tab style {TabStyleTemplateName}");
-                return false;
-            }
-
-            //
-            // The TabItem content is wrapped in a ScrollViewer.
-            //
-            var scrollViewer = new ScrollViewer()
-            {
-                VerticalScrollBarVisibility = ScrollBarVisibility.Visible,
-                HorizontalScrollBarVisibility = ScrollBarVisibility.Auto,
-                Content = TabContent // likely a viewmodel
-            };
-            var newTab = new TabItem
-            {
-                Name = TabName,
-                Style = style,
-                IsSelected = true,
-                Content = scrollViewer 
-            };
-
-            if (DataContext != null)
-            {
-                newTab.DataContext = DataContext;
-            }
-
-            //
-            // Note: we're not done, we need to override parts of the HeaderTemplate for
-            // the tab title and plumb up the "X" close button, but these are UI element
-            // operations that cannot be done until the template is applied. These are
-            // handled from within the tab's Loaded callback.
-            //
-            newTab.Loaded += (s, e) =>
-            {
-                FixupDynamicTab(TabControl,
-                    newTab,
-                    TabText,
-                    TabHeaderTextBlockName,
-                    TabCloseButtonName,
-                    TabClosedCallback);
-            };
-
-            TabControl.Items.Add(newTab);
             return true;
         }
 
-        private static void FixupDynamicTab(
-            dynamic TabControl,
-            dynamic NewTab,
-            string TabTitle,
-            string TabHeaderTextBlockName,
-            string TabCloseButtonName,
-            Func<string,Task<bool>> TabClosedCallback)
+        public static bool RemoveRibbonContextualTab(string TabName)
         {
-            var headerTextBlock = (TextBlock)FindControlFromDataTemplate<TextBlock>(NewTab, TabHeaderTextBlockName);
-            var headerCloseButton = (Button)FindControlFromDataTemplate<Button>(NewTab, TabCloseButtonName);
-
-            if (headerTextBlock == null || headerCloseButton == null)
+            var ribbon = FindVisualChild<Ribbon>(
+                    Application.Current.MainWindow, "MainWindowRibbon");
+            if (ribbon == null)
             {
-                Trace(TraceLoggerType.UiHelper,
-                      TraceEventType.Error,
-                      $"Unable to locate headertextblock or closeButton");
                 Debug.Assert(false);
-                return;
+                return false;
             }
+            var existingTab = ribbon.Tabs.Where(tab => tab.Name == TabName).FirstOrDefault();
+            if (existingTab == default)
+            {
+                Debug.Assert(false);
+                return false;
+            }
+            existingTab.Template = null; // see https://github.com/dotnet/wpf/issues/6440
 
             //
-            // Add a handler for this tab close button and assign unique tag to the tab
-            // itself, so we can easily remove it.
+            // Before removing the tab, switch off this tab. We do this because otherwise
+            // the tabcontrol will switch to the next prior tab, which might not be what
+            // we want, and when that tab is activated, it might fire off an async init
+            // function for that tab's VM.
+            // The number of permanent tabs is 3, or 4 before we remove.
             //
-            headerCloseButton.Tag = NewTab.Name;
-            headerCloseButton.Click += async (s, e) =>
+            if (ribbon.Tabs.Count == 4)
             {
-                //
-                // Locate the button, corresponding tab name, and the containing tab control.
-                //
-                var button = s as Button;
-                if (button == null)
+                if (TabName.StartsWith("Manifest"))
                 {
-                    Trace(TraceLoggerType.UiHelper,
-                          TraceEventType.Error,
-                          $"Unable to locate button");
-                    return;
+                    GlobalStateViewModel.Instance.g_MainWindowViewModel.RibbonTabControlSelectedIndex = 0;
                 }
-
-                var tabName = button.Tag as string;
-                if (tabName == null)
+                else if (TabName.StartsWith("LiveSession"))
                 {
-                    Trace(TraceLoggerType.UiHelper,
-                          TraceEventType.Error,
-                          $"Unable to locate tab name from tag");
-                    return;
+                    GlobalStateViewModel.Instance.g_MainWindowViewModel.RibbonTabControlSelectedIndex = 1;
                 }
-
-                if (TabControl is Ribbon)
+                else
                 {
-                    var ribbon = TabControl as Ribbon;
-                    var existingTab = ribbon!.Tabs.Where(
-                        tab => tab.Name == tabName).FirstOrDefault();
-                    if (existingTab == null)
-                    {
-                        Trace(TraceLoggerType.UiHelper,
-                              TraceEventType.Error,
-                              $"Tab {tabName} not found!");
-                        return;
-                    }
-
-                    var result = await TabClosedCallback.Invoke(tabName);
-                    if (!result)
-                    {
-                        Trace(TraceLoggerType.UiHelper,
-                              TraceEventType.Warning,
-                              $"TabClosedCallback returned false, not removing tab");
-                        return;
-                    }
-
-                    existingTab.Template = null; // see https://github.com/dotnet/wpf/issues/6440
-                    ribbon.Tabs.Remove(existingTab);
-
-                    //
-                    // If the context tab group contains no tabs after this removal,
-                    // switch back to its "parent" Ribbon tab.
-                    //
-                    if (ribbon.Tabs.Count == 3)
-                    {
-                        if (tabName.StartsWith("Manifest"))
-                        {
-                            ribbon.SelectedTabIndex = 0; // Providers tab
-                        }
-                        else if (tabName.StartsWith("LiveSession"))
-                        {
-                            ribbon.SelectedTabIndex = 1; // Sessions tab
-                        }
-                    }
+                    GlobalStateViewModel.Instance.g_MainWindowViewModel.RibbonTabControlSelectedIndex = 0;
                 }
-                else if (TabControl is TabControl)
-                {
-                    var tc = TabControl as TabControl;
-                    var existingTab = tc!.Items.Cast<TabItem>().ToList().Where(
-                        tab => tab.Name == tabName).FirstOrDefault();
-                    if (existingTab == null)
-                    {
-                        Trace(TraceLoggerType.UiHelper,
-                              TraceEventType.Error,
-                              $"Tab {tabName} not found!");
-                        return;
-                    }
-
-                    var result = await TabClosedCallback.Invoke(tabName);
-                    if (!result)
-                    {
-                        Trace(TraceLoggerType.UiHelper,
-                              TraceEventType.Warning,
-                              $"TabClosedCallback returned false, not removing tab");
-                        return;
-                    }
-
-                    existingTab.Template = null; // see https://github.com/dotnet/wpf/issues/6440
-                    tc.Items.Remove(existingTab);
-                }
-            };
-
-            var title = $"{TabTitle}";
-            var header = title;
-            if (title.Length > 50)
-            {
-                int start = title.Length - 15;
-                header = $"{title.Substring(0, 15)}...{title.Substring(start - 1, 15)}";
             }
 
-            headerTextBlock.Text = header;
+            ribbon.Tabs.Remove(existingTab);
+            return true;
+        }
+
+        public static bool RemoveTab(string TabControlName, string TabName)
+        {
+            var tabControl = FindVisualChild<TabControl>(Application.Current.MainWindow, TabControlName);
+            if (tabControl == null)
+            {
+                Debug.Assert(false);
+                return false;
+            }
+            var tabs = tabControl.Items.Cast<TabItem>().ToList();
+            var existingTab = tabs.Where(tab => tab.Name == TabName).FirstOrDefault();
+            if (existingTab == default)
+            {
+                Debug.Assert(false);
+                return false;
+            }
+            existingTab.Template = null; // see https://github.com/dotnet/wpf/issues/6440
+            tabControl.Items.Remove(existingTab);
+            return true;
+        }
+
+        private static T? FindVisualChild<T>(DependencyObject parent, string? ChildName) where T : DependencyObject
+        {
+            if (parent == null)
+            {
+                return null;
+            }
+
+            T? foundChild = null;
+
+            int childrenCount = VisualTreeHelper.GetChildrenCount(parent);
+            for (int i = 0; i < childrenCount; i++)
+            {
+                var child = VisualTreeHelper.GetChild(parent, i);
+                T? childType = child as T;
+                if (childType == null)
+                {
+                    foundChild = FindVisualChild<T>(child, ChildName);
+                    if (foundChild != null)
+                    {
+                        break;
+                    }
+                }
+                else if (!string.IsNullOrEmpty(ChildName))
+                {
+                    var frameworkElement = child as FrameworkElement;
+                    if (frameworkElement != null && frameworkElement.Name == ChildName)
+                    {
+                        foundChild = (T)child;
+                        break;
+                    }
+                    foundChild = FindVisualChild<T>(child, ChildName);
+                    if (foundChild != null)
+                    {
+                        break;
+                    }
+                }
+                else
+                {
+                    foundChild = (T)child;
+                    break;
+                }
+            }
+
+            return foundChild;
+        }
+
+        public static T? FindVisualParent<T>(DependencyObject current, string? ParentName) where T : DependencyObject
+        {
+            do
+            {
+                if (current is T)
+                {
+                    if (!string.IsNullOrEmpty(ParentName))
+                    {
+                        var frameworkElement = current as FrameworkElement;
+                        if (frameworkElement != null && frameworkElement.Name == ParentName)
+                        {
+                            return current as T;
+                        }
+                    }
+                }
+                current = VisualTreeHelper.GetParent(current);
+            }
+            while (current != null);
+            return null;
         }
     }
 }

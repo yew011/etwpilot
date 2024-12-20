@@ -22,10 +22,31 @@ using System.ComponentModel;
 using System.Diagnostics;
 using System.IO;
 using System.Runtime.CompilerServices;
+using Microsoft.SemanticKernel.Connectors.Onnx;
+using System.Runtime.Intrinsics.X86;
+
+//
+// Remove supression after onnx connector is out of alpha
+//
+#pragma warning disable SKEXP0070
 
 namespace EtwPilot.Model
 {
     using static EtwPilot.Utilities.TraceLogger;
+
+    //
+    // The flow of these classes:
+    //  -OnnxGenAIConfigModel represents config file from a model repo. It is populated with
+    //      contents of the JSON config file shipped with a model, when the user selects a
+    //      model path from the settings UI. It has two sub-classes:
+    //      -OnnxGenAIModelOptionsModel
+    //      -OnnxGenAISearchOptionsModel
+    //  -The values in OnnxGenAIConfigModel are updated when the user changes them in the
+    //  settings UI.
+    //  -During inference, these settings are propagated to SK kernel instance via
+    //  the ToPromptExecutionSettings() routine.
+    //
+
 
     //
     // The format of the JSON file should conform to the onnxruntime-genai config format, eg:
@@ -128,6 +149,30 @@ namespace EtwPilot.Model
         {
             var baseDir = Directory.GetParent(Path.GetDirectoryName(ModelFile)!)!.FullName;
             return Path.Combine(baseDir, "vocab.txt");
+        }
+
+        public OnnxRuntimeGenAIPromptExecutionSettings ToPromptExecutionSettings()
+        {
+            return new OnnxRuntimeGenAIPromptExecutionSettings()
+            {
+                //
+                // NB: Not sure why SK uses int for all these? they are type double!
+                //
+                TopK = (int)SearchOptions.TopK,
+                TopP = (int)SearchOptions.TopP,
+                Temperature = (int)SearchOptions.Temperature,
+                RepetitionPenalty = (int)SearchOptions.RepetitionPenalty,
+                PastPresentShareBuffer = SearchOptions.PastPresentShareBuffer,
+                NumReturnSequences = (int)SearchOptions.NumReturnSequences,
+                NumBeams = (int)SearchOptions.NumBeams,
+                NoRepeatNgramSize = (int)SearchOptions.NoRepeatNgramSize,
+                MinTokens = (int)SearchOptions.MinLength,
+                MaxTokens = (int)SearchOptions.MaxLength,
+                LengthPenalty = (int)SearchOptions.LengthPenalty,
+                DiversityPenalty = (int)SearchOptions.DiversityPenalty,
+                EarlyStopping = SearchOptions.EarlyStopping,
+                DoSample = SearchOptions.DoSample,
+            };
         }
     }
 
@@ -329,7 +374,7 @@ namespace EtwPilot.Model
         }
 
         #region INotifyPropertyChanged
-        public event PropertyChangedEventHandler PropertyChanged;
+        public event PropertyChangedEventHandler? PropertyChanged;
         public void NotifyPropertyChanged([CallerMemberName] string property = "")
         {
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(property));

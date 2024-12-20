@@ -17,11 +17,9 @@ specific language governing permissions and limitations
 under the License.
 */
 using CommunityToolkit.Mvvm.Input;
-using Fluent;
 using System.Diagnostics;
 using System.Windows;
 using System.Windows.Controls;
-using EtwPilot.Utilities;
 
 namespace EtwPilot.ViewModel
 {
@@ -29,15 +27,15 @@ namespace EtwPilot.ViewModel
     {
         #region observable properties
         
-        private int m_RibbonTabControlSelectedIndex;
+        private int _RibbonTabControlSelectedIndex;
         public int RibbonTabControlSelectedIndex
         {
-            get => m_RibbonTabControlSelectedIndex;
+            get => _RibbonTabControlSelectedIndex;
             set
             {
-                if (m_RibbonTabControlSelectedIndex != value)
+                if (_RibbonTabControlSelectedIndex != value)
                 {
-                    m_RibbonTabControlSelectedIndex = value;
+                    _RibbonTabControlSelectedIndex = value;
                     OnPropertyChanged("RibbonTabControlSelectedIndex");
                 }
             }
@@ -76,8 +74,9 @@ namespace EtwPilot.ViewModel
 
         public AsyncRelayCommand<SelectionChangedEventArgs> TabSelectionChangedCommand { get; set; }
         public AsyncRelayCommand<RoutedEventArgs> WindowLoadedCommand { get; set; }
-        public AsyncRelayCommand ShowDebugLogsCommand { get; set; }
-        public AsyncRelayCommand ExitCommand { get; set; }
+        public RelayCommand ShowDebugLogsCommand { get; set; }
+        public RelayCommand ExitCommand { get; set; }
+        public AsyncRelayCommand<ViewModelBase> CloseDynamicTab { get; set; }
 
         #endregion
 
@@ -87,28 +86,35 @@ namespace EtwPilot.ViewModel
                 Command_TabSelectionChanged, _ => true);
             WindowLoadedCommand = new AsyncRelayCommand<RoutedEventArgs>(
                 Command_WindowLoaded, _ => true);
-            ShowDebugLogsCommand = new AsyncRelayCommand(
+            ShowDebugLogsCommand = new RelayCommand(
                 Command_ShowDebugLogs, () => { return true; });
-            ExitCommand = new AsyncRelayCommand(
-                async () => { System.Windows.Application.Current.Shutdown(); }, () => { return true; });
+            ExitCommand = new RelayCommand(
+                () => { Application.Current.Shutdown(); }, () => { return true; });
+            CloseDynamicTab = new AsyncRelayCommand<ViewModelBase>(
+                Command_CloseDynamicTab, _ => true);
             ProviderManifestVisible = Visibility.Hidden;
             LiveSessionsVisible = Visibility.Hidden;
             ProgressState = new ProgressState();
         }
 
-        private async Task Command_WindowLoaded(RoutedEventArgs Args)
+        private async Task Command_WindowLoaded(RoutedEventArgs? Args)
         {
-            GlobalStateViewModel.Instance.Initialize();
-
             //
             // Initialize traces and set trace levels
+            // NB: EtwPilot.TraceLogger was initialized in GlobalStateViewModel ctor to catch
+            // early errors.
             //
             etwlib.TraceLogger.Initialize();
             etwlib.TraceLogger.SetLevel(GlobalStateViewModel.Instance.Settings.TraceLevelEtwlib);
-            EtwPilot.Utilities.TraceLogger.Initialize();
             EtwPilot.Utilities.TraceLogger.SetLevel(GlobalStateViewModel.Instance.Settings.TraceLevelApp);
             symbolresolver.TraceLogger.Initialize();
             symbolresolver.TraceLogger.SetLevel(GlobalStateViewModel.Instance.Settings.TraceLevelSymbolresolver);
+
+            //
+            // Kick off application-wide initialization. All other views will be hidden until
+            // this completes.
+            //
+            await GlobalStateViewModel.Instance.GlobalResourceInitialization();
 
             //
             // This is the default tab displayed, so load it with content.
@@ -116,23 +122,49 @@ namespace EtwPilot.ViewModel
             await GlobalStateViewModel.Instance.g_ProviderViewModel.ViewModelActivated();
         }
 
-        private async Task Command_TabSelectionChanged(SelectionChangedEventArgs Args)
+        private async Task Command_TabSelectionChanged(SelectionChangedEventArgs? Args)
         {
-            if (Args.AddedItems.Count == 0)
+            string tabName;
+            object tabDataContext = null;
+
+            if (Args == null)
             {
                 return;
             }
-            var tab = Args.AddedItems[0] as RibbonTabItem;
-
-            if (tab == null || tab.Name == null)
+            else if (Args.AddedItems.Count > 0)
+            {
+                //
+                // A RibbonTabItem was just added to the ribbon tab control.
+                //
+                var tab = Args.AddedItems[0] as Fluent.RibbonTabItem;
+                if (tab == null || tab.Name == null)
+                {
+                    Debug.Assert(false);
+                    return;
+                }
+                tabName = tab.Name;
+                tabDataContext = tab.DataContext;
+            }
+            else if (Args.RemovedItems.Count > 0)
+            {
+                //
+                // A RibbonTabItem was just removed from the ribbon tab control.
+                // The only way this can happen is from our contextual tab groups,
+                // via UiHelper!RemoveRibbonContextualTab and that routine handles
+                // setting the selected tab after removal.
+                //
+                return;
+            }
+            else
             {
                 return;
             }
 
+            GlobalStateViewModel.Instance.PrimaryViewEnabled = false;
             ProviderManifestVisible = Visibility.Hidden;
             LiveSessionsVisible = Visibility.Hidden;
 
-            if (tab.Name == "ProvidersTab")
+            if (tabName == "ProvidersTab")
             {
                 await GlobalStateViewModel.Instance.g_ProviderViewModel.ViewModelActivated();
                 if (GlobalStateViewModel.Instance.g_ProviderViewModel.SelectedProviders.Count > 0)
@@ -140,41 +172,76 @@ namespace EtwPilot.ViewModel
                     ProviderManifestVisible = Visibility.Visible;
                 }
             }
-            else if (tab.Name == "SessionsTab")
+            else if (tabName == "SessionsTab")
             {
                 await GlobalStateViewModel.Instance.g_SessionViewModel.ViewModelActivated();
                 LiveSessionsVisible = GlobalStateViewModel.Instance.g_SessionViewModel.HasLiveSessions() ?
                     Visibility.Visible : Visibility.Hidden;
             }
-            else if (tab.Name == "InsightsTab")
+            else if (tabName == "InsightsTab")
             {
                 await GlobalStateViewModel.Instance.g_InsightsViewModel.ViewModelActivated();
             }
-            else if (tab.Name.StartsWith("Manifest_"))
+            else if (tabName.StartsWith("Manifest_"))
             {
                 //
                 // The provider VM maintains a list of instantiated manifest VMs.
                 //
-                await GlobalStateViewModel.Instance.g_ProviderViewModel.ActivateProviderManifestViewModel(tab.Name);
+                await GlobalStateViewModel.Instance.g_ProviderViewModel.ActivateProviderManifestViewModel(tabName);
                 ProviderManifestVisible = Visibility.Visible;
             }
-            else if (tab.Name.StartsWith("LiveSession_"))
+            else if (tabName.StartsWith("LiveSession_"))
             {
+                if (tabDataContext is not LiveSessionViewModel)
+                {
+                    Debug.Assert(false);
+                    return;
+                }
+                var vm = tabDataContext as LiveSessionViewModel;
                 //
                 // The session VM maintains a list of instantiated LiveSession VMs.
                 //
-                await GlobalStateViewModel.Instance.g_SessionViewModel.ActivateLiveSessionViewModel(tab.Name);
-                LiveSessionsVisible = GlobalStateViewModel.Instance.g_SessionViewModel.HasLiveSessions() ? 
-                    Visibility.Visible : Visibility.Hidden;
+                await GlobalStateViewModel.Instance.g_SessionViewModel.ShowSessionCommand.ExecuteAsync(vm);
+                LiveSessionsVisible = Visibility.Visible;
             }
+
+            GlobalStateViewModel.Instance.PrimaryViewEnabled = true;
         }
 
-        private async Task Command_ShowDebugLogs()
+        private void Command_ShowDebugLogs()
         {
             var psi = new ProcessStartInfo();
             psi.FileName = SettingsFormViewModel.DefaultWorkingDirectory;
             psi.UseShellExecute = true;
             Process.Start(psi);
+        }
+
+        public async Task Command_CloseDynamicTab(ViewModelBase? ViewModel)
+        {
+            if (ViewModel == null)
+            {
+                Debug.Assert(false);
+                return;
+            }
+            var vm = ViewModel as LiveSessionViewModel;
+            if (vm != null)
+            {
+                await GlobalStateViewModel.Instance.g_SessionViewModel.CloseDynamicTab.ExecuteAsync(vm);
+                return;
+            }
+            var vm2 = ViewModel as ProviderManifestViewModel;
+            if (vm2 != null)
+            {
+                GlobalStateViewModel.Instance.g_ProviderViewModel.CloseDynamicTab.Execute(vm2);
+                return;
+            }
+            var vm3 = ViewModel as ProviderFilterFormViewModel;
+            if (vm3 != null)
+            {
+                GlobalStateViewModel.Instance.g_SessionFormViewModel.CloseDynamicTab.Execute(vm3);
+                return;
+            }
+            Debug.Assert(false);
         }
     }
 }

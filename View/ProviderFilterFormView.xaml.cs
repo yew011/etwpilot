@@ -17,10 +17,10 @@ specific language governing permissions and limitations
 under the License.
 */
 using etwlib;
+using EtwPilot.Utilities;
 using EtwPilot.ViewModel;
 using System.Data;
 using System.Diagnostics;
-using System.Windows;
 using System.Windows.Controls;
 
 namespace EtwPilot.View
@@ -34,9 +34,9 @@ namespace EtwPilot.View
 
         #region ScopeFilter
 
-        private void ScopeFilterProcess_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        private void ScopeFilterProcesses_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
-            var vm = GlobalStateViewModel.Instance.g_SessionFormViewModel.CurrentProviderFilterForm;
+            var vm = DataContext as ProviderFilterFormViewModel;
             if (ScopeFilterProcesses.SelectedItems == null || vm == null)
             {
                 return;
@@ -47,35 +47,35 @@ namespace EtwPilot.View
 
         private void ScopeFilterExes_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
-            var vm = GlobalStateViewModel.Instance.g_SessionFormViewModel.CurrentProviderFilterForm;
+            var vm = DataContext as ProviderFilterFormViewModel;
             if (ScopeFilterExes.SelectedItems == null || vm == null)
             {
                 return;
             }
-            vm.ScopeFilter.ExeNames = ScopeFilterExes.SelectedItems.Cast<string>().Where(e =>
-                e != "[None]").ToList();
+            vm.ScopeFilter.ExeNames = ScopeFilterExes.SelectedItems.Cast<string>().Where(
+                p => p != "[None]").ToList();
         }
 
         private void ScopeFilterAppIds_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
-            var vm = GlobalStateViewModel.Instance.g_SessionFormViewModel.CurrentProviderFilterForm;
+            var vm = DataContext as ProviderFilterFormViewModel;
             if (ScopeFilterAppIds.SelectedItems == null || vm == null)
             {
                 return;
             }
-            vm.ScopeFilter.AppIds = ScopeFilterAppIds.SelectedItems.Cast<string>().Where(e =>
-                e != "[None]").ToList();
+            vm.ScopeFilter.AppIds = ScopeFilterAppIds.SelectedItems.Cast<string>().Where(
+                p => p != "[None]").ToList();
         }
 
         private void ScopeFilterPackageIds_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
-            var vm = GlobalStateViewModel.Instance.g_SessionFormViewModel.CurrentProviderFilterForm;
+            var vm = DataContext as ProviderFilterFormViewModel;
             if (ScopeFilterPackageIds.SelectedItems == null || vm == null)
             {
                 return;
             }
-            vm.ScopeFilter.PackageIds = ScopeFilterPackageIds.SelectedItems.Cast<string>().Where(e =>
-                e != "[None]").ToList();
+            vm.ScopeFilter.PackageIds = ScopeFilterPackageIds.SelectedItems.Cast<string>().Where(
+                p => p != "[None]").ToList();
         }
 
         #endregion
@@ -83,19 +83,23 @@ namespace EtwPilot.View
         #region AttributeFilter
         private void AttributeFilterEvents_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
-            var vm = GlobalStateViewModel.Instance.g_SessionFormViewModel.CurrentProviderFilterForm;
+            var vm = DataContext as ProviderFilterFormViewModel;
             if (AttributeFilterEvents.SelectedItems == null || vm == null)
             {
                 return;
             }
+            var chosen = AttributeFilterEvents.SelectedItems.Cast<
+                ParsedEtwManifestEvent>().ToList();
+            //
+            // Synchronize with VM's list
+            //
             vm.AttributeFilter.Events.Clear();
-            AttributeFilterEvents.SelectedItems.Cast<
-                ParsedEtwManifestEvent>().ToList().ForEach(e => vm.AttributeFilter.Events.Add(e));
+            chosen.ForEach(e => vm.AttributeFilter.Events.Add(e));
         }
 
         private void AttributeFilterAnyKeywords_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
-            var vm = GlobalStateViewModel.Instance.g_SessionFormViewModel.CurrentProviderFilterForm;
+            var vm = DataContext as ProviderFilterFormViewModel;
             if (AttributeFilterAnyKeywords.SelectedItems == null || vm == null)
             {
                 return;
@@ -107,7 +111,7 @@ namespace EtwPilot.View
 
         private void AttributeFilterAllKeywords_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
-            var vm = GlobalStateViewModel.Instance.g_SessionFormViewModel.CurrentProviderFilterForm;
+            var vm = DataContext as ProviderFilterFormViewModel;
             if (AttributeFilterAllKeywords.SelectedItems == null || vm == null)
             {
                 return;
@@ -121,19 +125,24 @@ namespace EtwPilot.View
         #region StackwalkFilter
         private void StackwalkFilterEvents_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
-            var vm = GlobalStateViewModel.Instance.g_SessionFormViewModel.CurrentProviderFilterForm;
-            if (AttributeFilterAllKeywords.SelectedItems == null || vm == null)
+            var vm = DataContext as ProviderFilterFormViewModel;
+            if (StackwalkFilterEvents.SelectedItems == null || vm == null)
             {
                 return;
             }
+
+            //
+            // Synchronize with VM's list
+            //
             vm.StackwalkFilter.Events.Clear();
-            StackwalkFilterEvents.SelectedItems.Cast<
-                ParsedEtwManifestEvent>().ToList().ForEach(e => vm.StackwalkFilter.Events.Add(e));
+            var chosen = StackwalkFilterEvents.SelectedItems.Cast<
+                ParsedEtwManifestEvent>().ToList();
+            chosen.ForEach(e => vm.StackwalkFilter.Events.Add(e));
         }
 
         private void StackwalkLevelKeywordFilterAnyKeywords_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
-            var vm = GlobalStateViewModel.Instance.g_SessionFormViewModel.CurrentProviderFilterForm;
+            var vm = DataContext as ProviderFilterFormViewModel;
             if (StackwalkLevelKeywordFilterAnyKeywords.SelectedItems == null || vm == null)
             {
                 return;
@@ -145,7 +154,7 @@ namespace EtwPilot.View
 
         private void StackwalkLevelKeywordFilterAllKeywords_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
-            var vm = GlobalStateViewModel.Instance.g_SessionFormViewModel.CurrentProviderFilterForm;
+            var vm = DataContext as ProviderFilterFormViewModel;
             if (StackwalkLevelKeywordFilterAllKeywords.SelectedItems == null || vm == null)
             {
                 return;
@@ -160,9 +169,10 @@ namespace EtwPilot.View
 
         private void PayloadFilterEvents_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
-            var vm = GlobalStateViewModel.Instance.g_SessionFormViewModel.CurrentProviderFilterForm;
+            var vm = DataContext as ProviderFilterFormViewModel;
             if (vm == null)
             {
+                Debug.Assert(false);
                 return;
             }
             var evt = PayloadFilterEvents.SelectedItem as ParsedEtwManifestEvent;
@@ -190,9 +200,10 @@ namespace EtwPilot.View
 
         private void PayloadFilterPredicates_MouseDoubleClick(object sender, System.Windows.Input.MouseButtonEventArgs e)
         {
-            var vm = GlobalStateViewModel.Instance.g_SessionFormViewModel.CurrentProviderFilterForm;
+            var vm = DataContext as ProviderFilterFormViewModel;
             if (vm == null)
             {
+                Debug.Assert(false);
                 return;
             }
             var filter = ((DataGrid)sender).CurrentCell.Item as PayloadFilterPredicateViewModel;
@@ -206,9 +217,10 @@ namespace EtwPilot.View
 
         private void PayloadFilterPredicates_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
-            var vm = GlobalStateViewModel.Instance.g_SessionFormViewModel.CurrentProviderFilterForm;
+            var vm = DataContext as ProviderFilterFormViewModel;
             if (vm == null)
             {
+                Debug.Assert(false);
                 return;
             }
             vm.RemovePredicateCommand.NotifyCanExecuteChanged();
@@ -218,84 +230,19 @@ namespace EtwPilot.View
 
         #region Choose Columns
 
-        private void TabControl_SelectionChanged(object sender, SelectionChangedEventArgs e)
-        {
-            if (e.AddedItems.Count == 0)
-            {
-                return;
-            }
-            var tab = e.AddedItems[0] as TabItem;
-            if (tab == null || tab.Name != "ChooseEtwColumnsTab")
-            {
-                return;
-            }
-            RefreshAvailableEtwColumns(sender);
-        }
-
-        private void TabControl_GotFocus(object sender, RoutedEventArgs e)
-        {
-            //
-            // This is hacky. Because we only use one static instance of this UI form,
-            // relying on XAML binding updates to take care of refreshing form content,
-            // the tab control's SelectionChanged callback won't get invoked when a
-            // new provider form is added when there was already another provider form
-            // and the "Choose Etw Columns" tab was already selected on that existing form.
-            // Thus, in that case, the new provider's form will have NO available columns
-            // to select from. To work around this, we'll just check for this case
-            // whenever the tab receives focus.
-            //
-            if (AvailableEtwColumnsDataGrid.Items.Count > 0)
-            {
-                return;
-            }
-            RefreshAvailableEtwColumns(sender);
-        }
-
-        private void RefreshAvailableEtwColumns(object sender)
-        {
-            var vm = GlobalStateViewModel.Instance.g_SessionFormViewModel.CurrentProviderFilterForm;
-            var uniqueEvents = new List<ParsedEtwManifestEvent>();
-            if (AttributeFilterEvents.SelectedItems != null)
-            {
-                var evt = AttributeFilterEvents.SelectedItems.Cast<
-                ParsedEtwManifestEvent>().ToList();
-                uniqueEvents = uniqueEvents.Union(evt).ToList();
-            }
-            if (StackwalkFilterEvents.SelectedItems != null)
-            {
-                var evt = StackwalkFilterEvents.SelectedItems.Cast<
-                ParsedEtwManifestEvent>().ToList();
-                uniqueEvents = uniqueEvents.Union(evt).ToList();
-            }
-            if (PayloadFilterEvents.SelectedItems != null)
-            {
-                var evt = PayloadFilterEvents.SelectedItems.Cast<
-                ParsedEtwManifestEvent>().ToList();
-                uniqueEvents = uniqueEvents.Union(evt).ToList();
-            }
-            if (uniqueEvents.Count == 0)
-            {
-                //
-                // The template fields from all events will be available
-                // for the user to pick from.
-                //
-                uniqueEvents = AttributeFilterEvents.Items.Cast<ParsedEtwManifestEvent>().ToList().Union(
-                    StackwalkFilterEvents.Items.Cast<
-                        ParsedEtwManifestEvent>().ToList().Union(
-                        PayloadFilterEvents.Items.Cast<ParsedEtwManifestEvent>().ToList())).ToList();
-            }
-            Debug.Assert(uniqueEvents.Count > 0);
-            vm.SetAvailableEtwColumnsFromUniqueEvents(uniqueEvents);
-        }
-
         private void ChosenEtwColumnsDataGrid_DataGridCellDoubleClick(object sender, System.Windows.Input.MouseButtonEventArgs e)
         {
             var cell = sender as DataGridCell;
-            var vm = GlobalStateViewModel.Instance.g_SessionFormViewModel.CurrentProviderFilterForm;
-            if (vm == null || cell == null || cell.Column.Header.ToString() != "IConverter")
+            if (cell == null || cell.Column.Header.ToString() != "IConverter")
             {
                 return;
-            }            
+            }
+            var vm = DataContext as ProviderFilterFormViewModel;
+            if (vm == null)
+            {
+                Debug.Assert(false);
+                return;
+            }
             var info = new DataGridCellInfo(cell);
             var filter = info.Item as EtwColumnViewModel;
             if (filter == null)
@@ -308,20 +255,35 @@ namespace EtwPilot.View
 
         private void ChosenEtwColumnsDataGrid_CellEditEnding(object sender, DataGridCellEditEndingEventArgs e)
         {
-            var vm = GlobalStateViewModel.Instance.g_SessionFormViewModel.CurrentProviderFilterForm;
+            var vm = DataContext as ProviderFilterFormViewModel;
+            if (vm == null)
+            {
+                Debug.Assert(false);
+                return;
+            }
             vm.EditingEtwColumn = false;
             NotifyCanExecuteChangedCommandButtons(vm);
         }
 
         private void ChosenEtwColumnsDataGrid_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
-            var vm = GlobalStateViewModel.Instance.g_SessionFormViewModel.CurrentProviderFilterForm;
+            var vm = DataContext as ProviderFilterFormViewModel;
+            if (vm == null)
+            {
+                Debug.Assert(false);
+                return;
+            }
             NotifyCanExecuteChangedCommandButtons(vm);
         }
 
         private void AvailableEtwColumnsDataGrid_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
-            var vm = GlobalStateViewModel.Instance.g_SessionFormViewModel.CurrentProviderFilterForm;
+            var vm = DataContext as ProviderFilterFormViewModel;
+            if (vm == null)
+            {
+                Debug.Assert(false);
+                return;
+            }
             NotifyCanExecuteChangedCommandButtons(vm);
         }
 
@@ -335,5 +297,32 @@ namespace EtwPilot.View
 
         #endregion
 
+        private void ProviderFilterFormTabControl_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            //
+            // When the ChooseEtwColumnsTab becomes selected, we have to refresh available
+            // columns - if no events from applicable tabs have been selected, we need to
+            // add all possible field/column names to the lsit.
+            //
+            var tabControl = sender as TabControl;
+            if (tabControl == null)
+            {
+                Debug.Assert(false);
+                return;
+            }
+            var tab = tabControl.SelectedItem as TabItem;
+            if (tab == null || tab.Name != "ChooseEtwColumnsTab")
+            {
+                return;
+            }
+            var vm = DataContext as ProviderFilterFormViewModel;
+            if (vm == null)
+            {
+                Debug.Assert(false);
+                return;
+            }
+            e.Handled = true;
+            vm.RefreshAvailableEtwColumnsCommand.Execute(null);
+        }
     }
 }

@@ -16,12 +16,14 @@ KIND, either express or implied.  See the License for the
 specific language governing permissions and limitations
 under the License.
 */
+using System.Collections.ObjectModel;
 using System.Diagnostics;
 using System.IO;
 using CommunityToolkit.Mvvm.Input;
 using EtwPilot.Model;
-using EtwPilot.Utilities;
+using Microsoft.Win32;
 using Newtonsoft.Json;
+using EtwPilot.Utilities;
 
 namespace EtwPilot.ViewModel
 {
@@ -34,6 +36,71 @@ namespace EtwPilot.ViewModel
                 "etwpilot"});
         public static readonly string DefaultSettingsFileName = "settings.json";
 
+        #region default formatters
+        private static readonly Guid s_Decimal2HexFormatterId = new Guid("7ca43fd3-972c-4e44-878d-812a9eec1888");
+        private static readonly Guid s_StackwalkAddressesToStringFormatterId = new Guid("bf5259b7-a1db-40bb-b099-d3046340d95b");
+
+        [JsonIgnore]
+        public List<Formatter> m_DefaultFormatters = new List<Formatter>() {
+            new Formatter() {
+                Id = s_Decimal2HexFormatterId,
+                Namespace = FormatterLibrary.GetGuidBasedName(s_Decimal2HexFormatterId, "Formatters"),
+                ClassName = FormatterLibrary.GetGuidBasedName(s_Decimal2HexFormatterId, "Class"),
+                FunctionName="Decimal2Hex",
+                Body="""
+                    if (Args.Length != 3)
+                    {
+                        throw new Exception($"Invalid argument length: Got {Args.Length}, expected 3");
+                    }
+                    var evt = Args[0] as ParsedEtwEvent;
+                    var contents = Args[1] as string;
+                    if (evt == null || string.IsNullOrEmpty(contents))
+                    {
+                        Trace(TraceLoggerType.AsyncFormatter, TraceEventType.Verbose, $"Decimal2Hex: returning null");
+                        return "";
+                    }
+                    var val = System.Convert.ToInt64(contents);
+                    Trace(TraceLoggerType.AsyncFormatter, TraceEventType.Verbose, $"Decimal2Hex: returning 0x{val:X}");
+                    return $"0x{val:X}";
+                    """
+            },
+            new Formatter() {
+                Id = s_StackwalkAddressesToStringFormatterId,
+                Namespace = FormatterLibrary.GetGuidBasedName(s_StackwalkAddressesToStringFormatterId, "Formatters"),
+                ClassName = FormatterLibrary.GetGuidBasedName(s_StackwalkAddressesToStringFormatterId, "Class"),
+                FunctionName="StackwalkAddressesToString",
+                Body="""
+                    if (Args.Length != 3)
+                    {
+                        throw new Exception($"Invalid argument length: Got {Args.Length}, expected 3");
+                    }
+                    var evt = Args[0] as ParsedEtwEvent;
+                    var contents = Args[1] as string;
+                    var stackwalkHelper = Args[2] as StackwalkHelper;
+                    if (evt == null || string.IsNullOrEmpty(contents) || stackwalkHelper == null)
+                    {
+                        Trace(TraceLoggerType.AsyncFormatter, TraceEventType.Verbose,
+                            $"StackwalkAddressesToString: returning null");
+                        return "";
+                    }
+                    var addresses = evt.StackwalkAddresses;
+                    if (addresses == null || addresses.Count == 0)
+                    {
+                        Trace(TraceLoggerType.AsyncFormatter, TraceEventType.Verbose, 
+                            $"StackwalkAddressesToString: no stackwalk addresses, returning null");
+                        return "";
+                    }
+                    var sb = new StringBuilder();
+                    await stackwalkHelper.ResolveAddresses((int)evt.ProcessId, addresses, sb);
+                    Trace(TraceLoggerType.AsyncFormatter, TraceEventType.Verbose,
+                        $"StackwalkAddressesToString: returning {sb.ToString()}");
+                    return sb.ToString();
+                    """
+            },
+        };
+
+        #endregion
+
         #region observable properties
 
         private string _DbghelpPath;
@@ -45,11 +112,14 @@ namespace EtwPilot.ViewModel
                 if (_DbghelpPath != value)
                 {
                     _DbghelpPath = value;
-                    OnPropertyChanged("DbghelpPath");
                     ClearErrors(nameof(DbghelpPath));
                     if (string.IsNullOrEmpty(value) || !File.Exists(value))
                     {
                         AddError(nameof(DbghelpPath), "DbghelpPath is null or invalid");
+                    }
+                    else
+                    {
+                        OnPropertyChanged("DbghelpPath");
                     }
                 }
             }
@@ -64,12 +134,14 @@ namespace EtwPilot.ViewModel
                 if (_SymbolPath != value)
                 {
                     _SymbolPath = value;
-                    OnPropertyChanged("SymbolPath");
-
                     ClearErrors(nameof(SymbolPath));
                     if (string.IsNullOrEmpty(value))
                     {
                         AddError(nameof(SymbolPath), "Symbol path is null");
+                    }
+                    else
+                    {
+                        OnPropertyChanged("SymbolPath");
                     }
                 }
             }
@@ -156,9 +228,9 @@ namespace EtwPilot.ViewModel
                     _ProviderCacheLocation = value;
                     OnPropertyChanged("ProviderCacheLocation");
                     ClearErrors(nameof(ProviderCacheLocation));
-                    if (string.IsNullOrEmpty(value))
+                    if (!string.IsNullOrEmpty(value) && !Path.Exists(value))
                     {
-                        AddError(nameof(ProviderCacheLocation), "Provider cache location is null");
+                        AddError(nameof(ProviderCacheLocation), "Provider cache location is invalid");
                     }
                 }
             }
@@ -186,23 +258,22 @@ namespace EtwPilot.ViewModel
             {
                 if (_ModelPath != value)
                 {
-                    ClearErrors(nameof(ModelPath));
                     _ModelPath = value;
-                    OnPropertyChanged("ModelPath");
                     if (!string.IsNullOrEmpty(value))
                     {
+                        ClearErrors(nameof(ModelPath));
                         if (!OnnxGenAIConfigModel.ValidateModelPath(ModelPath))
                         {
                             AddError(nameof(ModelPath), "Model path is invalid");
                         }
-                        else if (!OnnxGenAIConfigModel.ValidateEmbeddingsModelFile(EmbeddingsModelFile))
+                        else
                         {
-                            AddError(nameof(EmbeddingsModelFile), "Embeddings model file is invalid");
+                            OnPropertyChanged("ModelPath");
                         }
                     }
                     else
                     {
-                        ModelConfig = null;
+                        OnPropertyChanged("ModelPath");
                     }
                 }
             }
@@ -216,23 +287,23 @@ namespace EtwPilot.ViewModel
             {
                 if (_EmbeddingsModelFile != value)
                 {
-                    ClearErrors(nameof(EmbeddingsModelFile));
                     _EmbeddingsModelFile = value;
-                    OnPropertyChanged("EmbeddingsModelFile");
                     if (!string.IsNullOrEmpty(value))
                     {
-                        if (!OnnxGenAIConfigModel.ValidateModelPath(ModelPath))
-                        {
-                            AddError(nameof(ModelPath), "Model path is invalid");
-                        }
-                        else if (!OnnxGenAIConfigModel.ValidateEmbeddingsModelFile(EmbeddingsModelFile))
+                        ClearErrors(nameof(EmbeddingsModelFile));
+                        if (!OnnxGenAIConfigModel.ValidateEmbeddingsModelFile(EmbeddingsModelFile))
                         {
                             AddError(nameof(EmbeddingsModelFile), "Embeddings model file is invalid");
+                        }
+                        else
+                        {
+                            OnPropertyChanged("EmbeddingsModelFile");
                         }
                     }
                     else
                     {
                         ModelConfig = null;
+                        OnPropertyChanged("EmbeddingsModelFile");
                     }
                 }
             }
@@ -252,47 +323,80 @@ namespace EtwPilot.ViewModel
             }
         }
 
-        [JsonIgnore]
-        private bool _NewSettingsReady;
-        [JsonIgnore]
-        public bool NewSettingsReady
+        [JsonIgnore] // only used for UI
+        private bool _Valid;
+        public bool Valid
         {
-            get => _NewSettingsReady;
+            get => _Valid;
             set
             {
-                if (_NewSettingsReady != value)
+                if (_Valid != value)
                 {
-                    _NewSettingsReady = value;
-                    OnPropertyChanged("NewSettingsReady");
+                    _Valid = value;
+                    OnPropertyChanged("Valid");
                 }
             }
         }
+
         #endregion
-
-        [JsonIgnore]
-        public bool HasUnsavedChanges { get; set; }
-
-        [JsonIgnore]
-        public bool HasModelRelatedUnsavedChanges { get; set; }
 
         #region commands
         [JsonIgnore]
-        public AsyncRelayCommand LoadSettingsCommand { get; set; }
+        public RelayCommand LoadSettingsCommand { get; set; }
         [JsonIgnore]
-        public AsyncRelayCommand SaveSettingsCommand { get; set; }
+        public RelayCommand SaveSettingsCommand { get; set; }
+        [JsonIgnore]
+        public RelayCommand<Formatter> RemoveFormatterCommand { get; set; }
+        [JsonIgnore]
+        public RelayCommand<Formatter> AddFormatterCommand { get; set; }
+        [JsonIgnore]
+        public RelayCommand<Formatter> UpdateFormatterCommand { get; set; }
+        [JsonIgnore]
+        public RelayCommand AddDefaultFormattersCommand { get; set; }
+
+        public ObservableCollection<Formatter> Formatters { get; set; }
 
         #endregion
 
+        //
+        // The way we notify VMs that their settings changed is to keep a list of properties
+        // that changed in the Settings object while the form was open - when it closes,
+        // inside MainWindowView code-behind, we send the list to the VM's
+        // SettingsChanged_Command command. The reason we don't use INotifyPropertyChanged
+        // directly is that this would cause the VM to re-evaluate or re-initialize every
+        // time a single property changed, which makes no sense.
+        //
+        // Note: optional properties that are null'ed do make the list - but such properties
+        // that are assigned an invalid value do NOT make this list and do NOT persist to
+        // the settings file.
+        //
+        [JsonIgnore]
+        public List<string> ChangedProperties;
+
+        //
+        // This formatter object is only used for validating the settings form.
+        // Formatters are copied into live sessions because they contain a compiled
+        // assembly that must be readonly.
+        //
+        [JsonIgnore]
+        public FormatterLibrary m_FormatterLibrary { get; private set; }
+
         public SettingsFormViewModel() : base()
         {
-            LoadSettingsCommand = new AsyncRelayCommand(Command_LoadSettings, () => { return true; });
-            SaveSettingsCommand = new AsyncRelayCommand(Command_SaveSettings, () => { return !HasErrors; });
+            LoadSettingsCommand = new RelayCommand(Command_LoadSettings, () => { return true; });
+            SaveSettingsCommand = new RelayCommand(Command_SaveSettings, () => { return !HasErrors; });
+            RemoveFormatterCommand = new RelayCommand<Formatter>(
+                Command_RemoveFormatter, _ => { return true; });
+            AddFormatterCommand = new RelayCommand<Formatter>(
+                Command_AddFormatter, _ => { return true; });
+            UpdateFormatterCommand = new RelayCommand<Formatter>(
+                Command_UpdateFormatter, _ => { return true; });
+            AddDefaultFormattersCommand = new RelayCommand(
+                Command_AddDefaultFormatters, () => { return true; });
 
-            PropertyChanged += (obj, args) =>
-            {
-                LoadSettingsCommand.NotifyCanExecuteChanged();
-                SaveSettingsCommand.NotifyCanExecuteChanged();
-            };
+            ChangedProperties = new List<string>();
+            Formatters = new ObservableCollection<Formatter>();
+            m_FormatterLibrary = new FormatterLibrary();
 
             if (!Directory.Exists(DefaultWorkingDirectory))
             {
@@ -315,20 +419,58 @@ namespace EtwPilot.ViewModel
             TraceLevelApp = SourceLevels.Verbose;
             TraceLevelEtwlib = SourceLevels.Critical;
             TraceLevelSymbolresolver = SourceLevels.Critical;
+            Valid = true;
+
+            ErrorsChanged += (object? sender, System.ComponentModel.DataErrorsChangedEventArgs e) =>
+            {
+                //
+                // This is solely used to update UI
+                //
+                Valid = !HasErrors;
+            };
         }
 
-        protected override Task ExportData(DataExporter.ExportFormat Format, CancellationToken Token)
+        public void InitializeFromCodeBehind()
         {
-            throw new NotImplementedException();
+            //
+            // We don't do this in ctor because init of class members would make tracking
+            // field changes useless, because there would always be a change due to ctor.
+            //
+            PropertyChanged += (obj, args) =>
+            {
+                if (!string.IsNullOrEmpty(args.PropertyName) &&
+                    !ChangedProperties.Contains(args.PropertyName))
+                {
+                    ChangedProperties.Add(args.PropertyName);
+                }
+                LoadSettingsCommand.NotifyCanExecuteChanged();
+                SaveSettingsCommand.NotifyCanExecuteChanged();
+            };
+
+            Formatters.CollectionChanged += (sender, e) =>
+            {
+                if (!ChangedProperties.Contains(nameof(Formatters)))
+                {
+                    ChangedProperties.Add(nameof(Formatters));
+                }
+            };
         }
+
         public static SettingsFormViewModel LoadDefault()
         {
+            //
+            // Important: This settings load path is _only_ invoked from the GlobalStateViewModel
+            // singleton on app startup. There are no listeners at this point, so no need to
+            // report this via the SettingsChanged command for VMs. Validation is also NOT
+            // performed in this path, as GlobalStateViewModel instance has not been constructed yet.
+            //
+
             var target = Path.Combine(DefaultWorkingDirectory, DefaultSettingsFileName);
             if (File.Exists(target))
             {
                 try
                 {
-                    return Load(target);
+                    return Load(target, Validate:false);
                 }
                 catch (Exception ex)
                 {
@@ -337,17 +479,42 @@ namespace EtwPilot.ViewModel
                           $"Failed to load default settings: {ex.Message}");
                 }
             }
-            return new SettingsFormViewModel();
+            var newSettings = new SettingsFormViewModel();
+            newSettings.AddDefaultFormattersCommand.Execute(null);
+            return newSettings;
         }
 
-        private async Task Command_LoadSettings()
+        public async Task<bool> Validate()
         {
-            var dialog = new System.Windows.Forms.OpenFileDialog();
+            //
+            // This routine is invoked in two places:
+            //      1) in this file, whenever a new SettingsFormViewModel object is created
+            //      2) from GlobalStateViewModel:ApplySettingsChanges() when pending changes
+            //      are about to be sent to all the VMs.
+            //
+
+            ClearErrors(nameof(Formatters));
+            if (!await m_FormatterLibrary.Publish(Formatters.ToList()))
+            {
+                AddError(nameof(Formatters), "Failed to publish formatters");
+            }
+
+            //
+            // Most validation occurs in setters - when a value is changed to something
+            // invalid, a form error is added.
+            //
+            return !HasErrors;
+        }
+
+        private void Command_LoadSettings()
+        {
+            var dialog = new OpenFileDialog();
             dialog.CheckFileExists = true;
             dialog.CheckPathExists = true;
             dialog.Multiselect = false;
+            var result = dialog.ShowDialog();
 
-            if (dialog.ShowDialog() != System.Windows.Forms.DialogResult.OK)
+            if (!result.HasValue || !result.Value)
             {
                 return;
             }
@@ -358,25 +525,77 @@ namespace EtwPilot.ViewModel
             }
             catch (Exception ex)
             {
-                System.Windows.Forms.MessageBox.Show(
+                ProgressState.FinalizeProgress(
                     $"Unable to load settings from {dialog.FileName}: {ex.Message}");
                 return;
             }
             ProgressState.FinalizeProgress($"Successfully loaded settings from {dialog.FileName}");
         }
 
-        private async Task Command_SaveSettings()
+        private void Command_SaveSettings()
         {
-            var sfd = new System.Windows.Forms.SaveFileDialog();
+            var sfd = new SaveFileDialog();
             sfd.Filter = "json files (*.json)|*.json";
             sfd.RestoreDirectory = true;
+            var result = sfd.ShowDialog();
 
-            if (sfd.ShowDialog() != System.Windows.Forms.DialogResult.OK)
+            if (!result.HasValue || !result.Value)
             {
                 return;
             }
 
             Save(sfd.FileName);
+        }
+
+        private void Command_RemoveFormatter(Formatter? Formatter)
+        {
+            if (Formatter == null)
+            {
+                Debug.Assert(false);
+                return;
+            }
+            Formatters.Remove(Formatter);
+        }
+
+        private void Command_AddFormatter(Formatter? Formatter)
+        {
+            if (Formatter == null)
+            {
+                Debug.Assert(false);
+                return;
+            }
+            Formatters.Add(Formatter);
+        }
+
+        private void Command_AddDefaultFormatters()
+        {
+            if (!Formatters.ToList().Any(f => f.Id == s_Decimal2HexFormatterId))
+            {
+                AddFormatterCommand.Execute(m_DefaultFormatters[0]);
+            }
+            if (!Formatters.ToList().Any(f => f.Id == s_StackwalkAddressesToStringFormatterId))
+            {
+                AddFormatterCommand.Execute(m_DefaultFormatters[1]);
+            }
+        }
+
+        private void Command_UpdateFormatter(Formatter? NewFormatter)
+        {
+            if (NewFormatter == null)
+            {
+                Debug.Assert(false);
+                return;
+            }
+            //
+            // Since we're updating the entry in place, the collectionChanged event
+            // won't be raised. We have to manually note that this field was modified
+            // so that it gets persisted and VMs get notified.
+            //
+            var errorPropertyName = NewFormatter.Id.ToString();
+            if (!ChangedProperties.Contains(errorPropertyName))
+            {
+                ChangedProperties.Add(errorPropertyName);
+            }
         }
 
         public void Save(string? Target)
@@ -392,10 +611,9 @@ namespace EtwPilot.ViewModel
             }
             catch (Exception ex)
             {
-                System.Windows.Forms.MessageBox.Show($"Unable to save settings: {ex.Message}");
+                ProgressState.FinalizeProgress($"Unable to save settings: {ex.Message}");
                 return;
             }
-            NewSettingsReady = true; // cheap way to trigger listeners that new settings are ready
             ProgressState.FinalizeProgress($"Successfully saved settings to {target}");
         }
 
@@ -411,7 +629,6 @@ namespace EtwPilot.ViewModel
                 };
                 json = JsonConvert.SerializeObject(this, settings);
                 File.WriteAllText(Target, json);
-                HasUnsavedChanges = false;
             }
             catch (Exception ex)
             {
@@ -419,7 +636,7 @@ namespace EtwPilot.ViewModel
             }
         }
 
-        private static SettingsFormViewModel Load(string Location)
+        private static SettingsFormViewModel Load(string Location, bool Validate=true)
         {
             if (!File.Exists(Location))
             {
@@ -439,9 +656,25 @@ namespace EtwPilot.ViewModel
                     //
                     settings.ModelConfig.SearchOptions.PropertyChanged += (obj, p) =>
                     {
-                        settings.HasUnsavedChanges = true;
-                        settings.HasModelRelatedUnsavedChanges = true;
+                        if (!settings.ChangedProperties.Contains(nameof(ModelConfig)))
+                        {
+                            settings.ChangedProperties.Add(nameof(ModelConfig));
+                        }
                     };
+                }
+                if (settings.Formatters.Count == 0)
+                {
+                    settings.AddDefaultFormattersCommand.Execute(null);
+                }
+
+                if (Validate)
+                {
+                    //
+                    // Validate the deserialized object. Most form errors should have been
+                    // populated at this point, but there are some checks that must be
+                    // done after the settings object has been fully formed.
+                    //
+                    _ = settings.Validate();
                 }
                 return settings;
             }
@@ -476,8 +709,10 @@ namespace EtwPilot.ViewModel
                     //
                     ModelConfig.SearchOptions.PropertyChanged += (obj, p) =>
                     {
-                        HasUnsavedChanges = true;
-                        HasModelRelatedUnsavedChanges = true;
+                        if (!ChangedProperties.Contains(nameof(ModelConfig)))
+                        {
+                            ChangedProperties.Add(nameof(ModelConfig));
+                        }
                     };
                 }
             }

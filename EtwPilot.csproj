@@ -2,12 +2,12 @@
 
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
-    <TargetFramework>net8.0-windows</TargetFramework>
+    <TargetFramework>net9.0-windows7.0</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <UseWPF>true</UseWPF>
     <PlatformTarget>x64</PlatformTarget>
-    <Platforms>x64</Platforms>
+    <Platforms>x64;AnyCPU</Platforms>
     <Configurations>Debug;Release;Debug_Cuda;Release_Cuda;Debug_DirectML;Release_DirectML</Configurations>
     <XamlDebuggingInformation>True</XamlDebuggingInformation>
   </PropertyGroup>
@@ -22,6 +22,55 @@
 
   <PropertyGroup>
     <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <NoWarn>1701;1702;8618</NoWarn>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|AnyCPU'">
+    <NoWarn>1701;1702;8618</NoWarn>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <NoWarn>1701;1702;8618</NoWarn>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|AnyCPU'">
+    <NoWarn>1701;1702;8618</NoWarn>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug_Cuda|x64'">
+    <NoWarn>1701;1702;8618</NoWarn>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug_Cuda|AnyCPU'">
+    <NoWarn>1701;1702;8618</NoWarn>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release_Cuda|x64'">
+    <NoWarn>1701;1702;8618</NoWarn>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release_Cuda|AnyCPU'">
+    <NoWarn>1701;1702;8618</NoWarn>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug_DirectML|x64'">
+    <NoWarn>1701;1702;8618</NoWarn>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug_DirectML|AnyCPU'">
+    <NoWarn>1701;1702;8618</NoWarn>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release_DirectML|x64'">
+    <NoWarn>1701;1702;8618</NoWarn>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release_DirectML|AnyCPU'">
+    <NoWarn>1701;1702;8618</NoWarn>
   </PropertyGroup>
     
   <ItemGroup>
@@ -45,24 +94,22 @@
     <Resource Include="images\provdb.png" />
   </ItemGroup>
 
-  <ItemGroup>
-    <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.0-preview2" />
-    <PackageReference Include="etwlib" Version="1.11.2" />
-    <PackageReference Include="Fluent.Ribbon" Version="11.0.0-rc0264" />
-    <PackageReference Include="Meziantou.Framework.WPF" Version="1.5.6" />
-    <PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="4.12.0-3.final" />
-    <PackageReference Include="Microsoft.KernelMemory.SemanticKernelPlugin" Version="0.93.241118.1" />
-    <PackageReference Include="Microsoft.ML.OnnxRuntimeGenAI" Version="0.5.1" Condition=" '$(Configuration)' == 'Debug' OR '$(Configuration)' == 'Release' " />
-    <PackageReference Include="Microsoft.ML.OnnxRuntimeGenAI.Cuda" Version="0.4.0" Condition=" '$(Configuration)' == 'Debug_Cuda' OR '$(Configuration)' == 'Release_Cuda' " />
-    <PackageReference Include="Microsoft.ML.OnnxRuntimeGenAI.DirectML" Version="0.4.0" Condition=" '$(Configuration)' == 'Debug_DirectML' OR '$(Configuration)' == 'Release_DirectML' " />
-    <PackageReference Include="Microsoft.SemanticKernel" Version="1.30.0" />
-    <PackageReference Include="Microsoft.SemanticKernel.Abstractions" Version="1.30.0" />
-    <PackageReference Include="Microsoft.SemanticKernel.Connectors.Onnx" Version="1.29.0-alpha" />
-    <PackageReference Include="Microsoft.SemanticKernel.Connectors.Qdrant" Version="1.29.0-preview" />
-    <PackageReference Include="Microsoft.SemanticKernel.Core" Version="1.30.0" />
-    <PackageReference Include="Microsoft.SemanticKernel.Plugins.Memory" Version="1.29.0-alpha" />
+  <ItemGroup>	
+	<PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.0" />
+    <PackageReference Include="etwlib" Version="1.11.3" />
+    <PackageReference Include="Fluent.Ribbon" Version="11.0.0" />
+    <PackageReference Include="Meziantou.Framework.WPF" Version="1.5.7" />
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="4.13.0" />
+    <PackageReference Include="Microsoft.KernelMemory.SemanticKernelPlugin" Version="0.97.250211.1" />
+    <PackageReference Include="Microsoft.SemanticKernel" Version="1.40.1" />
+    <PackageReference Include="Microsoft.SemanticKernel.Abstractions" Version="1.40.1" />
+    <PackageReference Include="Microsoft.SemanticKernel.Connectors.Onnx" Version="1.40.1-alpha" />
+    <PackageReference Include="Microsoft.SemanticKernel.Connectors.Qdrant" Version="1.40.1-preview" />
+    <PackageReference Include="Microsoft.SemanticKernel.Core" Version="1.40.1" />
     <PackageReference Include="Microsoft.Xaml.Behaviors.Wpf" Version="1.1.135" />
     <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
+	
+	
   </ItemGroup>
 
   <ItemGroup>

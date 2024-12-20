@@ -39,7 +39,7 @@ namespace EtwPilot.Utilities
             }
             else
             {
-                scrollViewer.ScrollChanged -= ScrollViewer_ScrollChanged;
+                scrollViewer!.ScrollChanged -= ScrollViewer_ScrollChanged;
             }
         }
 

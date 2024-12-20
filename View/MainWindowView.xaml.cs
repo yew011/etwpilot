@@ -18,6 +18,7 @@ under the License.
 */
 using EtwPilot.ViewModel;
 using Fluent;
+using System.Diagnostics;
 
 namespace EtwPilot
 {
@@ -47,18 +48,28 @@ namespace EtwPilot
             });
         }
 
-        private void Backstage_IsOpenChanged(object sender, System.Windows.DependencyPropertyChangedEventArgs e)
+        private async void Backstage_IsOpenChanged(object sender, System.Windows.DependencyPropertyChangedEventArgs e)
         {
             var newvalue = (bool)e.NewValue;
             var oldvalue = (bool)e.OldValue;
             if (oldvalue && !newvalue)
             {
                 if (!GlobalStateViewModel.Instance.Settings.HasErrors &&
-                    GlobalStateViewModel.Instance.Settings.HasUnsavedChanges)
+                    GlobalStateViewModel.Instance.Settings.ChangedProperties.Count > 0)
                 {
-                    GlobalStateViewModel.Instance.Settings.Save(null);
+                    await GlobalStateViewModel.Instance.ApplySettingsChanges();
                 }
             }
+        }
+
+        private void MainRibbonWindow_Loaded(object sender, System.Windows.RoutedEventArgs e)
+        {
+            if (MainWindowRibbon.TitleBar == null)
+            {
+                Debug.Assert(false);
+                return;
+            }
+            MainWindowRibbon.TitleBar.HideContextTabs = false;
         }
     }
 }

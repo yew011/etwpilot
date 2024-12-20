@@ -47,35 +47,62 @@ namespace EtwPilot.ViewModel
             }
         }
 
+        //
+        // This is required in order to have something to bind to LiveSessionView.xaml.
+        // It is updated whenever the selected contextual tab changes for the live
+        // session, from MainWindowViewModel, which invokes SessionViewModel's
+        // ShowSessionCommand, which calls the appropriate LiveSessionViewModel's
+        // ViewModelActivated().
+        //
+        private LiveSessionViewModel _CurrentLiveSession;
+        public LiveSessionViewModel CurrentLiveSession
+        {
+            get => _CurrentLiveSession;
+            set
+            {
+                if (_CurrentLiveSession != value)
+                {
+                    _CurrentLiveSession = value;
+                    OnPropertyChanged("CurrentLiveSession");
+                }
+            }
+        }
+
         #endregion
 
         #region commands
 
         public AsyncRelayCommand LoadSessionsCommand { get; set; }
-        public AsyncRelayCommand NewSessionCommand { get; set; }
+        public RelayCommand NewSessionCommand { get; set; }
         public AsyncRelayCommand StartSessionCommand { get; set; }
+        public AsyncRelayCommand<LiveSessionViewModel> ShowSessionCommand { get; set; }
         public AsyncRelayCommand StopAllSessionsCommand { get; set; }
+        public AsyncRelayCommand<LiveSessionViewModel> CloseDynamicTab { get; set; }
 
         #endregion
 
         public List<ParsedEtwSession> SelectedSessions;
         private SessionModel Model;
-        private Dictionary<string, LiveSessionViewModel> LiveSessionCache;
+        public ObservableCollection<LiveSessionViewModel> LiveSessions;
 
         public SessionViewModel() : base()
         {
             Sessions = new ObservableCollection<ParsedEtwSession>();
             Model = new SessionModel();
             SelectedSessions = new List<ParsedEtwSession>();
-            LiveSessionCache = new Dictionary<string, LiveSessionViewModel>();
+            LiveSessions = new ObservableCollection<LiveSessionViewModel>();
 
             LoadSessionsCommand = new AsyncRelayCommand(Command_LoadSessions, () => { return true; });
-            NewSessionCommand = new AsyncRelayCommand(
+            NewSessionCommand = new RelayCommand(
                 Command_NewSession, () => { return true; });
             StartSessionCommand = new AsyncRelayCommand(
                 Command_StartSession, CanExecuteStartSession);
             StopAllSessionsCommand = new AsyncRelayCommand(
                 Command_StopAllSessions, CanExecuteStopAllSessions);
+            ShowSessionCommand = new AsyncRelayCommand<LiveSessionViewModel>(
+                Command_ShowSession, _ => true);
+            CloseDynamicTab = new AsyncRelayCommand<LiveSessionViewModel>(
+                Command_CloseDynamicTab, _ => true);
         }
 
         public override async Task ViewModelActivated()
@@ -87,22 +114,8 @@ namespace EtwPilot.ViewModel
             GlobalStateViewModel.Instance.CurrentViewModel = this;
         }
 
-        public async Task ActivateLiveSessionViewModel(string TabName)
-        {
-            //
-            // Note: In the StartLiveSession workflow, the VM is activated before the
-            // tab has been created, so it won't show in the cache here!
-            //
-            if (LiveSessionCache.ContainsKey(TabName))
-            {
-                await LiveSessionCache[TabName].ViewModelActivated();
-            }
-            NotifyCanExecuteChanged();
-        }
-
         private async Task Command_LoadSessions()
         {
-            GlobalStateViewModel.Instance.CurrentViewModel = this;
             ProgressState.InitializeProgress(1);
             var sessions = await Model.GetSessions();
             if (sessions == null)
@@ -115,7 +128,7 @@ namespace EtwPilot.ViewModel
             sessions.ForEach(s => Sessions.Add(s));
         }
 
-        private async Task Command_NewSession()
+        private void Command_NewSession()
         {
             var g_MainWindowVm = UiHelper.GetGlobalResource<MainWindowViewModel>(
                 "g_MainWindowViewModel");
@@ -124,6 +137,25 @@ namespace EtwPilot.ViewModel
                 return;
             }
             g_MainWindowVm.RibbonTabControlSelectedIndex = 1;
+        }
+
+        public async Task Command_ShowSession(LiveSessionViewModel? LiveSession)
+        {
+            if (LiveSession == null)
+            {
+                Debug.Assert(false);
+                return;
+            }
+            //
+            // Note: In the StartLiveSession workflow, the VM is activated before the
+            // tab has been created, so it won't show in the cache here!
+            //
+            var livesession = LiveSessions.FirstOrDefault(ls => ls.Configuration.Id == LiveSession.Configuration.Id);
+            if (livesession != default)
+            {
+                await livesession.ViewModelActivated();
+            }
+            NotifyCanExecuteChanged();
         }
 
         private async Task Command_StartSession()
@@ -150,43 +182,36 @@ namespace EtwPilot.ViewModel
                 () => {
                     NotifyCanExecuteChanged();
                 });
-            await vm.ViewModelActivated();
 
-
-            //
-            // Create a UI contextual tab for this live session
-            //
-            Func<string, Task<bool>> tabClosedCallback = async delegate (string TabName)
+            if (!await vm.Initialize())
             {
-                var result = await StopLiveSession(vm);
-                if (!result)
-                {
-                    return false;
-                }
-                LiveSessionCache.Remove(TabName);
-                return true;
-            };
+                ProgressState.EphemeralStatusText = "Live session failed to initialize";
+                return;
+            }
+
+            if (!vm.StartCommand.CanExecute(null))
+            {
+                //
+                // If this happens, we forgot to do something here.
+                //
+                Debug.Assert(false);
+                ProgressState.EphemeralStatusText = "Live session cannot be started";
+                return;
+            }
+
+            //
+            // Create a UI contextual tab for this live session.
+            //
             var tabName = UiHelper.GetUniqueTabName(vm.Configuration.Id, "LiveSession");
-            var tab = UiHelper.CreateRibbonContextualTab(
+            if (!UiHelper.CreateRibbonContextualTab(
                     tabName,
                     vm.Configuration.Name,
                     1,
                     new Dictionary<string, List<string>>() {
                         { "Control", new List<string> { "LiveSessionStopButtonStyle" } },
                         { "Actions", new List<string> { "LiveSessionInsightsButtonStyle" } },
-                        { "Export", new List<string> {
-                            "ExportJSONButtonStyle",
-                            "ExportCSVButtonStyle",
-                            "ExportXMLButtonStyle",
-                            "ExportClipboardButtonStyle",
-                        } },
                     },
-                    "SessionContextTabStyle",
-                    "SessionContextTabText",
-                    "SessionContextTabCloseButton",
-                    vm,
-                    tabClosedCallback);
-            if (tab == null)
+                    vm))
             {
                 Trace(TraceLoggerType.LiveSession,
                       TraceEventType.Error,
@@ -194,36 +219,71 @@ namespace EtwPilot.ViewModel
                 return;
             }
 
-            Debug.Assert(!LiveSessionCache.ContainsKey(tabName));
-            LiveSessionCache.Add(tabName, vm);
+            LiveSessions.Add(vm);
+
+            //
+            // Display the VM
+            //
+            await vm.ViewModelActivated();
+
             //
             // Disable CS4014 - we don't want to await this call, because it doesn't return
             // until the LiveSession is stopped...
             //
 #pragma warning disable CS4014
-            vm.StartLiveSessionCommand.ExecuteAsync(null);
+            vm.StartCommand.ExecuteAsync(null);
 #pragma warning restore CS4014
         }
 
         private async Task<bool> Command_StopAllSessions()
         {
-            var total = LiveSessionCache.Count;
+            var total = LiveSessions.Count;
             var i = 1;
             ProgressState.InitializeProgress(total);
-            foreach (var kvp in LiveSessionCache)
+            foreach (var session in LiveSessions)
             {
-                var vm = kvp.Value;
                 ProgressState.UpdateProgressMessage(
                     $"Please wait, stopping live session {i++} of {total}...");
-                if (!await StopLiveSession(vm))
+                if (!session.IsRunning() || session.IsStopping())
                 {
-                    return false;
+                    continue;
                 }
+                ProgressState.UpdateProgressMessage($"Live session stop requested...");
+                await session.StopCommand.ExecuteAsync(null);
+                ProgressState.UpdateProgressMessage($"Live session stopped");
                 ProgressState.UpdateProgressValue();
             }
             ProgressState.FinalizeProgress("All live sessions stopped.");
             NotifyCanExecuteChanged();
             return true;
+        }
+
+        public async Task Command_CloseDynamicTab(LiveSessionViewModel? ViewModel)
+        {
+            if (ViewModel == null)
+            {
+                Debug.Assert(false);
+                return;
+            }
+            //
+            // Stop the live session if necessary and remove it from our list.
+            //
+            if (ViewModel.StopCommand.CanExecute(null))
+            {
+                await ViewModel.StopCommand.ExecuteAsync(null);
+            }
+            var result = LiveSessions.Remove(ViewModel);
+            Debug.Assert(result);
+
+            //
+            // Remove the contextual tab from the main ribbon tab control.
+            //
+            var tabName = UiHelper.GetUniqueTabName(ViewModel.Configuration.Id, "LiveSession");
+            if (!UiHelper.RemoveRibbonContextualTab(tabName))
+            {
+                Debug.Assert(false);
+                return;
+            }
         }
 
         protected override async Task ExportData(DataExporter.ExportFormat Format, CancellationToken Token)
@@ -262,7 +322,28 @@ namespace EtwPilot.ViewModel
                     result = await DataExporter.Export<List<ParsedEtwSession>>(
                         sessions, Format, "Sessions", Token);
                 }
+                if (result.Item1 == 0 || result.Item2 == null)
+                {
+                    ProgressState.FinalizeProgress("");
+                    return;
+                }
                 ProgressState.FinalizeProgress($"Exported {result.Item1} records to {result.Item2}");
+                if (Format != DataExporter.ExportFormat.Clip)
+                {
+                    ProgressState.SetFollowupActionCommand.Execute(
+                        new FollowupAction()
+                        {
+                            Title = "Open",
+                            Callback = new Action<dynamic>((args) =>
+                            {
+                                var psi = new ProcessStartInfo();
+                                psi.FileName = result.Item2;
+                                psi.UseShellExecute = true;
+                                Process.Start(psi);
+                            }),
+                            CallbackArgument = null
+                        });
+                }
             }
             catch (Exception ex)
             {
@@ -270,29 +351,11 @@ namespace EtwPilot.ViewModel
             }
         }
 
-        public bool HasLiveSessions() => LiveSessionCache.Count > 0;
-        public bool HasActiveLiveSessions() => LiveSessionCache.Values.Any(
+        public bool HasLiveSessions() => LiveSessions.Count > 0;
+        public bool HasActiveLiveSessions() => LiveSessions.Any(
             s => s.IsRunning() && !s.IsStopping());
-        public LiveSessionViewModel GetMostRecentLiveSession() => LiveSessionCache.Values.Where(
+        public LiveSessionViewModel GetMostRecentLiveSession() => LiveSessions.Where(
             s => s.IsRunning() && !s.IsStopping()).OrderByDescending(s => s.StartTime).First();
-
-        private async Task<bool> StopLiveSession(LiveSessionViewModel LiveSession)
-        {
-            if (!LiveSession.IsRunning())
-            {
-                return true;
-            }
-            if (LiveSession.IsStopping())
-            {
-                ProgressState.UpdateProgressMessage($"Stop in progress, please wait...");
-                return false;
-            }
-            ProgressState.UpdateProgressMessage($"Live session stop requested...");
-            await LiveSession.StopLiveSessionCommand.ExecuteAsync(null);
-            ProgressState.UpdateProgressMessage($"Live session stopped");
-            ProgressState.FinalizeProgress(null);
-            return true;
-        }
 
         public void NotifyCanExecuteChanged()
         {
@@ -302,7 +365,8 @@ namespace EtwPilot.ViewModel
 
         private bool CanExecuteStartSession()
         {
-            return !GlobalStateViewModel.Instance.g_SessionFormViewModel.HasErrors;
+            return !GlobalStateViewModel.Instance.g_SessionFormViewModel.HasErrors &&
+                !GlobalStateViewModel.Instance.Settings.HasErrors;
         }
 
         private bool CanExecuteStopAllSessions()

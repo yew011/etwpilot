@@ -73,7 +73,7 @@ namespace EtwPilot.Vector
             return collection;
         }
 
-        public abstract Task<T> CreateRecord(dynamic Object, ITextEmbeddingGenerationService EmbeddingService);
+        public abstract Task<T> CreateRecord<T2>(T2 Object, ITextEmbeddingGenerationService EmbeddingService);
 
         public async Task<ulong> GetRecordCount()
         {
@@ -115,7 +115,7 @@ namespace EtwPilot.Vector
             _ = await Create(true);
         }
 
-        public async Task Import(List<dynamic> Data, CancellationToken Token)
+        public async Task Import<T2>(List<T2> Data, CancellationToken Token)
         {
             int total = Data.Count;
             if (total == 0)
@@ -183,9 +183,10 @@ namespace EtwPilot.Vector
                 {
                     throw new Exception($"HTTP status code is {response.StatusCode}");
                 }
-                var content = await response.Content.ReadAsByteArrayAsync().ConfigureAwait(false);
                 var target = Path.Combine(OutputPath, snapshotName);
-                File.WriteAllBytes(target, content);
+                using var downloadStream = await response.Content.ReadAsStreamAsync().ConfigureAwait(false);
+                using var fileStream = new FileStream(target, FileMode.Create, FileAccess.Write, FileShare.None, bufferSize: 4096, useAsync: true);
+                await downloadStream.CopyToAsync(fileStream).ConfigureAwait(false);
             }
             m_ProgressState.UpdateProgressValue();
         }

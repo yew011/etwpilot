@@ -22,7 +22,6 @@ using EtwPilot.ViewModel;
 namespace EtwPilot.Model
 {
     using StopCondition = ViewModel.LiveSessionViewModel.StopCondition;
-    using static EtwPilot.Utilities.TraceLogger;
 
     public class ConfiguredProvider
     {

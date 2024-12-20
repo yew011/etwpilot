@@ -13,12 +13,15 @@
     <Grid.RowDefinitions>
         <RowDefinition Height="*" />
     </Grid.RowDefinitions>
-    <TabControl Name="ManifestTabControl" Grid.Row="1">
+    <TabControl Name="ManifestTabControl"
+                Grid.Row="1"
+                LostFocus="ManifestTabControl_LostFocus"
+                SelectedIndex="{Binding TabControlSelectedIndex}">
         <TabItem Header="Events">
             <DataGrid Name="ManifestEventsDataGrid"
                       IsReadOnly="true"
                       AutoGenerateColumns="false"
-                      ItemsSource="{Binding SelectedProviderManifest.Events}">
+                      ItemsSource="{Binding m_Manifest.Events}">
                 <DataGrid.Columns>
                     <DataGridTextColumn Header="Id" Binding="{Binding Id}"/>
                     <DataGridTextColumn Header="Version" Binding="{Binding Version}" />
@@ -30,7 +33,7 @@
             <DataGrid Name="ManifestTasksDataGrid"
                       IsReadOnly="true"
                       AutoGenerateColumns="false"
-                      ItemsSource="{Binding SelectedProviderManifest.Tasks}">
+                      ItemsSource="{Binding m_Manifest.Tasks}">
                 <DataGrid.Columns>
                     <DataGridTextColumn Header="Name" Binding="{Binding Key.Name}"/>
                     <DataGridTextColumn Header="Value" Binding="{Binding Key.Value}" />
@@ -66,7 +69,7 @@
             <DataGrid Name="ManifestChannelsDataGrid"
                       IsReadOnly="true"
                       AutoGenerateColumns="false"
-                      ItemsSource="{Binding SelectedProviderManifest.Channels}">
+                      ItemsSource="{Binding m_Manifest.Channels}">
                 <DataGrid.Columns>
                     <DataGridTextColumn Header="Name" Binding="{Binding Name}"/>
                     <DataGridTextColumn Header="Value" Binding="{Binding Value}" />
@@ -78,7 +81,7 @@
             <DataGrid Name="ManifestKeywordsDataGrid"
                       IsReadOnly="true"
                       AutoGenerateColumns="false"
-                      ItemsSource="{Binding SelectedProviderManifest.Keywords}">
+                      ItemsSource="{Binding m_Manifest.Keywords}">
                 <DataGrid.Columns>
                     <DataGridTextColumn Header="Name" Binding="{Binding Name}"/>
                     <DataGridTextColumn Header="Value" Binding="{Binding Value, Converter={StaticResource DecimalToHex}}" />
@@ -90,7 +93,7 @@
             <DataGrid Name="ManifestTemplatesDataGrid"
                         IsReadOnly="true"
                         AutoGenerateColumns="false"
-                        ItemsSource="{Binding SelectedProviderManifest.Templates}">
+                        ItemsSource="{Binding m_Manifest.Templates}">
                 <DataGrid.Columns>
                     <DataGridTextColumn Header="Name" Binding="{Binding Key}"/>
                     <DataGridTextColumn Header="Fields" Binding="{Binding Value.Count}" />
@@ -126,7 +129,7 @@
             <DataGrid Name="ManifestStringsDataGrid"
                       IsReadOnly="true"
                       AutoGenerateColumns="false"
-                      ItemsSource="{Binding SelectedProviderManifest.StringTable}">
+                      ItemsSource="{Binding m_Manifest.StringTable}">
                 <DataGrid.Columns>
                     <DataGridTextColumn Header="Value" Binding="{Binding }" />
                 </DataGrid.Columns>

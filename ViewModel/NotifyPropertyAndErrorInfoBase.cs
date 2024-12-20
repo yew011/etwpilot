@@ -17,6 +17,7 @@ specific language governing permissions and limitations
 under the License.
 */
 using System.ComponentModel;
+using Newtonsoft.Json;
 
 namespace EtwPilot.ViewModel
 {
@@ -32,7 +33,7 @@ namespace EtwPilot.ViewModel
 
         #region INotifyPropertyChanged
 
-        public event PropertyChangedEventHandler PropertyChanged;
+        public event PropertyChangedEventHandler? PropertyChanged;
 
         protected void OnPropertyChanged(string propertyName)
         {
@@ -54,7 +55,7 @@ namespace EtwPilot.ViewModel
 
         protected void AddError(string propertyName, object newError)
         {
-            if (!Errors.TryGetValue(propertyName, out IList<object> propertyErrors))
+            if (!Errors.TryGetValue(propertyName, out IList<object>? propertyErrors))
             {
                 propertyErrors = new List<object>();
                 Errors.Add(propertyName, propertyErrors);
@@ -70,7 +71,7 @@ namespace EtwPilot.ViewModel
                 return;
             }
 
-            if (!Errors.TryGetValue(propertyName, out IList<object> propertyErrors))
+            if (!Errors.TryGetValue(propertyName, out IList<object>? propertyErrors))
             {
                 propertyErrors = new List<object>();
                 Errors.Add(propertyName, propertyErrors);
@@ -111,17 +112,18 @@ namespace EtwPilot.ViewModel
         }
 
         public bool PropertyHasErrors(string propertyName) =>
-            Errors.TryGetValue(propertyName, out IList<object> propertyErrors) && propertyErrors.Any();
+            Errors.TryGetValue(propertyName, out IList<object>? propertyErrors) && propertyErrors.Any();
 
-        public event EventHandler<DataErrorsChangedEventArgs> ErrorsChanged;
+        public event EventHandler<DataErrorsChangedEventArgs>? ErrorsChanged;
 
-        public System.Collections.IEnumerable GetErrors(string propertyName)
+        public System.Collections.IEnumerable GetErrors(string? propertyName)
           => string.IsNullOrWhiteSpace(propertyName)
             ? Errors.SelectMany(entry => entry.Value)
-            : Errors.TryGetValue(propertyName, out IList<object> errors)
+            : Errors.TryGetValue(propertyName, out IList<object>? errors)
               ? (IEnumerable<object>)errors
               : new List<object>();
 
+        [JsonIgnore]
         public bool HasErrors => Errors.Any();
 
         protected virtual void OnErrorsChanged(string propertyName)

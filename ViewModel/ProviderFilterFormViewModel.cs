@@ -18,7 +18,6 @@ under the License.
 */
 using CommunityToolkit.Mvvm.Input;
 using etwlib;
-using EtwPilot.Utilities.Converters;
 using EtwPilot.Utilities;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
@@ -29,11 +28,9 @@ using static etwlib.NativeTraceConsumer;
 
 namespace EtwPilot.ViewModel
 {
-    using static EtwPilot.Utilities.TraceLogger;
-
-    public class ProviderFilterFormViewModel : ViewModelBase
+    public class ProviderFilterFormViewModel : ViewModelBase, IEquatable<ProviderFilterFormViewModel>
     {
-        public Guid Id { get; set; }
+        public Guid TabId { get; set; }
         public ParsedEtwManifest Manifest { get; set; }
         public ScopeFilterViewModel ScopeFilter { get; set; }
         public AttributeFilterViewModel AttributeFilter { get; set; }
@@ -42,9 +39,78 @@ namespace EtwPilot.ViewModel
         public bool MatchAnyPredicate {get; set; }
         private static readonly int s_MaxColCount = 20;
 
+        public string m_TabText { get; set; }
+
+        #region IEquatable
+        public override bool Equals(object? Other)
+        {
+            if (Other == null)
+            {
+                return false;
+            }
+            var form = Other as ProviderFilterFormViewModel;
+            return Equals(form);
+        }
+
+        public bool Equals(ProviderFilterFormViewModel? Other)
+        {
+            if (Other == null)
+            {
+                return false;
+            }
+            return TabId == Other.TabId; // only one form per provider
+        }
+
+        public static bool operator ==(ProviderFilterFormViewModel? Obj1, ProviderFilterFormViewModel? Obj2)
+        {
+            if (Obj1 is null)
+            {
+                return Obj2 is null;
+            }
+            if (Obj2 is null)
+            {
+                return Obj1 is null;
+            }
+            if ((object)Obj1 == null || (object)Obj2 == null)
+                return Equals(Obj1, Obj2);
+            return Obj1.Equals(Obj2);
+        }
+
+        public static bool operator !=(ProviderFilterFormViewModel? Obj1, ProviderFilterFormViewModel? Obj2)
+        {
+            if (Obj1 is null)
+            {
+                return Obj2 is not null;
+            }
+            if (Obj2 is null)
+            {
+                return Obj1 is not null;
+            }
+            if ((object)Obj1 == null || (object)Obj2 == null)
+                return !Equals(Obj1, Obj2);
+            return !(Obj1.Equals(Obj2));
+        }
+
+        public override int GetHashCode()
+        {
+            return TabId.GetHashCode() +
+                Manifest.GetHashCode() +
+                ScopeFilter.GetHashCode() +
+                AttributeFilter.GetHashCode() +
+                StackwalkFilter.GetHashCode() +
+                EventsWithTemplates.GetHashCode();
+        }
+        #endregion
+
         #region default etw column defs
         private static readonly List<EtwColumnViewModel> s_DefaultEtwColumns = new List<EtwColumnViewModel>()
         {
+            //
+            // Note: these field names are reserved in ETW, so the "unique name" will later be
+            // set to the same value as Name.
+            //
+            // (ETW custom providers cannot name fields with these names).
+            //
             new EtwColumnViewModel()
             {
                 Name = "Provider",
@@ -80,12 +146,12 @@ namespace EtwPilot.ViewModel
             new EtwColumnViewModel()
             {
                 Name = "ProcessId",
-                IConverterCode = IConverterCode.s_DecimalToHexIConverterCode,
+                Formatter = GlobalStateViewModel.Instance.Settings.m_DefaultFormatters[0]
             },
             new EtwColumnViewModel()
             {
                 Name = "ThreadId",
-                IConverterCode = IConverterCode.s_DecimalToHexIConverterCode,
+                Formatter = GlobalStateViewModel.Instance.Settings.m_DefaultFormatters[0]
             },
             new EtwColumnViewModel()
             {
@@ -98,6 +164,11 @@ namespace EtwPilot.ViewModel
             new EtwColumnViewModel()
             {
                 Name = "Timestamp",
+            },
+            new EtwColumnViewModel()
+            {
+                Name = "StackwalkAddresses",
+                Formatter = GlobalStateViewModel.Instance.Settings.m_DefaultFormatters[1]
             },
         };
         #endregion
@@ -184,6 +255,21 @@ namespace EtwPilot.ViewModel
                 }
             }
         }
+
+        private int _SelectedTabIndex;
+        public int SelectedTabIndex
+        {
+            get => _SelectedTabIndex;
+            set
+            {
+                if (_SelectedTabIndex != value)
+                {
+                    _SelectedTabIndex = value;
+                    OnPropertyChanged("SelectedTabIndex");
+                }
+            }
+        }
+
         #endregion
 
         #region commands
@@ -191,22 +277,26 @@ namespace EtwPilot.ViewModel
         //
         // Predicate filters
         //
-        public AsyncRelayCommand AddPredicateCommand { get; set; }
-        public AsyncRelayCommand UpdatePredicateCommand { get; set; }
-        public AsyncRelayCommand CancelUpdatePredicateCommand { get; set; }
-        public AsyncRelayCommand<IEnumerable<object>?> RemovePredicateCommand { get; set; }
+        public RelayCommand AddPredicateCommand { get; set; }
+        public RelayCommand UpdatePredicateCommand { get; set; }
+        public RelayCommand CancelUpdatePredicateCommand { get; set; }
+        public RelayCommand<IEnumerable<object>?> RemovePredicateCommand { get; set; }
         //
         // Chosen etw columns for display
         //
-        public AsyncRelayCommand AddDefaultEtwColumnsCommand { get; set; }
-        public AsyncRelayCommand<IEnumerable<object>?> AddEtwColumnsCommand { get; set; }
-        public AsyncRelayCommand ClearEtwColumnCommand { get; set; }
-        public AsyncRelayCommand<IEnumerable<object>?> RemoveEtwColumnCommand { get; set; }
+        public RelayCommand AddDefaultEtwColumnsCommand { get; set; }
+        public RelayCommand<IEnumerable<object>?> AddEtwColumnsCommand { get; set; }
+        public RelayCommand ClearEtwColumnCommand { get; set; }
+        public RelayCommand<IEnumerable<object>?> RemoveEtwColumnCommand { get; set; }
+        public RelayCommand RefreshAvailableEtwColumnsCommand { get; set; }
         #endregion
 
         public ProviderFilterFormViewModel(ParsedEtwManifest Manifest2) : base()
         {
+            SelectedTabIndex = 0;
+            TabId = Manifest2.Provider.Id;
             Manifest = Manifest2;
+            m_TabText = string.IsNullOrEmpty(Manifest.Provider.Name) ? "<unnamed>" : Manifest.Provider.Name;
             ScopeFilter = new ScopeFilterViewModel();
             AttributeFilter = new AttributeFilterViewModel();
             StackwalkFilter = new StackwalkFilterViewModel();
@@ -227,20 +317,22 @@ namespace EtwPilot.ViewModel
 
             //
             // There are two column lists - one for available columns which changes as other
-            // parts of the form are completed, repopulated whenever the tab is activated -
-            // and one for the chosen columns which can be edited by the user.
+            // parts of the form are completed and one for the chosen columns which can be
+            // edited by the user.
             //
             AvailableEtwColumns = new ObservableCollection<EtwColumnViewModel>();
             ChosenEtwColumns = new ObservableCollection<EtwColumnViewModel>();
             ChosenEtwColumns.CollectionChanged += ChosenEtwColumns_CollectionChanged;
-            AddEtwColumnsCommand = new AsyncRelayCommand<IEnumerable<object>?>(
+            AddEtwColumnsCommand = new RelayCommand<IEnumerable<object>?>(
                 Command_AddEtwColumns, (columns) => { return columns != null && columns.Count() > 0 && !EditingEtwColumn; });
-            ClearEtwColumnCommand = new AsyncRelayCommand(
+            ClearEtwColumnCommand = new RelayCommand(
                 Command_ClearEtwColumns, () => { return !EditingEtwColumn; });
-            RemoveEtwColumnCommand = new AsyncRelayCommand<IEnumerable<object>?>(
+            RemoveEtwColumnCommand = new RelayCommand<IEnumerable<object>?>(
                 Command_RemoveEtwColumn, (columns) => { return columns != null && columns.Count() > 0 && !EditingEtwColumn; });
-            AddDefaultEtwColumnsCommand = new AsyncRelayCommand(
+            AddDefaultEtwColumnsCommand = new RelayCommand(
                 Command_AddDefaultEtwColumns, () => { return !EditingEtwColumn; });
+            RefreshAvailableEtwColumnsCommand = new RelayCommand(
+                Command_RefreshAvailableEtwColumns, () => { return !EditingEtwColumn; });
 
             //
             // Payload filter predicates utilize a command model and a "selected" predicate
@@ -248,24 +340,23 @@ namespace EtwPilot.ViewModel
             //
             PayloadFilterPredicates = new ObservableCollection<PayloadFilterPredicateViewModel>();
             SelectedPredicate = new PayloadFilterPredicateViewModel();
-            AddPredicateCommand = new AsyncRelayCommand(
+            AddPredicateCommand = new RelayCommand(
                 Command_AddPredicate, () => { return !SelectedPredicate.HasErrors && !SelectedPredicate.IsUpdateMode; });
-            UpdatePredicateCommand = new AsyncRelayCommand(
+            UpdatePredicateCommand = new RelayCommand(
                 Command_UpdatePredicate, () => { return !SelectedPredicate.HasErrors && SelectedPredicate.IsUpdateMode; });
-            CancelUpdatePredicateCommand = new AsyncRelayCommand(
+            CancelUpdatePredicateCommand = new RelayCommand(
                 Command_CancelUpdatePredicate, () => { return !SelectedPredicate.HasErrors && SelectedPredicate.IsUpdateMode; });
-            RemovePredicateCommand = new AsyncRelayCommand<IEnumerable<object>?>(
+            RemovePredicateCommand = new RelayCommand<IEnumerable<object>?>(
                 Command_RemovePredicate, (predicates) => { return predicates != null && predicates.Count() > 0; });
-        }
 
-        public void Initialize()
-        {
-            //
-            // When the form loads, the user has not had an opportunity to select ETW columns
-            // yet, and this is required in the form.
-            //
-            AddError(nameof(ChosenEtwColumns), $"Select at least one column");
-            SetInitialChosenEtwColumns();
+            if (GlobalStateViewModel.Instance.Settings.UseDefaultEtwColumns)
+            {
+                AddDefaultColumnsToChosenEtwColumns();
+            }
+            else
+            {
+                AddError(nameof(ChosenEtwColumns), $"Select at least one column");
+            }
         }
 
         public void FinalizeForm()
@@ -296,86 +387,27 @@ namespace EtwPilot.ViewModel
             }
         }
 
-        private void SetInitialChosenEtwColumns()
+        private void AddDefaultColumnsToChosenEtwColumns()
         {
-            if (!GlobalStateViewModel.Instance.Settings.UseDefaultEtwColumns)
-            {
-                return;
-            }
-            AddDefaultColumnsToChosenEtwColumns();
-        }
-
-        public void SetAvailableEtwColumnsFromUniqueEvents(List<ParsedEtwManifestEvent> Events)
-        {
-            //
-            // This routine is called from the corresponding view's code-behind
-            // when the "choose ETW columns" tab is loaded. Its purpose is to
-            // populate our view model's AvailableEtwColumns list to allow the
-            // user to select what ETW columns should be displayed during a
-            // LiveSession. This function could be implemented as a command but
-            // because the caller already has our VM instance, it seemed overkill.
-            //
-            // The input events are the unique set of events selected across all
-            // filter tabs (scope, attribute, stackwalk, predicate). This routine
-            // creates an ETW display column for all default columns and each
-            // template field defined in any event with templates. If no events
-            // are selected, the user will have a display column for all unique
-            // fields across all templates, plus the defaults.
-            //
-            AvailableEtwColumns.Clear();
             s_DefaultEtwColumns.ForEach(dc =>
             {
-                if (!AvailableEtwColumns.Any(c => c.Name == dc.Name))
+                if (!ChosenEtwColumns.Any(c => c.Name == dc.Name))
                 {
-                    AvailableEtwColumns.Add(new EtwColumnViewModel()
+                    var newCol = new EtwColumnViewModel()
                     {
                         Name = dc.Name,
-                        UniqueName = dc.Name,
-                        IConverterCode = dc.IConverterCode,
-                    });
+                        UniqueName = dc.Name, // these are reserved columns, already guaranteed unique.
+                        TemplateSourceEvent = dc.TemplateSourceEvent,
+                        TemplateFieldType = dc.TemplateFieldType,
+                        Formatter = dc.Formatter
+                    };
+                    //
+                    // Bubble up any errors to parent form
+                    //
+                    newCol.SetParentFormNotifyErrorsChanged(this);
+                    ChosenEtwColumns.Add(newCol);
                 }
             });
-
-            foreach (var _event in Events)
-            {
-                if (string.IsNullOrEmpty(_event.Template))
-                {
-                    continue;
-                }
-
-                //
-                // Fetch the template field names from the corresponding provider manifest
-                //
-                if (!Manifest.Templates.ContainsKey(_event.Template))
-                {
-                    Debug.Assert(false);
-                    Trace(TraceLoggerType.Sessions,
-                          TraceEventType.Error,
-                          $"Unable to locate template named {_event.Template} for provider {Manifest.Provider}");
-                    continue;
-                }
-                var template = Manifest.Templates[_event.Template];
-                foreach (var field in template)
-                {
-                    var uniqueName = $"{_event.Template}.{field.Name}";
-                    if (AvailableEtwColumns.Any(c => c.UniqueName == uniqueName))
-                    {
-                        Debug.Assert(false);
-                        Trace(TraceLoggerType.Sessions,
-                              TraceEventType.Error,
-                              $"Column named {uniqueName} already exists!");
-                        continue;
-                    }
-                    
-                    AvailableEtwColumns.Add(new EtwColumnViewModel()
-                    {
-                        Name = field.Name,
-                        UniqueName = uniqueName,
-                        TemplateSourceEvent = _event.Id,
-                        TemplateFieldType = $"{field.InType}",
-                    });
-                }
-            }
         }
 
         public override string ToString()
@@ -410,31 +442,9 @@ namespace EtwPilot.ViewModel
             return sb.ToString();
         }
 
-        private void AddDefaultColumnsToChosenEtwColumns()
-        {
-            s_DefaultEtwColumns.ForEach(dc =>
-            {
-                if (!ChosenEtwColumns.Any(c => c.Name == dc.Name))
-                {
-                    var newCol = new EtwColumnViewModel();
-                    //
-                    // Bubble up any errors to parent form
-                    //
-                    newCol.SetParentFormNotifyErrorsChanged(this);
-                    //
-                    // Set the fields/validate
-                    //
-                    newCol.Name = dc.Name;
-                    newCol.UniqueName = dc.Name;
-                    newCol.IConverterCode = dc.IConverterCode;
-                    ChosenEtwColumns.Add(newCol);
-                }
-            });
-        }
-
         #region command processing
 
-        private async Task Command_AddPredicate()
+        private void Command_AddPredicate()
         {
             Debug.Assert(!SelectedPredicate.HasErrors);
             Debug.Assert(SelectedPredicate.Event != null);
@@ -447,68 +457,145 @@ namespace EtwPilot.ViewModel
             // Bubble up any errors in sub-forms to parent form
             //
             SelectedPredicate.SetParentFormNotifyErrorsChanged(this);
+            //
+            // Synchronize available columns
+            //
+            RefreshAvailableEtwColumnsCommand.Execute(null);
         }
 
-        private async Task Command_UpdatePredicate()
+        private void Command_UpdatePredicate()
         {
             Debug.Assert(SelectedPredicate.IsUpdateMode);
             SelectedPredicate.IsUpdateMode = false;
             SelectedPredicate = new PayloadFilterPredicateViewModel();
         }
 
-        private async Task Command_CancelUpdatePredicate()
+        private void Command_CancelUpdatePredicate()
         {
             Debug.Assert(SelectedPredicate.IsUpdateMode);
             SelectedPredicate.IsUpdateMode = false;
             SelectedPredicate = new PayloadFilterPredicateViewModel();
         }
 
-        private async Task Command_RemovePredicate(IEnumerable<object> Predicates)
+        private void Command_RemovePredicate(IEnumerable<object>? Predicates)
         {
-            Debug.Assert(Predicates != null && Predicates.Count() > 0);
+            if (Predicates == null || Predicates.Count() == 0)
+            {
+                Debug.Assert(false);
+                return;
+            }
             var items = Predicates.OfType<PayloadFilterPredicateViewModel>().ToList();
             items.ForEach(s => PayloadFilterPredicates.Remove(s));
             SelectedPredicate = new PayloadFilterPredicateViewModel();
         }
 
-        private async Task Command_AddDefaultEtwColumns()
+        private void Command_AddDefaultEtwColumns()
         {
             AddDefaultColumnsToChosenEtwColumns();
         }
 
-        private async Task Command_ClearEtwColumns()
+        private void Command_ClearEtwColumns()
         {
             ChosenEtwColumns.Clear();
         }
 
-        private async Task Command_AddEtwColumns(IEnumerable<object> Columns)
+        private void Command_AddEtwColumns(IEnumerable<object>? Columns)
         {
-            Debug.Assert(Columns != null && Columns.Count() > 0);
+            if (Columns == null || Columns.Count() == 0)
+            {
+                Debug.Assert(false);
+                return;
+            }
             var items = Columns.OfType<EtwColumnViewModel>().ToList();
             items.ForEach(cc =>
             {
                 if (!ChosenEtwColumns.Any(c => c.Name == cc.Name))
                 {
-                    var newCol = new EtwColumnViewModel();
+                    var newCol = new EtwColumnViewModel()
+                    {
+                        Name = cc.Name,
+                        UniqueName = cc.UniqueName,
+                        TemplateSourceEvent = cc.TemplateSourceEvent,
+                        TemplateFieldType = cc.TemplateFieldType,
+                        Formatter = cc.Formatter
+                    };
                     //
                     // Bubble up any errors to parent form
                     //
                     newCol.SetParentFormNotifyErrorsChanged(this);
-                    //
-                    // Set the fields/validate
-                    //
-                    newCol.Name = cc.Name;
-                    newCol.IConverterCode = cc.IConverterCode;
                     ChosenEtwColumns.Add(newCol);
                 }
             });
         }
 
-        private async Task Command_RemoveEtwColumn(IEnumerable<object> Columns)
+        private void Command_RemoveEtwColumn(IEnumerable<object>? Columns)
         {
-            Debug.Assert(Columns != null && Columns.Count() > 0);
+            if (Columns == null || Columns.Count() == 0)
+            {
+                Debug.Assert(false);
+                return;
+            }
             var items = Columns.OfType<EtwColumnViewModel>().ToList();
             items.ForEach(c => ChosenEtwColumns.Remove(c));
+        }
+
+        private void Command_RefreshAvailableEtwColumns()
+        {
+            //
+            // This command is invoked from code-behind whenever an event multi-select list
+            // changes in the form (AttributeFilter, StackWalkFilter) or a payload filter
+            // predicate is added. The purpose is to synchronize available columns list as
+            // events are selected in the form - because in the live session, the user will
+            // naturally want to see the fields of those events as columns in the data view.
+            //
+            var uniqueEvents = new List<ParsedEtwManifestEvent>();
+            uniqueEvents = uniqueEvents.Union(AttributeFilter.Events).
+                                        Union(StackwalkFilter.Events).
+                                        Union(PayloadFilterPredicates.Select(p => p.Event).ToList()).ToList();
+            if (uniqueEvents.Count == 0)
+            {
+                //
+                // If no events are selected, we want to show ALL unique fields available
+                // across ALL events.
+                //
+                uniqueEvents = Manifest.Events.ToList();
+            }
+            AvailableEtwColumns.Clear();
+            foreach (var _event in uniqueEvents)
+            {
+                if (string.IsNullOrEmpty(_event.Template))
+                {
+                    continue;
+                }
+
+                //
+                // Fetch the template field names from the corresponding provider manifest
+                //
+                if (!Manifest.Templates.ContainsKey(_event.Template))
+                {
+                    Debug.Assert(false);
+                    continue;
+                }
+                var template = Manifest.Templates[_event.Template];
+                //
+                // Each field in the template can be a column in the gridview.
+                //
+                foreach (var field in template)
+                {
+                    var uniqueName = $"{_event.Template}.{field.Name}";
+                    if (AvailableEtwColumns.Any(c => c.Name == field.Name))
+                    {
+                        continue; // already in the list, skip.
+                    }
+                    AvailableEtwColumns.Add(new EtwColumnViewModel()
+                    {
+                        Name = field.Name,
+                        UniqueName = uniqueName,
+                        TemplateSourceEvent = _event.Id,
+                        TemplateFieldType = $"{field.InType}",
+                    });
+                }
+            }
         }
 
         #endregion
@@ -1085,7 +1172,7 @@ namespace EtwPilot.ViewModel
             }
         }
 
-        private string _UniqueName;
+        private string _UniqueName; // because a field name can exist in multiple events
         public string UniqueName
         {
             get => _UniqueName;
@@ -1127,28 +1214,16 @@ namespace EtwPilot.ViewModel
             }
         }
 
-        private string _IConverterCode;
-        public string IConverterCode
+        private Formatter _Formatter;
+        public Formatter Formatter
         {
-            get => _IConverterCode;
+            get => _Formatter;
             set
             {
-                if (_IConverterCode != value)
+                if (_Formatter != value)
                 {
-                    _IConverterCode = value;
-                    OnPropertyChanged("IConverterCode");
-                    ClearErrors(nameof(IConverterCode));
-                    if (!string.IsNullOrEmpty(IConverterCode))
-                    {
-                        using (var library = GetIConverterLibrary())
-                        {
-                            var result = library!.TryCompile(out string err);
-                            if (!result)
-                            {
-                                AddError(nameof(IConverterCode), err);
-                            }
-                        }
-                    }
+                    _Formatter = value;
+                    OnPropertyChanged("Formatter");
                 }
             }
         }
@@ -1171,16 +1246,6 @@ namespace EtwPilot.ViewModel
         public EtwColumnViewModel()
         {
             IsUpdateMode = false;
-        }
-
-        public DynamicRuntimeLibrary GetIConverterLibrary()
-        {
-            return new DynamicRuntimeLibrary(
-                "using System; using System.Windows.Data;",
-                "EtwPilot.Utilities.Converters",
-                "CustomConverter",
-                "IValueConverter",
-                IConverterCode);
         }
 
         public override string ToString()

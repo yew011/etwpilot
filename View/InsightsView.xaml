@@ -11,30 +11,33 @@
              mc:Ignorable="d" 
              d:DesignHeight="450" d:DesignWidth="800"
              Name="InsightsControl"
-             DataContext="{Binding Source={x:Static vm:GlobalStateViewModel.Instance},Path=g_InsightsViewModel}"
-             Loaded="InsightsControl_Loaded">
-    <DockPanel>
+             DataContext="{Binding Source={x:Static vm:GlobalStateViewModel.Instance},ValidatesOnNotifyDataErrors=False}">
+    <DockPanel
+        IsEnabled="{Binding g_InsightsViewModel.IsViewEnabled}">
         <DockPanel DockPanel.Dock="Bottom" Height="100" Margin="2">
             <DockPanel DockPanel.Dock="Right">
                 <DockPanel>
                     <UniformGrid Columns="2" DockPanel.Dock="Bottom" Height="30" Width="100">
                         <Button Content="Clear"
-                                Command="{Binding ClearCommand}"/>
-                        <Button Content="Cancel" 
-                                Command="{Binding CancelCommand}"/>
+                                Command="{Binding g_InsightsViewModel.ClearCommand}"/>
+                        <Button Content="Copy" 
+                                Command="{Binding g_InsightsViewModel.CopyCommand}"/>
                     </UniformGrid>
                     <Button Content="Send" 
-                            Command="{Binding GenerateCommand}"
+                            Command="{Binding g_InsightsViewModel.GenerateCommand}"
                             IsDefault="True"/>
                 </DockPanel>
             </DockPanel>
-            <TextBox Text="{Binding Prompt, UpdateSourceTrigger=PropertyChanged,ValidatesOnNotifyDataErrors=False}"
-                     Name="PromptTextbox"
-                     KeyUp="PromptTextbox_KeyUp"/>
+            <TextBox Text="{Binding g_InsightsViewModel.Prompt,Mode=OneWayToSource,UpdateSourceTrigger=PropertyChanged,ValidatesOnNotifyDataErrors=False}"
+                     Name="PromptTextbox"/>
         </DockPanel>
         <Border BorderBrush="Gainsboro" BorderThickness="1" Margin="2">
-            <ScrollViewer CanContentScroll="False" Utilities:AutoScrollBehavior.AutoScroll="True" HorizontalScrollBarVisibility="Disabled" >
-                <ItemsControl ItemsSource="{Binding}" ScrollViewer.HorizontalScrollBarVisibility="Disabled" ScrollViewer.VerticalScrollBarVisibility="Disabled">
+            <ScrollViewer CanContentScroll="False" 
+                          Utilities:AutoScrollBehavior.AutoScroll="True" 
+                          HorizontalScrollBarVisibility="Disabled" >
+                <ItemsControl ItemsSource="{Binding}" 
+                              ScrollViewer.HorizontalScrollBarVisibility="Disabled" 
+                              ScrollViewer.VerticalScrollBarVisibility="Disabled">
                     <ItemsControl.ItemTemplate>
                         <DataTemplate>
                             <Border BorderBrush="Gainsboro" BorderThickness="1" Margin="2">
@@ -82,7 +85,7 @@
                         </DataTemplate>
                     </ItemsControl.ItemTemplate>
                     <ItemsControl.DataContext>
-                        <CollectionViewSource Source="{Binding ResultHistory.AsObservable,ValidatesOnNotifyDataErrors=False}">
+                        <CollectionViewSource Source="{Binding g_InsightsViewModel.ResultHistory.AsObservable,ValidatesOnNotifyDataErrors=False}">
                             <CollectionViewSource.SortDescriptions>
                                 <scm:SortDescription PropertyName="Timestamp" Direction="Ascending" />
                             </CollectionViewSource.SortDescriptions>

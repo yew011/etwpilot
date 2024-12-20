@@ -19,6 +19,9 @@ under the License.
 
 using EtwPilot.Utilities;
 using System.ComponentModel;
+using System.Diagnostics;
+using System.Security.Principal;
+using System.Text;
 
 namespace EtwPilot.ViewModel
 {
@@ -26,6 +29,10 @@ namespace EtwPilot.ViewModel
     {
         #region observable properties
 
+        //
+        // The CurrentViewModel is bound to the main ContentControl in MainWindowView.xaml
+        // and is the primary means by which views are swapped in the viewing area.
+        //
         private static ViewModelBase _CurrentViewModel;
         public ViewModelBase CurrentViewModel
         {
@@ -44,6 +51,31 @@ namespace EtwPilot.ViewModel
             set { _Settings = value; OnPropertyChanged(nameof(Settings)); }
         }
 
+        //
+        // No view can be displayed in MainWindowView.xaml's ContenControl until global
+        // init is completed, asychronously. Only app-wide critical init is done here.
+        //
+        private static bool _PrimaryViewEnabled;
+        public bool PrimaryViewEnabled
+        {
+            get { return _PrimaryViewEnabled; }
+            set {
+                _PrimaryViewEnabled = value;
+                OnPropertyChanged(nameof(PrimaryViewEnabled));
+            }
+        }
+
+        private static bool _IsAdmin;
+        public bool IsAdmin
+        {
+            get { return _IsAdmin; }
+            set
+            {
+                _IsAdmin = value;
+                OnPropertyChanged(nameof(IsAdmin));
+            }
+        }
+
         #endregion
 
         private static GlobalStateViewModel _Instance = new GlobalStateViewModel();
@@ -52,7 +84,12 @@ namespace EtwPilot.ViewModel
             get { return _Instance; }
         }
 
-        public event PropertyChangedEventHandler PropertyChanged;
+        //
+        // Global resources used by multiple VMs. These are late-initialized from MainWindowViewModel.
+        //
+        public StackwalkHelper m_StackwalkHelper;
+
+        public event PropertyChangedEventHandler? PropertyChanged;
 
         #region View Model instances
 
@@ -64,58 +101,124 @@ namespace EtwPilot.ViewModel
 
         #endregion
 
-        public ConverterLibrary g_ConverterLibrary;
-
         public GlobalStateViewModel()
         {
             //
-            // Settings and g_MainWindowViewModel must be initialized in ctor
-            // g_MainWindowViewModel will call Initialize on window load
+            // Early initialize our own tracelogger to catch settings errors.
+            // The level will be adjusted to whatever is in the settings later.
+            //
+            EtwPilot.Utilities.TraceLogger.Initialize();
+            EtwPilot.Utilities.TraceLogger.SetLevel(System.Diagnostics.SourceLevels.Error);
+            //
+            // This ctor is invoked as a result of the binding expression in MainWindowView.xaml.
+            // It is invoked before any other binding expressions in that view are evaluated,
+            // and as such, it is important that the viewmodels relied upon in those expressions
+            // are instantiated now, otherwise, no bindings will work.
+            //
+            // Note: ctors of VMs below _cannot_ access Settings from this context
             //
             _Settings = SettingsFormViewModel.LoadDefault();
             g_MainWindowViewModel = UiHelper.GetGlobalResource<MainWindowViewModel>(
                 "g_MainWindowViewModel")!; // from App.xaml
-        }
-
-        public void Initialize()
-        {
-            //
-            // Some View models access settings so they cannot be instantiated in ctor
-            //
             g_ProviderViewModel = new ProviderViewModel();
             g_SessionViewModel = new SessionViewModel();
             g_SessionFormViewModel = new SessionFormViewModel(); // lazy init
             g_InsightsViewModel = new InsightsViewModel();
 
-            g_ConverterLibrary = new ConverterLibrary();
+            //
+            // Global resources
+            //
+            m_StackwalkHelper = new StackwalkHelper();
+            PrimaryViewEnabled = false;
+
+            using (WindowsIdentity identity = WindowsIdentity.GetCurrent())
+            {
+                WindowsPrincipal principal = new WindowsPrincipal(identity);
+                IsAdmin = principal.IsInRole(WindowsBuiltInRole.Administrator);
+            }
+        }
+
+        public async Task ApplySettingsChanges()
+        {
+            Debug.Assert(Settings.ChangedProperties.Count > 0);
 
             //
-            // Subscribe to changes to the settings instance, so that autosave kicks in.
-            // Note that the internal Save() routine in this class resets this value.
+            // Validate the completed settings object.
             //
-            Settings.PropertyChanged += (obj, p) =>
+            if (!await Settings.Validate())
             {
-                if (p.PropertyName == "HasUnsavedChanges")
-                {
-                    return;
-                }
-                Settings.HasUnsavedChanges = true;
-                if (p.PropertyName == "ModelPath" ||
-                    p.PropertyName == "EmbeddingsModelFile" ||
-                    p.PropertyName == "ModelConfig")
-                {
-                    Settings.HasModelRelatedUnsavedChanges = true;
-                }
-            };
+                return;
+            }
 
             //
-            // Subscribe to property change events in session form, so when the form becomes valid,
-            // the session control buttons and associated commands are available.
+            // This routine is invoked from MainWindowView code behind when the backstage
+            // menu is closed, presumably after settings are changing. While VMs update
+            // their views and other data sources, we hide views.
             //
-            g_SessionFormViewModel.ErrorsChanged += delegate (object? sender, DataErrorsChangedEventArgs e)
+            PrimaryViewEnabled = false;
+            Settings.Save(null);
+
+            //
+            // Update global resources
+            //
+            if (Settings.ChangedProperties.Contains(nameof(SettingsFormViewModel.DbghelpPath)) ||
+                Settings.ChangedProperties.Contains(nameof(SettingsFormViewModel.SymbolPath)))
             {
-                g_SessionViewModel.NotifyCanExecuteChanged();
-            };
+                Instance.m_StackwalkHelper = new StackwalkHelper();
+                await GlobalResourceInitialization();
+                PrimaryViewEnabled = false;
+            }
+
+            //
+            // Notify all VMs
+            //
+            await g_MainWindowViewModel.SettingsChangedCommand.ExecuteAsync(null);
+            await g_ProviderViewModel.SettingsChangedCommand.ExecuteAsync(null);
+            await g_SessionViewModel.SettingsChangedCommand.ExecuteAsync(null);
+            await g_SessionFormViewModel.SettingsChangedCommand.ExecuteAsync(null);
+            await g_InsightsViewModel.SettingsChangedCommand.ExecuteAsync(null);
+
+            //
+            // Clear the changed properties
+            //
+            Settings.ChangedProperties.Clear();
+            PrimaryViewEnabled = true;
+        }
+
+        public async Task<bool> GlobalResourceInitialization()
+        {
+            PrimaryViewEnabled = false;
+
+            //
+            // Now we can validate the settings object that was loaded in ctor path
+            //
+            if (!await Settings.Validate())
+            {
+                return false;
+            }
+
+            //
+            // Global resources are initialized once when the MainWindowView is shown
+            // and anytime thereafter when applicable settings are changed. This routine
+            // should be relatively fast!
+            //
+            var sb = new StringBuilder();
+
+            try
+            {
+                await m_StackwalkHelper.Initialize();
+            }
+            catch (Exception)
+            {
+                sb.Append($"Unable to init symbol resolver. ");
+            }
+
+            if (sb.Length > 0)
+            {
+                CurrentViewModel.ProgressState.EphemeralStatusText = sb.ToString();
+            }
+            PrimaryViewEnabled = true;
+            return true;
         }
 
         protected void OnPropertyChanged(string propertyName)

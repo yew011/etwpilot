@@ -62,11 +62,11 @@
         <converters:IntegerToString x:Key="IntegerToString"/>
         <converters:NullableBoolConverter x:Key="NullableBoolConverter"/>
         <converters:ParsedEtwManifestEventToString x:Key="ParsedEtwManifestEventToString"/>
-        <converters:MillisecondToSecond x:Key="MillisecondToSecond"/>
         <converters:InverseBooleanConverter x:Key="InverseBooleanConverter"/>
-        <converters:ByteSizeToFriendlyString x:Key="ByteSizeToFriendlyString"/>
         <converters:ChatTopicToBool x:Key="ChatTopicToBool"/>
         <converters:MultiValueBooleanConverterOR x:Key="MultiValueBooleanConverterOR"/>
+        <converters:StringNullOrEmptyToVisibilityConverter x:Key="StringNullOrEmptyToVisibilityConverter"/>
+        
         <!-- template for adorning errors onto input form controls -->
         <ControlTemplate x:Key="ValidationErrorTemplate">
             <DockPanel LastChildFill="True">
@@ -122,45 +122,7 @@
                 <Setter Property="ToolTipService.InitialShowDelay" Value="0"/>
             </Trigger>
         </Style.Triggers>
-        </Style>
-        
-        <!-- Fluent Ribbon groupbox buttons that are added to Fluent Context Tabs for LiveSessions -->
-        <Style x:Key="LiveSessionStopButtonStyle" TargetType="{x:Type Fluent:Button}">
-            <Setter Property="Icon" Value="{DynamicResource stop}" />
-            <Setter Property="Command" Value="{Binding StopLiveSessionCommand}" />
-            <Setter Property="Header" Value="Stop" />
-        </Style>
-        <Style x:Key="LiveSessionInsightsButtonStyle" TargetType="{x:Type Fluent:Button}">
-            <Setter Property="Icon" Value="{DynamicResource lightbulb}" />
-            <Setter Property="Command" Value="{Binding SendToInsightsCommand}" />
-            <Setter Property="Header" Value="Insights" />
-        </Style>
-        <!-- Fluent Ribbon groupbox buttons added to various context tabs -->
-        <Style x:Key="ExportJSONButtonStyle" TargetType="{x:Type Fluent:Button}">
-            <Setter Property="Icon" Value="{DynamicResource json}" />
-            <Setter Property="Command" Value="{Binding ExportDataCommand}" />
-            <Setter Property="CommandParameter" Value="{x:Static utils:DataExporter+ExportFormat.Json}"/>
-            <Setter Property="Header" Value="JSON" />
-        </Style>
-        <Style x:Key="ExportCSVButtonStyle" TargetType="{x:Type Fluent:Button}">
-            <Setter Property="Icon" Value="{DynamicResource csv}" />
-            <Setter Property="Command" Value="{Binding ExportDataCommand}" />
-            <Setter Property="CommandParameter" Value="{x:Static utils:DataExporter+ExportFormat.Csv}"/>
-            <Setter Property="Header" Value="CSV" />
-        </Style>
-        <Style x:Key="ExportXMLButtonStyle" TargetType="{x:Type Fluent:Button}">
-            <Setter Property="Icon" Value="{DynamicResource xml}" />
-            <Setter Property="Command" Value="{Binding ExportDataCommand}" />
-            <Setter Property="CommandParameter" Value="{x:Static utils:DataExporter+ExportFormat.Xml}"/>
-            <Setter Property="Header" Value="XML" />
-        </Style>
-        <Style x:Key="ExportClipboardButtonStyle" TargetType="{x:Type Fluent:Button}">
-            <Setter Property="Icon" Value="{DynamicResource clipboard}" />
-            <Setter Property="Command" Value="{Binding ExportDataCommand}" />
-            <Setter Property="CommandParameter" Value="{x:Static utils:DataExporter+ExportFormat.Clip}"/>
-            <Setter Property="Header" Value="Clip" />
-        </Style>
-        
+        </Style>        
         
         <Style x:Key="DataGridColumnHeaderTextBoxStyle" TargetType="{x:Type TextBox}">
             <Setter Property="Background" Value="AliceBlue" />

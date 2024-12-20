@@ -20,6 +20,7 @@ using CommunityToolkit.Mvvm.Input;
 using etwlib;
 using EtwPilot.Model;
 using EtwPilot.Utilities;
+using Microsoft.Win32;
 using System.Collections.ObjectModel;
 using System.Diagnostics;
 using System.IO;
@@ -68,6 +69,7 @@ namespace EtwPilot.ViewModel
         public AsyncRelayCommand LoadProvidersCommand { get; set; }
         public AsyncRelayCommand DumpProviderManifestsCommand { get; set; }
         public AsyncRelayCommand<ParsedEtwProvider> LoadProviderManifestCommand { get; set; }
+        public RelayCommand<ProviderManifestViewModel> CloseDynamicTab { get; set; }
 
         #endregion
 
@@ -78,7 +80,7 @@ namespace EtwPilot.ViewModel
         public ProviderViewModel() : base()
         {
             Providers = new ObservableCollection<ParsedEtwProvider>();
-            Model = new ProviderModel(GlobalStateViewModel.Instance.Settings.ProviderCacheLocation);
+            Model = new ProviderModel();
             m_ManifestCache = new Dictionary<string, ProviderManifestViewModel>();
             SelectedProviders = new List<ParsedEtwProvider>();
             ProvidersWithManifest = new ObservableCollection<ParsedEtwProvider>();
@@ -88,6 +90,8 @@ namespace EtwPilot.ViewModel
                 Command_DumpProviderManifests, () => { return true; });
             LoadProviderManifestCommand = new AsyncRelayCommand<ParsedEtwProvider>(
                 Command_LoadProviderManifest, _ => true);
+            CloseDynamicTab = new RelayCommand<ProviderManifestViewModel>(
+                Command_CloseDynamicTab, _ => true);
         }
 
         public override async Task ViewModelActivated()
@@ -106,15 +110,33 @@ namespace EtwPilot.ViewModel
 
         private async Task Command_DumpProviderManifests(CancellationToken Token)
         {
-            m_CurrentCommand = DumpProviderManifestsCommand;
-            CancelCommandButtonVisibility = Visibility.Visible;
-            await DumpProviderManifests(Token);
-            CancelCommandButtonVisibility = Visibility.Hidden;
-            m_CurrentCommand = null;
+            var location = await DumpProviderManifests(Token);
+            if (location == null)
+            {
+                return;
+            }
+            ProgressState.SetFollowupActionCommand.Execute(
+                new FollowupAction()
+                {
+                    Title = "Open",
+                    Callback = new Action<dynamic>((args) =>
+                    {
+                        var psi = new ProcessStartInfo();
+                        psi.FileName = location;
+                        psi.UseShellExecute = true;
+                        Process.Start(psi);
+                    }),
+                    CallbackArgument = null
+                });
         }
 
-        private async Task Command_LoadProviderManifest(ParsedEtwProvider Provider)
+        private async Task Command_LoadProviderManifest(ParsedEtwProvider? Provider)
         {
+            if (Provider == null)
+            {
+                Debug.Assert(false);
+                return;
+            }
             var manifestVm = await GetProviderManifest(Provider.Id);
             if (manifestVm == null)
             {
@@ -122,39 +144,58 @@ namespace EtwPilot.ViewModel
             }
 
             //
-            // Create the tab if it doesn't exist; otherwise simply switch to it.
+            // Create a UI contextual tab for this provider manifest.
+            //
+            // Note: Fluent:Ribbon contextual tabs are unique in that we have to create
+            // them in code because Fluent developer refuses to implement MVVM template
+            // support in the library - there is no way to dynamically create tabs via
+            // MVVM templates. Other places in EtwPilot use .NET's builtin TabControl
+            // which has full data/content/item template support to dynamically create tabs.
             //
             var tabName = UiHelper.GetUniqueTabName(Provider.Id, "Manifest");
-            Func<string, Task<bool>> tabClosedCallback = async delegate (string tabName)
-            {
-                return true;
-            };
-
-            var tab = UiHelper.CreateRibbonContextualTab(
+            if (!UiHelper.CreateRibbonContextualTab(
                     tabName,
                     Provider.Name!,
                     0,
-                    new Dictionary<string, List<string>>() {
-                        { "Export", new List<string> {
-                            "ExportJSONButtonStyle",
-                            "ExportCSVButtonStyle",
-                            "ExportXMLButtonStyle",
-                            "ExportClipboardButtonStyle",
-                        } },
-                    },
-                    "ProviderContextTabStyle",
-                    "ProviderContextTabText",
-                    "ProviderContextTabCloseButton",
-                    manifestVm,
-                    tabClosedCallback);
-            if (tab == null)
+                    null,
+                    manifestVm))
             {
                 Trace(TraceLoggerType.MainWindow,
                       TraceEventType.Error,
                       $"Unable to create contextual tab {tabName}");
                 return;
             }
-            GlobalStateViewModel.Instance.CurrentViewModel = manifestVm;
+            await manifestVm.ViewModelActivated();
+        }
+
+        public void Command_CloseDynamicTab(ProviderManifestViewModel? ViewModel)
+        {
+            if (ViewModel == null)
+            {
+                Debug.Assert(false);
+                return;
+            }
+            //
+            // Remove the tab from the tab control.
+            //
+            var tabName = UiHelper.GetUniqueTabName(ViewModel.m_Manifest.Provider.Id, "Manifest");
+            if (!UiHelper.RemoveRibbonContextualTab(tabName))
+            {
+                return;
+            }
+        }
+
+        public override async Task Command_SettingsChanged()
+        {
+            var changed = GlobalStateViewModel.Instance.Settings.ChangedProperties;
+            if (changed.Contains(nameof(SettingsFormViewModel.HideProvidersWithoutManifest)) ||
+                changed.Contains(nameof(SettingsFormViewModel.ProviderCacheLocation)))
+            {
+                //
+                // Refresh the view with the new setting
+                //
+                await LoadProviders();
+            }
         }
 
         private async Task LoadProviders()
@@ -189,7 +230,6 @@ namespace EtwPilot.ViewModel
 
         public async Task<ProviderManifestViewModel?> GetProviderManifest(Guid Id)
         {
-            ProgressState.InitializeProgress(1);
             var name = UiHelper.GetUniqueTabName(Id, "Manifest");
             if (m_ManifestCache.ContainsKey(name))
             {
@@ -197,41 +237,35 @@ namespace EtwPilot.ViewModel
                 // This manifest has already been loaded once and bound to an existing tab.
                 // The caller has to go find the tab.
                 //
-                ProgressState.UpdateProgressValue();
-                ProgressState.FinalizeProgress($"Loaded cached manifest for provider {Id}");
                 return m_ManifestCache[name];
             }
-            ProgressState.UpdateProgressMessage("Parsing manifest...");
             var manifest = await Model.GetProviderManifest(Id);
-            ProgressState.UpdateProgressValue();
             if (manifest == null)
             {
-                ProgressState.FinalizeProgress($"Unable to load manifest for provider {Id}");
                 return null;
             }
-            ProgressState.FinalizeProgress($"Loaded manifest for provider {Id}");
             var vm = new ProviderManifestViewModel(manifest);
             m_ManifestCache.Add(name, vm);
             return vm;
         }
 
-        private async Task DumpProviderManifests(CancellationToken CancelToken)
+        private async Task<string?> DumpProviderManifests(CancellationToken CancelToken)
         {
-            var providers = GetSelectedProviders();
+            var providers = GetAvailableProviders();
             if (providers.Count == 0)
             {
-                return;
+                return null;
             }
-            var browser = new System.Windows.Forms.FolderBrowserDialog();
-            browser.Description = "Select a location to save manifest data";
-            browser.RootFolder = Environment.SpecialFolder.MyComputer;
+            var browser = new OpenFolderDialog();
+            browser.Title = "Select a location to save manifest data";
+            browser.InitialDirectory = Environment.SpecialFolder.MyComputer.ToString();
             var result = browser.ShowDialog();
-            if (result != System.Windows.Forms.DialogResult.OK)
+            if (!result.HasValue || !result.Value)
             {
-                return;
+                return null;
             }
 
-            var root = Path.Combine(browser.SelectedPath, "Provider Manifests");
+            var root = Path.Combine(browser.FolderName, "Provider Manifests");
             try
             {
                 Directory.CreateDirectory(root);
@@ -243,10 +277,12 @@ namespace EtwPilot.ViewModel
                       $"Unable to create root directory " +
                       $"'{root}': {ex.Message}");
                 ProgressState.FinalizeProgress($"Unable to create root directory {root}: {ex.Message}");
-                return;
+                return null;
             }
 
             ProgressState.InitializeProgress(providers.Count);
+            ProgressState.m_CurrentCommand = DumpProviderManifestsCommand;
+            ProgressState.CancelCommandButtonVisibility = Visibility.Visible;
 
             var numErrors = 0;
             var i = 1;
@@ -255,7 +291,7 @@ namespace EtwPilot.ViewModel
                 if (CancelToken.IsCancellationRequested)
                 {
                     ProgressState.FinalizeProgress("Operation cancelled");
-                    return;
+                    return null;
                 }
                 ProgressState.UpdateProgressMessage(
                     $"Dumping manifest for provider {provider.Name} ({i++} of {providers.Count})...");
@@ -267,11 +303,14 @@ namespace EtwPilot.ViewModel
                     ProgressState.UpdateProgressValue();
                     continue;
                 }
-                File.WriteAllText(target, manifest.SelectedProviderManifest.ToXml());
+                File.WriteAllText(target, manifest.m_Manifest.ToXml());
                 ProgressState.UpdateProgressValue();
             }
             ProgressState.FinalizeProgress(
                 $"Dumped {providers.Count} manifests to {root} ({numErrors} errors)");
+            ProgressState.CancelCommandButtonVisibility = Visibility.Hidden;
+            ProgressState.m_CurrentCommand = null;
+            return root;
         }
 
         public async Task ActivateProviderManifestViewModel(string TabName)
@@ -283,7 +322,50 @@ namespace EtwPilot.ViewModel
             }
         }
 
-        public List<ParsedEtwProvider> GetSelectedProviders()
+        protected override async Task ExportData(DataExporter.ExportFormat Format, CancellationToken Token)
+        {
+            ProgressState.InitializeProgress(1);
+            var list = GetAvailableProviders();
+            if (list.Count == 0)
+            {
+                ProgressState.FinalizeProgress("No providers available for export.");
+                return;
+            }
+            try
+            {
+                var result = await DataExporter.Export<List<ParsedEtwProvider>>(
+                    list, Format, "Providers", Token);
+                if (result.Item1 == 0 || result.Item2 == null)
+                {
+                    ProgressState.FinalizeProgress("");
+                    return;
+                }
+                ProgressState.UpdateProgressValue();
+                ProgressState.FinalizeProgress($"Exported {result.Item1} records to {result.Item2}");
+                if (Format != DataExporter.ExportFormat.Clip)
+                {
+                    ProgressState.SetFollowupActionCommand.Execute(
+                        new FollowupAction()
+                        {
+                            Title = "Open",
+                            Callback = new Action<dynamic>((args) =>
+                            {
+                                var psi = new ProcessStartInfo();
+                                psi.FileName = result.Item2;
+                                psi.UseShellExecute = true;
+                                Process.Start(psi);
+                            }),
+                            CallbackArgument = null
+                        });
+                }
+            }
+            catch (Exception ex)
+            {
+                ProgressState.FinalizeProgress($"ExportData failed: {ex.Message}");
+            }
+        }
+
+        private List<ParsedEtwProvider> GetAvailableProviders()
         {
             if (SelectedProviders == null || SelectedProviders.Count == 0)
             {
@@ -294,28 +376,6 @@ namespace EtwPilot.ViewModel
                 return Providers.ToList();
             }
             return SelectedProviders;
-        }
-
-        protected override async Task ExportData(DataExporter.ExportFormat Format, CancellationToken Token)
-        {
-            ProgressState.InitializeProgress(1);
-            var list = GetSelectedProviders();
-            if (list.Count == 0)
-            {
-                ProgressState.FinalizeProgress("No providers available for export.");
-                return;
-            }
-            try
-            {
-                var result = await DataExporter.Export<List<ParsedEtwProvider>>(
-                    list, Format, "Providers", Token);
-                ProgressState.UpdateProgressValue();
-                ProgressState.FinalizeProgress($"Exported {result.Item1} records to {result.Item2}");
-            }
-            catch (Exception ex)
-            {
-                ProgressState.FinalizeProgress($"ExportData failed: {ex.Message}");
-            }
         }
     }
 }

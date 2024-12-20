@@ -28,20 +28,5 @@ namespace EtwPilot.View
         {
             InitializeComponent();
         }
-
-        private async void PromptTextbox_KeyUp(object sender, System.Windows.Input.KeyEventArgs e)
-        {
-            if (e.Key == System.Windows.Input.Key.Enter)
-            {
-                await GlobalStateViewModel.Instance.g_InsightsViewModel.GenerateCommand.ExecuteAsync(null);
-                return;
-            }
-            GlobalStateViewModel.Instance.g_InsightsViewModel.Prompt += e.Key;
-        }
-
-        private async void InsightsControl_Loaded(object sender, RoutedEventArgs e)
-        {
-            await GlobalStateViewModel.Instance.g_InsightsViewModel.Initialize();
-        }
     }
 }

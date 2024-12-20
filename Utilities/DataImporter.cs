@@ -18,9 +18,10 @@ under the License.
 */
 using Newtonsoft.Json;
 using System.IO;
-using System.Windows.Forms;
+using Microsoft.Win32;
 using System.Xml.Serialization;
 using System.Xml;
+using Newtonsoft.Json.Linq;
 
 namespace EtwPilot.Utilities
 {
@@ -33,7 +34,7 @@ namespace EtwPilot.Utilities
     }
     public static class DataImporter
     {
-        public static async Task<T?> Import<T>(ImportFormat Format)
+        public static T? Import<T>(ImportFormat Format)
         {
             var dialog = new OpenFileDialog();
             dialog.CheckFileExists = true;
@@ -58,7 +59,7 @@ namespace EtwPilot.Utilities
                     }
             }
             var result = dialog.ShowDialog();
-            if (result != DialogResult.OK)
+            if (!result.HasValue || !result.Value)
             {
                 return default;
             }
@@ -72,6 +73,10 @@ namespace EtwPilot.Utilities
                         if (obj == null)
                         {
                             return default;
+                        }
+                        if (obj is JArray)
+                        {
+                            return ((JArray)obj).ToObject<T>();
                         }
                         return (T)obj;
                     }

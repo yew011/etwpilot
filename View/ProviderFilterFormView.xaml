@@ -5,23 +5,34 @@
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008" 
              xmlns:view="clr-namespace:EtwPilot.View"
              xmlns:vm="clr-namespace:EtwPilot.ViewModel"
+             xmlns:controls="clr-namespace:EtwPilot.Controls"
+             xmlns:scm="clr-namespace:System.ComponentModel;assembly=WindowsBase"
              mc:Ignorable="d" 
              d:DesignHeight="450" d:DesignWidth="800"
-             DataContext="{Binding Source={x:Static vm:GlobalStateViewModel.Instance},Path=g_SessionFormViewModel}">
+             Name="ProviderFilterFormControl">
+    <UserControl.Resources>
+        <CollectionViewSource x:Key='src' Source="{Binding AvailableEtwColumns}">
+            <CollectionViewSource.SortDescriptions>
+                <scm:SortDescription PropertyName="Name" />
+            </CollectionViewSource.SortDescriptions>
+        </CollectionViewSource>
+    </UserControl.Resources>
     <Grid>
-        <TabControl SelectionChanged="TabControl_SelectionChanged"
-                    GotFocus="TabControl_GotFocus">
-            <TabItem Header="Scope">
+        <TabControl Name="ProviderFilterFormTabControl"
+                    SelectedIndex="{Binding SelectedTabIndex,ValidatesOnNotifyDataErrors=False}"
+                    SelectionChanged="ProviderFilterFormTabControl_SelectionChanged">
+            <TabItem Header="Scope"
+                     DataContext="{Binding Source={x:Static vm:GlobalStateViewModel.Instance},Path=g_SessionFormViewModel,ValidatesOnNotifyDataErrors=False}">
                 <StackPanel Orientation="Vertical" Margin="5">
                     <StackPanel Orientation="Horizontal" Margin="5" VerticalAlignment="Top">
                         <Label Width="150">Process ID:</Label>
                         <ListBox ItemsSource="{Binding SystemInfo.ActiveProcessList}"
-                                  Name="ScopeFilterProcesses"
-                                  SelectedIndex="0"
-                                  SelectionMode="Multiple"
-                                  SelectionChanged="ScopeFilterProcess_SelectionChanged"
-                                  MaxHeight="125">
-                            <ListBox.ItemTemplate>
+                                 Name="ScopeFilterProcesses"
+                                 SelectedIndex="0"
+                                 SelectionMode="Extended"
+                                 SelectionChanged="ScopeFilterProcesses_SelectionChanged"
+                                 MaxHeight="125">
+                            <ListBox.ItemTemplate>                                
                                 <DataTemplate>
                                     <TextBlock>
                                         <TextBlock.Text>
@@ -38,41 +49,39 @@
                     <StackPanel Orientation="Horizontal" Margin="5" VerticalAlignment="Top">
                         <Label Width="150">EXE Name:</Label>
                         <ListBox ItemsSource="{Binding SystemInfo.UniqueExeNames}"
-                                  Name="ScopeFilterExes"
-                                  SelectedIndex="0"
-                                  SelectionMode="Multiple"
-                                  SelectionChanged="ScopeFilterExes_SelectionChanged"
-                                  MaxHeight="125"/>
+                                 Name="ScopeFilterExes"
+                                 SelectedIndex="0"
+                                 SelectionMode="Extended"
+                                 SelectionChanged="ScopeFilterExes_SelectionChanged"
+                                 MaxHeight="125"/>
                     </StackPanel>
                     <StackPanel Orientation="Horizontal" Margin="5" VerticalAlignment="Top">
                         <Label Width="150">App ID:</Label>
                         <ListBox ItemsSource="{Binding SystemInfo.UniqueAppIds}"
-                                  Name="ScopeFilterAppIds"
-                                  SelectedIndex="0"
-                                  SelectionMode="Multiple"
-                                  SelectionChanged="ScopeFilterAppIds_SelectionChanged"
-                                  MaxHeight="125" />
+                                 Name="ScopeFilterAppIds"
+                                 SelectedIndex="0"
+                                 SelectionMode="Extended"
+                                 SelectionChanged="ScopeFilterAppIds_SelectionChanged"
+                                 MaxHeight="125"/>
                     </StackPanel>
                     <StackPanel Orientation="Horizontal" Margin="5" VerticalAlignment="Top">
                         <Label Width="150">Package ID:</Label>
                         <ListBox ItemsSource="{Binding SystemInfo.UniquePackageIds}"
                                   Name="ScopeFilterPackageIds"
                                   SelectedIndex="0"
-                                  SelectionMode="Multiple"
+                                  SelectionMode="Extended"
                                   SelectionChanged="ScopeFilterPackageIds_SelectionChanged"
                                   MaxHeight="125"/>
                     </StackPanel>
                 </StackPanel>
             </TabItem>
-            <TabItem Header="Attribute" 
-                     Name="AttributeTab"
-                     DataContext="{Binding CurrentProviderFilterForm,Mode=TwoWay,ValidatesOnNotifyDataErrors=False}">
+            <TabItem Header="Attribute" Name="AttributeTab">
                 <StackPanel Orientation="Vertical" Margin="5">
                     <StackPanel Orientation="Horizontal" Margin="5">
                         <Label Width="150">Events:</Label>
                         <ListBox ItemsSource="{Binding Manifest.Events}"
                                  Name="AttributeFilterEvents"
-                                 SelectionMode="Multiple"
+                                 SelectionMode="Extended"
                                  Width="Auto"
                                  MaxWidth="600"
                                  MaxHeight="250"
@@ -101,7 +110,7 @@
                         <ListBox ItemsSource="{Binding Manifest.Keywords,Mode=TwoWay}"
                                  Name="AttributeFilterAnyKeywords"
                                  SelectionChanged="AttributeFilterAnyKeywords_SelectionChanged"
-                                 SelectionMode="Multiple"
+                                 SelectionMode="Extended"
                                  Width="Auto"
                                  MaxWidth="600"
                                  MaxHeight="250"
@@ -111,7 +120,7 @@
                         <Label Width="150">All keywords:</Label>
                         <ListBox ItemsSource="{Binding Manifest.Keywords,Mode=TwoWay}"
                                  Name="AttributeFilterAllKeywords"
-                                 SelectionMode="Multiple"
+                                 SelectionMode="Extended"
                                  SelectionChanged="AttributeFilterAllKeywords_SelectionChanged"
                                  Width="Auto"
                                  MaxWidth="600"
@@ -120,14 +129,13 @@
                     </StackPanel>
                 </StackPanel>
             </TabItem>
-            <TabItem Header="Stackwalk"
-                     DataContext="{Binding CurrentProviderFilterForm,Mode=TwoWay,ValidatesOnNotifyDataErrors=False}">
+            <TabItem Header="Stackwalk" Name="StackwalkTab">
                 <StackPanel Orientation="Vertical" Margin="5">
                     <StackPanel Orientation="Horizontal" Margin="5">
                         <Label Width="150">Events:</Label>
                         <ListBox ItemsSource="{Binding Manifest.Events}"
                                  Name="StackwalkFilterEvents"
-                                 SelectionMode="Multiple"
+                                 SelectionMode="Extended"
                                  Width="Auto"
                                  MaxWidth="600"
                                  MaxHeight="250"
@@ -167,7 +175,7 @@
                                     <Label Width="150">Any keywords:</Label>
                                     <ListBox ItemsSource="{Binding Manifest.Keywords}"
                                              Name="StackwalkLevelKeywordFilterAnyKeywords"
-                                             SelectionMode="Multiple"
+                                             SelectionMode="Extended"
                                              Width="Auto"
                                              MaxWidth="600"
                                              MaxHeight="250"
@@ -178,7 +186,7 @@
                                     <Label Width="150">All keywords:</Label>
                                     <ListBox ItemsSource="{Binding Manifest.Keywords}"
                                              Name="StackwalkLevelKeywordFilterAllKeywords"
-                                             SelectionMode="Multiple"
+                                             SelectionMode="Extended"
                                              Width="Auto"
                                              MaxWidth="600"
                                              MaxHeight="250"
@@ -190,8 +198,7 @@
                     </StackPanel>
                 </StackPanel>
             </TabItem>
-            <TabItem Header="Payload"
-                     DataContext="{Binding CurrentProviderFilterForm,Mode=TwoWay,ValidatesOnNotifyDataErrors=False}">
+            <TabItem Header="Payload" Name="PayloadTab">
                 <StackPanel Orientation="Vertical" Margin="5">
                     <StackPanel Orientation="Horizontal">
                         <Label Width="100">Event:</Label>
@@ -295,9 +302,7 @@
                     </StackPanel>
                 </StackPanel>
             </TabItem>
-            <TabItem Header="Choose Columns"
-                     Name="ChooseEtwColumnsTab"
-                     DataContext="{Binding CurrentProviderFilterForm,Mode=TwoWay,ValidatesOnNotifyDataErrors=True}">
+            <TabItem Header="Choose Columns" Name="ChooseEtwColumnsTab">
                 <StackPanel Orientation="Horizontal" Margin="5">
                     <StackPanel Orientation="Vertical" Margin="5">
                         <StackPanel Orientation="Horizontal">
@@ -305,7 +310,7 @@
                             <DataGrid Name="AvailableEtwColumnsDataGrid"
                                       IsReadOnly="True"
                                       AutoGenerateColumns="False"
-                                      ItemsSource="{Binding AvailableEtwColumns,NotifyOnValidationError=False,ValidatesOnNotifyDataErrors=False}"
+                                      ItemsSource="{Binding Source={StaticResource src},ValidatesOnNotifyDataErrors=False}"
                                       SelectionMode="Extended"
                                       RowValidationErrorTemplate="{x:Null}"
                                       SelectionChanged="AvailableEtwColumnsDataGrid_SelectionChanged"
@@ -358,23 +363,23 @@
                                         <DataGridTextColumn Header="Name" IsReadOnly="True" Binding="{Binding Name}"/>
                                         <DataGridTextColumn Header="Event" IsReadOnly="True" Binding="{Binding TemplateSourceEvent}"/>
                                         <DataGridTextColumn Header="Type" IsReadOnly="True" Binding="{Binding TemplateFieldType}"/>
-                                        <DataGridTextColumn Header="IConverter" 
-                                                            Binding="{Binding IConverterCode}"
-                                                            Width="300">
-                                            <DataGridTextColumn.ElementStyle>
-                                                <Style TargetType="TextBlock"
-                                                       BasedOn="{StaticResource ErrorStyleTextBlockOnly}">
-                                                    <Setter Property="TextWrapping" Value="Wrap" />
-                                                </Style>
-                                            </DataGridTextColumn.ElementStyle>
-                                            <DataGridTextColumn.EditingElementStyle>
-                                                <Style TargetType="TextBox"
-                                                       BasedOn="{StaticResource ErrorStyle}">
-                                                    <Setter Property="TextWrapping" Value="Wrap" />
-                                                    <Setter Property="AcceptsReturn" Value="true" />
-                                                </Style>
-                                            </DataGridTextColumn.EditingElementStyle>
-                                        </DataGridTextColumn>
+                                        <DataGridTemplateColumn Header="Formatter">
+                                            <DataGridTemplateColumn.CellTemplate>
+                                                <DataTemplate>
+                                                    <ListBox 
+                                                        ItemsSource="{Binding Source={x:Static vm:GlobalStateViewModel.Instance},Path=Settings.Formatters,ValidatesOnNotifyDataErrors=False}"
+                                                        SelectedItem="{Binding Formatter}"
+                                                        MaxHeight="75"
+                                                        MaxWidth="255">
+                                                        <ListBox.ItemTemplate>
+                                                            <DataTemplate>
+                                                                <TextBlock Text="{Binding FunctionName}"/>
+                                                            </DataTemplate>
+                                                        </ListBox.ItemTemplate>
+                                                    </ListBox>
+                                                </DataTemplate>
+                                            </DataGridTemplateColumn.CellTemplate>
+                                        </DataGridTemplateColumn>
                                     </DataGrid.Columns>
                                 </DataGrid>
                         </StackPanel>

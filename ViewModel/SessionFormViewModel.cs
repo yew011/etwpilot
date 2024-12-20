@@ -27,11 +27,12 @@ using System.Windows.Controls;
 using System.Windows;
 using CommunityToolkit.Mvvm.Input;
 using Brushes = System.Windows.Media.Brushes;
+using System.ComponentModel;
+using Meziantou.Framework.WPF.Collections;
 
 namespace EtwPilot.ViewModel
 {
     using StopCondition = LiveSessionViewModel.StopCondition;
-    using static EtwPilot.Utilities.TraceLogger;
 
     public class SessionFormViewModel : ViewModelBase
     {
@@ -186,20 +187,9 @@ namespace EtwPilot.ViewModel
 
         #region observable properties
 
-        private ProviderFilterFormViewModel? m_CurrentProviderFilterForm;
-        public ProviderFilterFormViewModel? CurrentProviderFilterForm
-        {
-            get => m_CurrentProviderFilterForm;
-            set
-            {
-                if (m_CurrentProviderFilterForm != value)
-                {
-                    m_CurrentProviderFilterForm = value;
-                    OnPropertyChanged("CurrentProviderFilterForm");
-                }
-            }
-        }
-
+        //
+        // Used for error validation
+        //
         private int _NumProviderFilterForms;
         public int NumProviderFilterForms
         {
@@ -219,27 +209,24 @@ namespace EtwPilot.ViewModel
                 OnPropertyChanged("NumProviderFilterForms");
             }
         }
+
         #endregion
 
         #region commands
 
         public AsyncRelayCommand NewSessionFromProviderCommand { get; set; }
         public AsyncRelayCommand<ParsedEtwProvider> AddProviderToFormCommand { get; set; }
-        public AsyncRelayCommand<string> SwitchToProviderFormTabCommand { get; set; }
-        public AsyncRelayCommand ShowFormPreviewCommand { get; set; }        
+        public RelayCommand ShowFormPreviewCommand { get; set; }
+        public ConcurrentObservableCollection<ProviderFilterFormViewModel> ProviderFilterForms { get; set; }
+        public RelayCommand<ProviderFilterFormViewModel> CloseDynamicTab { get; set; }
 
         #endregion
 
-        private Dictionary<string, ProviderFilterFormViewModel> m_ProviderFilterForms;
-        //
-        // This is set in SessionFormView.xaml.cs code-behind. Go there for the lamentation.
-        //
-        public dynamic TabControl { get; set; }
         public SystemInfo SystemInfo { get; set; }
 
         public SessionFormViewModel() : base()
         {
-            m_ProviderFilterForms = new Dictionary<string, ProviderFilterFormViewModel>();
+            ProviderFilterForms = new ConcurrentObservableCollection<ProviderFilterFormViewModel>();
             SystemInfo = new SystemInfo();
 
             Name = _Name = string.Empty;
@@ -253,13 +240,22 @@ namespace EtwPilot.ViewModel
                 Command_NewSessionFromProvider, () => { return true; });
             AddProviderToFormCommand = new AsyncRelayCommand<ParsedEtwProvider>(
                 Command_AddProviderToForm, _ => true);
-            SwitchToProviderFormTabCommand = new AsyncRelayCommand<string>(
-                Command_SwitchToProviderFormTab, _ => true);
-            ShowFormPreviewCommand = new AsyncRelayCommand(
+            CloseDynamicTab = new RelayCommand<ProviderFilterFormViewModel>(
+                Command_CloseDynamicTab, _ => true);
+            ShowFormPreviewCommand = new RelayCommand(
                 Command_ShowFormPreview, () => { return true; });
+
+            //
+            // When our form becomes valid, the session control buttons and associated commands
+            // also become available.
+            //
+            ErrorsChanged += delegate (object? sender, DataErrorsChangedEventArgs e)
+            {
+                GlobalStateViewModel.Instance.g_SessionViewModel.NotifyCanExecuteChanged();
+            };
         }
 
-        private async Task<bool> Command_ShowFormPreview()
+        private void Command_ShowFormPreview()
         {
             var popup = new System.Windows.Controls.Primitives.Popup()
             {
@@ -281,31 +277,36 @@ namespace EtwPilot.ViewModel
             popBorder.Child = popContent;
             popup.IsOpen = true;
             popup.Child = popBorder;
-            return true;
         }
-
+         
         private async Task Command_NewSessionFromProvider()
         {
             var vm = GlobalStateViewModel.Instance.g_ProviderViewModel;
-            var providers = vm.GetSelectedProviders();
+            var providers = vm.SelectedProviders;
             if (providers.Count == 0)
             {
                 return;
             }
 
+            //
+            // Switch the mainwindow tabcontrol to our the Sessions tab before adding the provider
+            // to the form, because it's possible the VM backing the form hasn't been created yet.
+            //
+            GlobalStateViewModel.Instance.g_MainWindowViewModel.RibbonTabControlSelectedIndex = 1;
+
             foreach (var provider in providers)
             {
                 await Command_AddProviderToForm(provider);
             }
-
-            //
-            // Switch the mainwindow tabcontrol to our tab
-            //
-            GlobalStateViewModel.Instance.g_MainWindowViewModel.RibbonTabControlSelectedIndex = 1;
         }
 
-        private async Task Command_AddProviderToForm(ParsedEtwProvider Provider)
+        private async Task Command_AddProviderToForm(ParsedEtwProvider? Provider)
         {
+            if (Provider == null)
+            {
+                Debug.Assert(false);
+                return;
+            }
             ProgressState.InitializeProgress(2);
 
             if (SystemInfo.ActiveProcessList.Count == 0)
@@ -318,89 +319,52 @@ namespace EtwPilot.ViewModel
                 ProgressState.UpdateProgressMessage($"Found {SystemInfo.ActiveProcessList.Count} processes.");
             }
 
-            //
-            // If the provider has never been loaded, parse and load its manifest.
-            // If it has been accessed before, pull the VM from the cache. Each entry in
-            // the cache points to a ProviderFilterFormViewModel.
-            //
-            var tabName = UiHelper.GetUniqueTabName(Provider.Id, "ProviderFilter");
-            ProviderFilterFormViewModel providerForm;
-            if (m_ProviderFilterForms.ContainsKey(tabName))
-            {
-                //
-                // This form has already been loaded once and bound to an existing tab.
-                // Activate it and we're done.
-                //
-                providerForm = m_ProviderFilterForms[tabName];
-                CurrentProviderFilterForm = providerForm;
-                return;
-            }
-            //
-            // There is no form created for this provider yet, do so now.
-            //
             var manifest = await GlobalStateViewModel.Instance.g_ProviderViewModel.GetProviderManifest(Provider.Id);
             if (manifest == null)
             {
                 ProgressState.FinalizeProgress($"Unable to locate manifest for provider {Provider}");
                 return;
             }
-            providerForm = new ProviderFilterFormViewModel(manifest.SelectedProviderManifest);
-            providerForm.SetParentFormNotifyErrorsChanged(this); // bubble up to parent
-            providerForm.Initialize();
-            if (!UiHelper.CreateTabControlContextualTab(
-                    TabControl,
-                    providerForm,
-                    tabName,
-                    Provider.Name!,
-                    "ProviderFilterContextTabStyle",
-                    "ProviderFilterContextTabText",
-                    "ProviderFilterContextTabCloseButton",
-                    null,
-                    new Func<string, Task<bool>>(RemoveProviderFilterForm)))
-            {
-                Trace(TraceLoggerType.Sessions,
-                      TraceEventType.Error,
-                      $"Unable to create contextual tab {tabName}");
-                return;
-            }
 
-            m_ProviderFilterForms.Add(tabName, providerForm);
-            CurrentProviderFilterForm = providerForm;
+            var providerForm = new ProviderFilterFormViewModel(manifest.m_Manifest);
+            providerForm.SetParentFormNotifyErrorsChanged(this); // bubble up to parent
+
+            //
+            // Create a UI tab for this provider form. If the form already exists, switch to it.
+            //
+            var tabName = UiHelper.GetUniqueTabName(Provider.Id, "ProviderFilterForm");
+            if (!UiHelper.CreateTabControlTab(
+                "ProviderFilterFormsTabControl",
+                providerForm,
+                tabName,
+                providerForm))
+            {
+                Debug.Assert(false);
+                return;
+            }            
+            ProviderFilterForms.Add(providerForm);
             NumProviderFilterForms++;
         }
 
-        private Task Command_SwitchToProviderFormTab(string TabName)
+        public void Command_CloseDynamicTab(ProviderFilterFormViewModel? Form)
         {
-            //
-            // Invoked from SessionFormView code-behind when selected provider form
-            // tab changes
-            //
-            if (m_ProviderFilterForms.ContainsKey(TabName))
+            if (Form == null)
             {
-                CurrentProviderFilterForm = m_ProviderFilterForms[TabName];
-                return Task.FromResult(true);
+                Debug.Assert(false);
+                return;
             }
-
-            Debug.Assert(false);
-            return Task.FromResult(false);
-        }
-
-        private Task<bool> RemoveProviderFilterForm(string TabName)
-        {
+            Form.FinalizeForm();
+            NumProviderFilterForms--;
+            Debug.Assert(ProviderFilterForms.Contains(Form));
+            ProviderFilterForms.Remove(Form);
             //
-            // Invoked from SessionFormView code-behind when tab "X" is clicked
+            // Remove the tab from the tab control.
             //
-            if (m_ProviderFilterForms.ContainsKey(TabName))
+            var tabName = UiHelper.GetUniqueTabName(Form.Manifest.Provider.Id, "ProviderFilterForm");
+            if (!UiHelper.RemoveTab("ProviderFilterFormsTabControl",tabName))
             {
-                m_ProviderFilterForms[TabName].FinalizeForm();
-                NumProviderFilterForms--;
-                m_ProviderFilterForms.Remove(TabName);
-                CurrentProviderFilterForm = null;
-                return Task.FromResult(true);
+                return;
             }
-
-            Debug.Assert(false);
-            return Task.FromResult(false);
         }
 
         public override string ToString()
@@ -411,7 +375,7 @@ namespace EtwPilot.ViewModel
             sb.AppendLine($"Log location: {LogLocation}");
             sb.AppendLine($"Stop condition: {StopCondition}");
             sb.AppendLine($"Stop condition value: {StopConditionValue}");
-            m_ProviderFilterForms.ToList().ForEach(f => sb.AppendLine($"{f.Value}"));
+            ProviderFilterForms.ToList().ForEach(f => sb.AppendLine($"{f}"));
             return sb.ToString();
         }
 
@@ -423,10 +387,9 @@ namespace EtwPilot.ViewModel
             model.StopCondition = StopCondition;
             model.StopConditionValue = StopConditionValue;
             model.LogLocation = LogLocation;
-            Debug.Assert(m_ProviderFilterForms.Count > 0);
-            foreach (var item in m_ProviderFilterForms)
+            Debug.Assert(ProviderFilterForms.Count > 0);
+            foreach (var form in ProviderFilterForms)
             {
-                var form = item.Value;
                 var enabledProvider = new EnabledProvider(
                     form.Manifest.Provider.Id,
                     form.Manifest.Provider.Name!,
@@ -564,14 +527,5 @@ namespace EtwPilot.ViewModel
             }
             return model;
         }
-    }
-
-    public class ProcessObject
-    {
-        public int Pid { get; set; }
-        public string Name { get; set; }
-        public string Exe { get; set; }
-        public string AppId { get; set; }
-        public string PackageId { get; set; }
     }
 }

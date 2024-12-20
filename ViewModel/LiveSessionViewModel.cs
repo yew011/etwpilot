@@ -29,10 +29,12 @@ using System.Collections.Concurrent;
 using EtwPilot.Utilities;
 using CommunityToolkit.Mvvm.Input;
 using System.Windows.Controls;
+using System.Collections.ObjectModel;
 
 namespace EtwPilot.ViewModel
 {
     using static EtwPilot.Utilities.TraceLogger;
+    using Timer = System.Timers.Timer;
 
     public class LiveSessionViewModel : ViewModelBase
     {
@@ -46,7 +48,41 @@ namespace EtwPilot.ViewModel
 
         #region observable properties
 
-        private long _EventsConsumed;
+        //
+        // This is required in order to have something to bind to LiveSessionGrid.xaml,
+        // which is the UserControl that displays the provider's data in a DataGrid.
+        // It is updated whenever the selected provider trace data tab changes, from
+        // LiveSessionView code-behind.
+        //
+        private ProviderTraceData _SelectedProviderTraceData;
+        public ProviderTraceData SelectedProviderTraceData
+        {
+            get => _SelectedProviderTraceData;
+            set
+            {
+                if (_SelectedProviderTraceData != value)
+                {
+                    _SelectedProviderTraceData = value;
+                    OnPropertyChanged("SelectedProviderTraceData");
+                }
+            }
+        }
+
+        private int _SelectedProviderIndex;
+        public int SelectedProviderIndex
+        {
+            get => _SelectedProviderIndex;
+            set
+            {
+                if (_SelectedProviderIndex != value)
+                {
+                    _SelectedProviderIndex = value;
+                    OnPropertyChanged("SelectedProviderIndex");
+                }
+            }
+        }
+
+        private long _EventsConsumed; // could be per-provider, but confusing in UI
         public long EventsConsumed
         {
             get { return Interlocked.Read(ref _EventsConsumed); }
@@ -60,7 +96,7 @@ namespace EtwPilot.ViewModel
             }
         }
 
-        private long _BytesConsumed;
+        private long _BytesConsumed; // bytes consumed are global, not per-provider
         public long BytesConsumed
         {
             get { return Interlocked.Read(ref _BytesConsumed); }
@@ -73,32 +109,22 @@ namespace EtwPilot.ViewModel
                 }
             }
         }
-
-        private ProviderTraceData _CurrentProviderTraceData; // relates to currently selected tab
-        public ProviderTraceData CurrentProviderTraceData
-        {
-            get => _CurrentProviderTraceData;
-            set
-            {
-                if (_CurrentProviderTraceData != value)
-                {
-                    _CurrentProviderTraceData = value;
-                    OnPropertyChanged("CurrentProviderTraceData");
-                }
-            }
-        }
         #endregion
 
         #region commands
 
-        public AsyncRelayCommand StartLiveSessionCommand { get; set; }
-        public AsyncRelayCommand StopLiveSessionCommand { get; set; }
-        public AsyncRelayCommand<dynamic> CreateTabsForProvidersCommand { get; set; }
+        public AsyncRelayCommand StartCommand { get; set; }
+        public AsyncRelayCommand StopCommand { get; set; }
         public AsyncRelayCommand SendToInsightsCommand { get; set; }
 
         #endregion
 
         public DateTime StartTime { get; set; }
+        public string m_TabText { get; set; }
+        //
+        // This collection is bound to the LiveSessionViewTabControl
+        //
+        public ObservableCollection<TabItem> Tabs { get; set; }
 
         public SessionFormModel Configuration { get; set; }
         public Stopwatch Stopwatch { get; set; }
@@ -114,12 +140,14 @@ namespace EtwPilot.ViewModel
         //
         // Per-provider trace data, accessed from arbitrary thread ctx.
         //
-        private ConcurrentDictionary<Guid, ProviderTraceData> _ProviderTraceData;
+        public ConcurrentDictionary<string, ProviderTraceData> m_ProviderTraceData { get; set; }
 
         //
-        // This is set in LiveSessionView.xaml.cs code-behind. Go there for the lamentation.
+        // Each live session gets a copy of the most recent library validated in current
+        // settings. Otherwise, a global copy would overwrite the libraries of active
+        // live sessions.
         //
-        public dynamic TabControl { get; set; }
+        public FormatterLibrary m_FormatterLibrary { get; set; }
 
         public LiveSessionViewModel(
             SessionFormModel Model,
@@ -127,49 +155,139 @@ namespace EtwPilot.ViewModel
             Action StoppedCallback
             ) : base()
         {
-            StartLiveSessionCommand = new AsyncRelayCommand(
-                Command_StartLiveSession, () => { return !IsRunning(); });
-            StopLiveSessionCommand = new AsyncRelayCommand(
-                Command_StopLiveSession, () => { return IsRunning(); });
-            CreateTabsForProvidersCommand = new AsyncRelayCommand<dynamic>(
-                Command_CreateTabsForProviders, (_) => { return true; });
-            SendToInsightsCommand = new AsyncRelayCommand(
-                Command_SendToInsights, CanExecuteSendToInsights);
+            m_FormatterLibrary = new FormatterLibrary();
 
+            StartCommand = new AsyncRelayCommand(Command_Start, CanExecuteStartCommand);
+            StopCommand = new AsyncRelayCommand(Command_Stop, CanExecuteStopCommand);
+            SendToInsightsCommand = new AsyncRelayCommand(Command_SendToInsights, CanExecuteSendToInsights);
             CancellationSource = new CancellationTokenSource();
             TaskCompletedEvent = new AutoResetEvent(false);
             Stopwatch = new Stopwatch();
             Configuration = Model;
-            _ProviderTraceData = new ConcurrentDictionary<Guid, ProviderTraceData>();
+            m_TabText = Configuration.Name;
+            m_ProviderTraceData = new ConcurrentDictionary<string, ProviderTraceData>();
             TraceStartedCallback = StartedCallback;
             TraceStoppedCallback = StoppedCallback;
+            BytesConsumed = 0;
+            EventsConsumed = 0;
+            Tabs = new ObservableCollection<TabItem>();
+
             //
-            // For the elapsed seconds visual aid to update once a second. This is
-            // required because Stopwatch.ElapsedMilliseconds is a property that
-            // only updates when it is accessed (queried), so one-way binding to
-            // the control does not do that.
+            // Setup progress bar.
             //
-            _ElapsedSecTimer = new Timer(new TimerCallback((s) =>
-                OnPropertyChanged("Stopwatch")), null, 1000, 1000);
+            if (Configuration.StopCondition == StopCondition.None)
+            {
+                ProgressState.InitializeProgress(100); // arbitrary
+                ProgressState.ProgressValue = 50;
+            }
+            else
+            {
+                ProgressState.InitializeProgress(Configuration.StopConditionValue);
+            }
+
+            //
+            // 1-second timer to keep taskbar refreshed with trace details
+            //
+            _ElapsedSecTimer = new Timer();
+            _ElapsedSecTimer.Interval = 1000;
+            _ElapsedSecTimer.AutoReset = true;
+            _ElapsedSecTimer.Elapsed += (sender, e) =>
+            {
+                var ts = TimeSpan.FromMilliseconds(Stopwatch.ElapsedMilliseconds);
+                var bytes = MiscHelper.FormatByteSizeString(BytesConsumed, 0);
+                var message = $"{EventsConsumed:n0} events | {bytes} | {ts:mm}:{ts:ss}";
+                if (IsStopping())
+                {
+                    message += $" | Session stopping...";
+                }
+                else if (!IsRunning())
+                {
+                    message += $" | Session stopped.";
+                    _ElapsedSecTimer.Stop();
+                    ProgressState.FinalizeProgress(message);
+                    return;
+                }
+                ProgressState.UpdateProgressMessage(message);
+            };
+
+            //
+            // Create tabs for each provider. This must be done before the view has been
+            // instantiated, which should occur right after this ctor. These tabs are
+            // bound to the tab control's ItemsSource.
+            //
+            // The tabs will not have a close button, because it doesn't make sense to close
+            // provider data tabs that are irreversibly part of the live session, but also,
+            // the viewmodel for the provider data tabs is ProviderTraceData, which is NOT
+            // derived from ViewModelBase (the style has a command that expects that)
+            //
+            foreach (var provider in Configuration.ConfiguredProviders)
+            {
+                var name = provider._EnabledProvider.Name;
+                if (string.IsNullOrEmpty(name))
+                {
+                    Debug.Assert(false);
+                    continue;
+                }
+                var result = m_ProviderTraceData.TryAdd(name, new ProviderTraceData()
+                {
+                    Columns = provider.Columns,
+                    m_TabText = name
+                });
+                Debug.Assert(result);
+                var id = provider._EnabledProvider.Id;
+                var tabName = UiHelper.GetUniqueTabName(id, "LiveSessionProviderData");
+                var newTab = UiHelper.CreateEmptyTab(tabName, name, m_ProviderTraceData[name]);
+                if (newTab == null)
+                {
+                    Debug.Assert(false);
+                    return;
+                }
+                Tabs.Add(newTab); // bound to LiveSessionView tabcontrol
+            }
+        }
+
+        public async Task<bool> Initialize()
+        {
+            //
+            // This routine is called from SessionViewModel after instantiating a LiveSession
+            // but before starting it.
+            //
+
+            //
+            // If the formatters in the settings object have errors, nothing to do.
+            //
+            if (!GlobalStateViewModel.Instance.Settings.m_FormatterLibrary.m_Ready)
+            {
+                return false;
+            }
+
+            //
+            // Re-publish/copy the already-validated formatters from settings.
+            //
+            return await m_FormatterLibrary.Publish(
+                GlobalStateViewModel.Instance.Settings.Formatters.ToList());
         }
 
         public override Task ViewModelActivated()
         {
             GlobalStateViewModel.Instance.CurrentViewModel = this;
+            GlobalStateViewModel.Instance.g_SessionViewModel.CurrentLiveSession = this;
             return Task.CompletedTask;
         }
 
-        private async Task Command_StartLiveSession()
+        private async Task Command_Start()
         {
             Debug.Assert(!StartTaskRunning);
             Debug.Assert(!StopTaskRunning);
+            Debug.Assert(m_FormatterLibrary.m_Ready);
             StartTaskRunning = true;
+            NotifyCanExecuteChanged();
+
             try
             {
-                GlobalStateViewModel.Instance.g_ConverterLibrary.Build(
-                    Configuration.ConfiguredProviders);
-                TraceStartedCallback();
                 StartTime = DateTime.Now;
+                TraceStartedCallback();
+                _ElapsedSecTimer.Start();
                 await Task.Run(() => ConsumeTraceEvents());
             }
             catch (Exception ex)
@@ -177,13 +295,15 @@ namespace EtwPilot.ViewModel
                 ProgressState.FinalizeProgress($"Exception occurred: {ex.Message}");
             }
             StartTaskRunning = false;
+            NotifyCanExecuteChanged();
         }
 
-        private async Task Command_StopLiveSession()
+        private async Task Command_Stop()
         {
             Debug.Assert(!StopTaskRunning);
             Debug.Assert(_TraceSession != null);
             StopTaskRunning = true;
+            NotifyCanExecuteChanged();
 
             try
             {
@@ -207,130 +327,55 @@ namespace EtwPilot.ViewModel
                 ProgressState.UpdateProgressMessage($"Exception occurred: {ex.Message}");
             }
             StopTaskRunning = false;
-        }
-
-        private async Task Command_CreateTabsForProviders(dynamic AutogeneratingColumnCallback)
-        {
-            //
-            // This routine is invoked only by TabControl_Loaded in LiveSessionView.xaml.cs code-behind
-            //
-            foreach (var provider in Configuration.ConfiguredProviders)
-            {
-                var id = provider._EnabledProvider.Id;
-                if (!_ProviderTraceData.ContainsKey(id))
-                {
-                    var result = _ProviderTraceData.TryAdd(id, new ProviderTraceData()
-                    {
-                        Columns = provider.Columns,
-                    });
-                    Debug.Assert(result);
-                }
-                var data = _ProviderTraceData[id];
-
-                var tabName = UiHelper.GetUniqueTabName(id, "ProviderLiveSession");
-                Func<string, Task<bool>> tabClosedCallback = delegate (string TabName)
-                {
-                    data.IsEnabled = false;
-                    return Task.FromResult(true);
-                };
-                var providerDataGrid = new DataGrid()
-                {
-                    //
-                    // Important: Fixing the control to a MaxHeight and MaxWidth
-                    // is required, as otherwise the Grid will attempt to re-calculate
-                    // control bounds on every single row/ column.Etw captures are
-                    // noisy and will hang the UI.
-                    //
-                    Name = UiHelper.GetUniqueTabName(id, "ProviderData"),
-                    AlternatingRowBackground = System.Windows.Media.Brushes.AliceBlue,
-                    EnableColumnVirtualization = true,
-                    EnableRowVirtualization = true,
-                    IsReadOnly = true,
-                    AutoGenerateColumns = true,
-                    RowHeight = 25,
-                    MaxHeight = 1600,
-                    MaxWidth = 1600,
-                    ItemsSource = data.Data.AsObservable,
-                    DataContext = data,
-                };
-                providerDataGrid.AutoGeneratingColumn += AutogeneratingColumnCallback;
-                if (!UiHelper.CreateTabControlContextualTab(
-                        TabControl,
-                        providerDataGrid,
-                        tabName,
-                        provider._EnabledProvider.Name!,
-                        "LiveSessionTabStyle",
-                        "LiveSessionTabText",
-                        "LiveSessionTabCloseButton",
-                        data,
-                        tabClosedCallback))
-                {
-                    Trace(TraceLoggerType.LiveSession,
-                          TraceEventType.Error,
-                          $"Unable to create live session tab {tabName}");
-                }
-            }
+            NotifyCanExecuteChanged();
         }
 
         private async Task Command_SendToInsights()
         {
             var insightsVm = GlobalStateViewModel.Instance.g_InsightsViewModel;
-
-            //
-            // The insights view model might not have been initialized yet, since this
-            // only occurs when its tab is activated.
-            //
-            if (!insightsVm.Initialized)
-            {
-                if (!insightsVm.ReinitializeCommand.CanExecute(null))
-                {
-                    ProgressState.FinalizeProgress("Unable to initialize Insights at this time");
-                    return;
-                }
-                await insightsVm.ReinitializeCommand.ExecuteAsync(null);
-            }
-
-            //
-            // Execute sequence of commands that normally are invoked from UI interaction.
-            //
-            if (!insightsVm.SetChatTopicCommand.CanExecute(null))
-            {
-                await insightsVm.ViewModelActivated();
-                ProgressState.FinalizeProgress("Unable to set chat topic at this time.");
-                return;
-            }
-            await insightsVm.SetChatTopicCommand.ExecuteAsync(InsightsViewModel.ChatTopic.EventData);
-            if (!insightsVm.ImportVectorDbDataFromLiveSessionCommand.CanExecute(null))
-            {
-                await insightsVm.ViewModelActivated();
-                ProgressState.FinalizeProgress("Unable to import data at this time.");
-                return;
-            }
-
+            Debug.Assert(SelectedProviderIndex < m_ProviderTraceData.Count);
             await insightsVm.ImportVectorDbDataFromLiveSessionCommand.ExecuteAsync(
-                CurrentProviderTraceData.Data.AsObservable.ToList());
-            await insightsVm.ViewModelActivated();
+                m_ProviderTraceData.ElementAt(SelectedProviderIndex).Value.Data.AsObservable.ToList());
         }
 
         protected override async Task ExportData(DataExporter.ExportFormat Format, CancellationToken Token)
         {
-            ProgressState.InitializeProgress(1);
-            var list = CurrentProviderTraceData.Data.AsObservable.ToList();
+            Debug.Assert(SelectedProviderTraceData != null);
+            var list = SelectedProviderTraceData.Data.AsObservable.ToList();
             if (list.Count == 0)
             {
-                ProgressState.FinalizeProgress("No live session data available for export.");
+                ProgressState.UpdateEphemeralStatustext("No live session data available for export.");
                 return;
             }
             try
             {
                 var result = await DataExporter.Export<List<ParsedEtwEvent>>(
-                    list, Format, "LiveSession",Token);
-                ProgressState.UpdateProgressValue();
-                ProgressState.FinalizeProgress($"Exported {result.Item1} records to {result.Item2}");
+                    list, Format, SelectedProviderTraceData.m_TabText,Token);
+                if (result.Item1 == 0 || result.Item2 == null)
+                {
+                    throw new Exception("Invalid export format");
+                }
+                ProgressState.UpdateEphemeralStatustext($"Exported {result.Item1} records to {result.Item2}");
+                if (Format != DataExporter.ExportFormat.Clip)
+                {
+                    ProgressState.SetFollowupActionCommand.Execute(
+                        new FollowupAction()
+                        {
+                            Title = "Open",
+                            Callback = new Action<dynamic>((args) =>
+                            {
+                                var psi = new ProcessStartInfo();
+                                psi.FileName = result.Item2;
+                                psi.UseShellExecute = true;
+                                Process.Start(psi);
+                            }),
+                            CallbackArgument = null
+                        });
+                }
             }
             catch (Exception ex)
             {
-                ProgressState.FinalizeProgress($"ExportData failed: {ex.Message}");
+                ProgressState.UpdateEphemeralStatustext($"ExportData failed: {ex.Message}");
             }
         }
 
@@ -352,19 +397,6 @@ namespace EtwPilot.ViewModel
 
         private void ConsumeTraceEvents()  // blocking
         {
-            //
-            // Setup progress bar.
-            //
-            if (Configuration.StopCondition == StopCondition.None)
-            {
-                ProgressState.InitializeProgress(100); // arbitrary
-                ProgressState.ProgressValue = 50;
-            }
-            else
-            {
-                ProgressState.InitializeProgress(Configuration.StopConditionValue);
-            }
-
             //
             // Instantiate trace object
             //
@@ -399,9 +431,6 @@ namespace EtwPilot.ViewModel
                     }
 
                     _TraceSession.Start();
-
-                    ProgressState.UpdateProgressMessage(
-                        $"Live session {Configuration.Name} has started.");
                     Stopwatch.Start();
 
                     //
@@ -442,14 +471,15 @@ namespace EtwPilot.ViewModel
                             return;
                         }
 
-                        if (!_ProviderTraceData.ContainsKey(parsedEvent.Provider.Id))
+                        if (string.IsNullOrEmpty(parsedEvent.Provider.Name) ||
+                            !m_ProviderTraceData.ContainsKey(parsedEvent.Provider.Name))
                         {
                             Trace(TraceLoggerType.LiveSession,
                                   TraceEventType.Error,
-                                  $"Dropping event for unrecognized provider {parsedEvent.Provider}");
+                                  $"Dropping event for unrecognized/no-name provider {parsedEvent.Provider}");
                             return;
                         }
-                        _ProviderTraceData[parsedEvent.Provider.Id].Data.Add(parsedEvent);
+                        m_ProviderTraceData[parsedEvent.Provider.Name].Data.Add(parsedEvent);
                         EventsConsumed++;
                     }),
                     new BufferCallback((LogFile) =>
@@ -471,6 +501,7 @@ namespace EtwPilot.ViewModel
                                   TraceEventType.Error,
                                   $"Unable to cast EVENT_TRACE_LOGFILE: {ex.Message}");
                         }
+                        
                         BytesConsumed += logfile.Filled;
                         var mbConsumed = Math.Round((double)BytesConsumed / 1000000, 2);
                         var elapsedSec = (int)Math.Floor((decimal)Stopwatch.ElapsedMilliseconds / 1000);
@@ -498,15 +529,45 @@ namespace EtwPilot.ViewModel
             }
 
             Stopwatch.Stop();
-            ProgressState.FinalizeProgress($"Live session {Configuration.Name} stopped.");
             TaskCompletedEvent.Set();
+        }
+
+        protected override bool CanExecuteExportDataCommand(DataExporter.ExportFormat Format)
+        {
+            if (IsRunning()) // Don't allow any data export until session is stopped.
+            {
+                return false;
+            }
+            return base.CanExecuteExportDataCommand(Format);
+        }
+
+        private bool CanExecuteStartCommand()
+        {
+            return !IsRunning() && m_FormatterLibrary.m_Ready;
+        }
+
+        private bool CanExecuteStopCommand()
+        {
+            return IsRunning();
         }
 
         private bool CanExecuteSendToInsights()
         {
-            return GlobalStateViewModel.Instance.Settings.ModelConfig != null && 
-                CurrentProviderTraceData != null &&
-                CurrentProviderTraceData.Data.Count > 0;
+            if (m_ProviderTraceData.Count == 0)
+            {
+                return false;
+            }
+            Debug.Assert(SelectedProviderIndex < m_ProviderTraceData.Count);
+            return GlobalStateViewModel.Instance.Settings.ModelConfig != null &&
+                m_ProviderTraceData.ElementAt(SelectedProviderIndex).Value.Data.Count > 0;
+        }
+
+        private void NotifyCanExecuteChanged()
+        {
+            StartCommand.NotifyCanExecuteChanged();
+            StopCommand.NotifyCanExecuteChanged();
+            ExportDataCommand.NotifyCanExecuteChanged();
+            SendToInsightsCommand.NotifyCanExecuteChanged();
         }
     }
 
@@ -520,12 +581,15 @@ namespace EtwPilot.ViewModel
         }
         public bool IsEnabled { get; set; }
         public List<EtwColumnViewModel> Columns { get; set; }
+        public string m_TabText { get; set; }
+        public Guid m_Id { get; set; } // used for converter library lookup
 
         public ProviderTraceData()
         {
             _Data = new ConcurrentObservableCollection<ParsedEtwEvent>();
             IsEnabled = true;
             Columns = new List<EtwColumnViewModel>();
+            m_Id = Guid.NewGuid();
         }
     }
 }
