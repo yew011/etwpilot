@@ -17,6 +17,7 @@ specific language governing permissions and limitations
 under the License.
 */
 using etwlib;
+using EtwPilot.Sk.Vector;
 using Microsoft.Extensions.VectorData;
 using Microsoft.SemanticKernel.Embeddings;
 using Qdrant.Client.Grpc;
@@ -27,7 +28,7 @@ using Qdrant.Client.Grpc;
 #pragma warning disable SKEXP0001
 #pragma warning disable SKEXP0020
 
-namespace EtwPilot.Vector.EtwProviderManifest
+namespace EtwPilot.Sk.Vector.EtwProviderManifest
 {
     using static VectorHelper;
 

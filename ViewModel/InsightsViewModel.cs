@@ -25,7 +25,6 @@ using Microsoft.SemanticKernel;
 using Microsoft.Win32;
 using Qdrant.Client;
 using etwlib;
-using EtwPilot.Vector;
 using EtwPilot.Utilities;
 using System.Text;
 using Microsoft.SemanticKernel.ChatCompletion;
@@ -33,6 +32,8 @@ using System;
 using Microsoft.SemanticKernel.Connectors.Onnx;
 using System.Collections.ObjectModel;
 using System.Windows.Controls;
+using EtwPilot.Sk.Plugins;
+using EtwPilot.Sk.Vector;
 
 //
 // Remove supression after onnx connector is out of alpha
@@ -313,10 +314,11 @@ namespace EtwPilot.ViewModel
                     }
                     ProgressState.UpdateProgressValue();
                     //
-                    // Add search plugin
+                    // Add SK plugins
                     //
-                    m_Kernel.Plugins.AddFromObject(
-                        new QdrantVecDbEtwSearchPlugin(m_VectorDb), "etwSearchPlugin");
+                    m_Kernel.Plugins.AddFromObject(new VectorSearch(m_VectorDb), "etwVectorSearch");
+                    m_Kernel.Plugins.AddFromObject(new EtwTraceSession(m_VectorDb), "etwTraceSession");
+                    m_Kernel.Plugins.AddFromObject(new ProcessInfo(), "processInfo");
                 });
                 ProgressState.FinalizeProgress($"Ready.");
                 Initialized = true;
@@ -709,56 +711,35 @@ namespace EtwPilot.ViewModel
                 IsViewEnabled = false;
 
                 //
-                // Construct the full prompt and at it to our chat history.
+                // Add the user's question to the chat history.
                 //
-                var prompt = $"Question: {Prompt}";
+                m_ChatHistory.AddUserMessage(Prompt);
+
+                //
+                // If applicable, construct a system prompt for a multi-step process to get
+                // at a meaningful reply using plugins as needed.
+                //
+                var systemPrompt = string.Empty;
                 if (Topic == ChatTopic.Manifests)
                 {
-                    prompt += $"{Environment.NewLine}" +
-                        $"Use this additional context on related ETW provider manifests: {{{{etwSearchPlugin.SearchEtwProviderManifests $query}}}}";
+                    systemPrompt = $"If the user question relates to ETW providers or their manifests, "+
+                        "respond with the name or GUID of the provider.";
                 }
                 else if (Topic == ChatTopic.EventData)
                 {
-                    prompt += $"{Environment.NewLine}" +
-                        $"Use this additional context containing actual ETW data: {{{{etwSearchPlugin.SearchEtwEvents $query}}}}";
+                    systemPrompt = $"If the user question relates to specific ETW events, respond with "+
+                        "as much information about the event as the user supplied in their question, in"+
+                        "the following format (do NOT include values that the user did not supply in their"+
+                        "question:  'This ETW event with ID <ID> (version <version>) generated "+
+                        "by provider <provider name or GUID> relates to the process with ID <process ID> "+
+                        "with start key <ProcessStartKey>, thread ID <threadId> from the user with SID "+
+                        "<UserSid> at timestamp <Timestamp>. The event <Event level>-type info about channel"+
+                        "<Channel>, task <task> and opcode <opcode>> pertaining to keywords <keywords>'";
+                    m_ChatHistory.AddSystemMessage(systemPrompt);
                 }
-                m_ChatHistory.AddUserMessage(prompt);
 
                 ProgressState.UpdateProgressValue();
                 ProgressState.UpdateProgressMessage("Please wait, performing inference...");
-
-                var service = m_Kernel.GetRequiredService<IChatCompletionService>();
-                var promptSettings = GlobalStateViewModel.Instance.Settings.ModelConfig!.ToPromptExecutionSettings();
-                var response = string.Empty;
-                var inferenceResult = new InsightsInferenceResultModel();
-
-                await Task.Run(async () =>
-                {
-                    await foreach (var content in service.GetStreamingChatMessageContentsAsync(
-                        m_ChatHistory, promptSettings, m_Kernel, Token))
-                    {
-                        Token.ThrowIfCancellationRequested();
-                        if (inferenceResult.Type == InsightsInferenceResultModel.ContentType.None)
-                        {
-                            //
-                            // For the View only
-                            //
-                            inferenceResult.Type = InsightsInferenceResultModel.ContentType.ModelOutput;
-                            ResultHistory.Add(inferenceResult);
-                        }
-
-                        if (content.Content is { Length: > 0 })
-                        {
-                            response += content.Content;
-                            inferenceResult.Content += content.Content;
-                        }
-                    }
-                });
-
-                if (!string.IsNullOrEmpty(response))
-                {
-                    m_ChatHistory.AddAssistantMessage(response);
-                }
             }
             catch (OperationCanceledException)
             {
@@ -891,6 +872,8 @@ namespace EtwPilot.ViewModel
                 //
                 return false;
             }
+            return true;
+            /*
             if (PropertyHasErrors(nameof(Prompt)))
             {
                 return false;
@@ -907,8 +890,7 @@ namespace EtwPilot.ViewModel
             {
                 return IsEventDataAvailable;
             }
-            Debug.Assert(false);
-            return false;
+            return false;*/
         }
 
         public bool CanExecuteVecDbCommand()

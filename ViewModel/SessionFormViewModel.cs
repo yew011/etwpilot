@@ -406,17 +406,17 @@ namespace EtwPilot.ViewModel
                 }
                 if (form.ScopeFilter.ExeNames.Count > 0) // exe
                 {
-                    var str = ScopeFilterViewModel.GetEtwString(form.ScopeFilter.ExeNames);
+                    var str = EtwHelper.GetEtwStringList(form.ScopeFilter.ExeNames);
                     enabledProvider.SetFilteredExeName(str);
                 }
                 if (form.ScopeFilter.AppIds.Count > 0) // appId
                 {
-                    var str = ScopeFilterViewModel.GetEtwString(form.ScopeFilter.AppIds);
+                    var str = EtwHelper.GetEtwStringList(form.ScopeFilter.AppIds);
                     enabledProvider.SetFilteredPackageAppId(str);
                 }
                 if (form.ScopeFilter.PackageIds.Count > 0) // packageId
                 {
-                    var str = ScopeFilterViewModel.GetEtwString(form.ScopeFilter.PackageIds);
+                    var str = EtwHelper.GetEtwStringList(form.ScopeFilter.PackageIds);
                     enabledProvider.SetFilteredPackageId(str);
                 }
                 //

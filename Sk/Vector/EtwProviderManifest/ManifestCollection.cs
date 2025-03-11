@@ -17,6 +17,7 @@ specific language governing permissions and limitations
 under the License.
 */
 using etwlib;
+using EtwPilot.Sk.Vector;
 using EtwPilot.ViewModel;
 using Microsoft.Extensions.VectorData;
 using Microsoft.SemanticKernel;
@@ -28,9 +29,9 @@ using Microsoft.SemanticKernel.Embeddings;
 #pragma warning disable SKEXP0001
 #pragma warning disable SKEXP0020
 
-namespace EtwPilot.Vector.EtwEvent
+namespace EtwPilot.Sk.Vector.EtwProviderManifest
 {
-    internal class EventCollection : QdrantCollection<EtwEventRecord>
+    internal class ManifestCollection : QdrantCollection<EtwProviderManifestRecord>
     {
         //
         // BGE (BERT) micro v2 (https://huggingface.co/TaylorAI/bge-micro-v2)
@@ -42,7 +43,14 @@ namespace EtwPilot.Vector.EtwEvent
                 Properties = new List<VectorStoreRecordProperty>
                     {
                         new VectorStoreRecordKeyProperty("Id", typeof(Guid)),
-                        new VectorStoreRecordDataProperty("EventJson", typeof(string)),
+                        new VectorStoreRecordDataProperty("Name", typeof(string)) { IsFilterable = true, IsFullTextSearchable=true },
+                        new VectorStoreRecordDataProperty("Source", typeof(string)),
+                        new VectorStoreRecordDataProperty("EventIds", typeof(List<int>)),
+                        new VectorStoreRecordDataProperty("Channels", typeof(List<string>)),
+                        new VectorStoreRecordDataProperty("Tasks", typeof(List<string>)),
+                        new VectorStoreRecordDataProperty("Keywords", typeof(List<string>)),
+                        new VectorStoreRecordDataProperty("Strings", typeof(List<string>)),
+                        new VectorStoreRecordDataProperty("TemplateFields", typeof(List<string>)),
                         new VectorStoreRecordDataProperty("Description", typeof(string)) { IsFilterable = true, IsFullTextSearchable = true },
                         new VectorStoreRecordVectorProperty("DescriptionEmbedding", typeof(ReadOnlyMemory<float>)) {
                             Dimensions = s_Dimensions,
@@ -51,25 +59,25 @@ namespace EtwPilot.Vector.EtwEvent
                         },
                     }
             };
-        public static readonly string s_Name = "events";
+        public static readonly string s_Name = "manifests";
 
-        public EventCollection(Kernel kernel, ProgressState progress, string hostUri) :
+        public ManifestCollection(Kernel kernel, ProgressState progress, string hostUri) :
             base(s_RecordDefinition, kernel, progress, hostUri, s_Name)
         {
 
         }
 
-        public override async Task<EtwEventRecord> CreateRecord<T>(
+        public override async Task<EtwProviderManifestRecord> CreateRecord<T>(
             T Object,
             ITextEmbeddingGenerationService EmbeddingService
             )
         {
-            var evt = Object as ParsedEtwEvent;
-            if (evt == null)
+            var manifest = Object as ParsedEtwManifest;
+            if (manifest == null)
             {
-                throw new Exception("Unrecognized input object type for EtwEventRecord");
+                throw new Exception("Unrecognized input object type for EtwProviderManifestRecord");
             }
-            return await EtwEventRecord.CreateFromParsedEtwEvent(evt, EmbeddingService);
+            return await EtwProviderManifestRecord.CreateFromParsedEtwManifest(manifest, EmbeddingService);
         }
     }
 }

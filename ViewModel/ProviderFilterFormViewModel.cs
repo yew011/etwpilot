@@ -615,21 +615,6 @@ namespace EtwPilot.ViewModel
         public List<string> AppIds { get; set; }
         public List<string> PackageIds { get; set; }
 
-        public static string GetEtwString(List<string> Values)
-        {
-            var exes = string.Join(';', Values);
-            var length = (exes.Length + 1) * 2;
-            if (length > 1024)
-            {
-                //
-                // ETW filtering allows a maximum length of 1024 bytes for these parameters
-                // This should already have been validated by the form validation.
-                //
-                Debug.Assert(false);
-            }
-            return exes;
-        }
-
         public override string ToString()
         {
             var sb = new StringBuilder();

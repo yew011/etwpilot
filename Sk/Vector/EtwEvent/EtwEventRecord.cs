@@ -28,7 +28,7 @@ using Qdrant.Client.Grpc;
 #pragma warning disable SKEXP0001
 #pragma warning disable SKEXP0020
 
-namespace EtwPilot.Vector.EtwEvent
+namespace EtwPilot.Sk.Vector.EtwEvent
 {
     using static Utilities.TraceLogger;
 

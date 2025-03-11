@@ -19,7 +19,7 @@ under the License.
 using Google.Protobuf.Collections;
 using Qdrant.Client.Grpc;
 
-namespace EtwPilot.Vector
+namespace EtwPilot.Sk.Vector
 {
     internal static class VectorHelper
     {

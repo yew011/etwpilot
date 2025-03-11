@@ -20,10 +20,9 @@ using Microsoft.SemanticKernel.Connectors.Qdrant;
 using Qdrant.Client;
 using EtwPilot.ViewModel;
 using Microsoft.SemanticKernel;
-using System.ComponentModel;
 using Microsoft.Extensions.VectorData;
-using EtwPilot.Vector.EtwProviderManifest;
-using EtwPilot.Vector.EtwEvent;
+using EtwPilot.Sk.Vector.EtwProviderManifest;
+using EtwPilot.Sk.Vector.EtwEvent;
 
 //
 // Remove supression after SK vector store is out of alpha
@@ -31,7 +30,7 @@ using EtwPilot.Vector.EtwEvent;
 #pragma warning disable SKEXP0001
 #pragma warning disable SKEXP0020
 
-namespace EtwPilot.Vector
+namespace EtwPilot.Sk.Vector
 {
     using static InsightsViewModel;
 
@@ -236,41 +235,6 @@ namespace EtwPilot.Vector
                         break;
                     }
             }
-        }
-    }
-
-    internal class QdrantVecDbEtwSearchPlugin
-    {
-        private readonly EtwVectorDb m_VectorDb;
-
-        public QdrantVecDbEtwSearchPlugin(EtwVectorDb VectorDb)
-        {
-            m_VectorDb = VectorDb;
-        }
-
-        [KernelFunction("SearchEtwProviderManifests")]
-        [Description("Search ETW provider manifests for information similar to the given query. A typical use of this search routine is to locate" +
-            "a particular ETW provider given parameters that relate to information produced by that provider such as event names, tasks, opcodes, " +
-            "keywords, channels or template fields.")]
-        public async Task<string> SearchEtwProviderManifestsAsync(string query)
-        {
-            var searchOptions = new VectorSearchOptions
-            {
-                VectorPropertyName = nameof(EtwProviderManifestRecord.DescriptionEmbedding)
-            };
-            return await m_VectorDb.Search(ChatTopic.Manifests, query, searchOptions);
-        }
-
-        [KernelFunction("SearchEtwEvents")]
-        [Description("Search ETW events for information similar to the given query. A typical use of this search routine is to locate" +
-            "ETW events whose ID, provider, task, keyword, etc relate to a particular process, thread, activity or user of interest.")]
-        public async Task<string> SearchEtwEventsAsync(string query)
-        {
-            var searchOptions = new VectorSearchOptions
-            {
-                VectorPropertyName = nameof(EtwEventRecord.DescriptionEmbedding)
-            };
-            return await m_VectorDb.Search(ChatTopic.EventData, query, searchOptions);
         }
     }
 }

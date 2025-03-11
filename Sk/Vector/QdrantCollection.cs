@@ -31,7 +31,7 @@ using Microsoft.SemanticKernel.Embeddings;
 #pragma warning disable SKEXP0001
 #pragma warning disable SKEXP0020
 
-namespace EtwPilot.Vector
+namespace EtwPilot.Sk.Vector
 {
     internal abstract class QdrantCollection<T>
     {
