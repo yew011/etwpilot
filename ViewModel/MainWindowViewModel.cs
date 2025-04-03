@@ -100,6 +100,11 @@ namespace EtwPilot.ViewModel
         private async Task Command_WindowLoaded(RoutedEventArgs? Args)
         {
             //
+            // Set our initial view to GlobalInitViewModel to show the "please wait" plea
+            //
+            await GlobalStateViewModel.Instance.g_InitViewModel.ViewModelActivated();
+
+            //
             // Initialize traces and set trace levels
             // NB: EtwPilot.TraceLogger was initialized in GlobalStateViewModel ctor to catch
             // early errors.
@@ -114,7 +119,7 @@ namespace EtwPilot.ViewModel
             // Kick off application-wide initialization. All other views will be hidden until
             // this completes.
             //
-            await GlobalStateViewModel.Instance.GlobalResourceInitialization();
+            await GlobalStateViewModel.Instance.g_InitViewModel.GlobalResourceInitialization();
 
             //
             // This is the default tab displayed, so load it with content.

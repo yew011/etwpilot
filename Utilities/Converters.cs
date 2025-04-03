@@ -43,9 +43,6 @@ namespace EtwPilot.Utilities.Converters
                 Debug.Assert(false);
                 return false;
             }
-            //
-            // Check if the control has errors using the ViewModel indexer
-            //
             var hasErrors = vm.PropertyHasErrors(fullPropertyPath);
             return hasErrors;
         }

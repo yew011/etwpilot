@@ -34,6 +34,7 @@
         
         See https://stackoverflow.com/questions/38468786/mvvm-datatemplate-creates-a-new-view
          -->
+        <view:GlobalInitView x:Key="StaticGlobalInitView"/>
         <view:ProviderView x:Key="StaticProviderView"/>
         <view:SessionView x:Key="StaticSessionView"/>
         <view:SettingsFormView x:Key="StaticSettingsFormView"/>
@@ -41,6 +42,9 @@
         <view:LiveSessionView x:Key="StaticLiveSessionView"/>
         
         <!-- DataTemplates for current content view model -->
+        <DataTemplate DataType="{x:Type vm:GlobalInitViewModel}">
+            <ContentControl Content="{StaticResource StaticGlobalInitView}" />
+        </DataTemplate>
         <DataTemplate DataType="{x:Type vm:ProviderViewModel}">
             <ContentControl Content="{StaticResource StaticProviderView}" />
         </DataTemplate>

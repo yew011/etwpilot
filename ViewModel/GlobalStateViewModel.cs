@@ -16,17 +16,28 @@ KIND, either express or implied.  See the License for the
 specific language governing permissions and limitations
 under the License.
 */
-
 using EtwPilot.Utilities;
 using System.ComponentModel;
-using System.Diagnostics;
 using System.Security.Principal;
-using System.Text;
 
 namespace EtwPilot.ViewModel
 {
     public class GlobalStateViewModel : INotifyPropertyChanged
     {
+        #region INotifyPropertyChanged
+
+        public event PropertyChangedEventHandler? PropertyChanged;
+        protected void OnPropertyChanged(string propertyName)
+        {
+            var handler = PropertyChanged;
+            if (handler != null)
+            {
+                handler(this, new PropertyChangedEventArgs(propertyName));
+            }
+        }
+
+        #endregion
+
         #region observable properties
 
         //
@@ -78,6 +89,11 @@ namespace EtwPilot.ViewModel
 
         #endregion
 
+        #region global resources
+
+        //
+        // Global singleton.
+        //
         private static GlobalStateViewModel _Instance = new GlobalStateViewModel();
         public static GlobalStateViewModel Instance
         {
@@ -85,14 +101,15 @@ namespace EtwPilot.ViewModel
         }
 
         //
-        // Global resources used by multiple VMs. These are late-initialized from MainWindowViewModel.
+        // These are late-initialized from MainWindowViewModel.
         //
         public StackwalkHelper m_StackwalkHelper;
 
-        public event PropertyChangedEventHandler? PropertyChanged;
+        #endregion
 
         #region View Model instances
 
+        public GlobalInitViewModel g_InitViewModel { get; set; }
         public ProviderViewModel g_ProviderViewModel { get; set; }
         public SessionViewModel g_SessionViewModel { get; set; }
         public SessionFormViewModel g_SessionFormViewModel { get; set; }
@@ -124,6 +141,7 @@ namespace EtwPilot.ViewModel
             g_SessionViewModel = new SessionViewModel();
             g_SessionFormViewModel = new SessionFormViewModel(); // lazy init
             g_InsightsViewModel = new InsightsViewModel();
+            g_InitViewModel = new GlobalInitViewModel();
 
             m_StackwalkHelper = new StackwalkHelper();
 
@@ -131,101 +149,6 @@ namespace EtwPilot.ViewModel
             {
                 WindowsPrincipal principal = new WindowsPrincipal(identity);
                 IsAdmin = principal.IsInRole(WindowsBuiltInRole.Administrator);
-            }
-        }
-
-        public async Task ApplySettingsChanges()
-        {
-            //
-            // This routine is invoked from MainWindowView code behind when the backstage
-            // menu is closed, presumably after settings are changing. While VMs update
-            // their views and other data sources, we hide views.
-            //
-            PrimaryViewEnabled = false;
-
-            Debug.Assert(Settings.ChangedProperties.Count > 0);
-
-            //
-            // Validate the completed settings object.
-            //
-            if (!await Settings.Validate())
-            {
-                PrimaryViewEnabled = true;
-                return;
-            }
-
-            Settings.Save(null);
-
-            //
-            // Update global resources
-            //
-            if (Settings.ChangedProperties.Contains(nameof(SettingsFormViewModel.DbghelpPath)) ||
-                Settings.ChangedProperties.Contains(nameof(SettingsFormViewModel.SymbolPath)))
-            {
-                Instance.m_StackwalkHelper = new StackwalkHelper();
-                await GlobalResourceInitialization();
-                PrimaryViewEnabled = false;
-            }
-
-            //
-            // Notify all VMs
-            //
-            await g_MainWindowViewModel.SettingsChangedCommand.ExecuteAsync(null);
-            await g_ProviderViewModel.SettingsChangedCommand.ExecuteAsync(null);
-            await g_SessionViewModel.SettingsChangedCommand.ExecuteAsync(null);
-            await g_SessionFormViewModel.SettingsChangedCommand.ExecuteAsync(null);
-            await g_InsightsViewModel.SettingsChangedCommand.ExecuteAsync(null);
-
-            //
-            // Clear the changed properties
-            //
-            Settings.ChangedProperties.Clear();
-            PrimaryViewEnabled = true;
-        }
-
-        public async Task<bool> GlobalResourceInitialization()
-        {
-            PrimaryViewEnabled = false;
-
-            //
-            // Now we can validate the settings object that was loaded in ctor path
-            //
-            if (!await Settings.Validate())
-            {
-                PrimaryViewEnabled = true;
-                return false;
-            }
-
-            //
-            // Global resources are initialized once when the MainWindowView is shown
-            // and anytime thereafter when applicable settings are changed. This routine
-            // should be relatively fast!
-            //
-            var sb = new StringBuilder();
-
-            try
-            {
-                await m_StackwalkHelper.Initialize();
-            }
-            catch (Exception)
-            {
-                sb.Append($"Unable to init symbol resolver. ");
-            }
-
-            if (sb.Length > 0)
-            {
-                CurrentViewModel.ProgressState.EphemeralStatusText = sb.ToString();
-            }
-            PrimaryViewEnabled = true;
-            return true;
-        }
-
-        protected void OnPropertyChanged(string propertyName)
-        {
-            var handler = PropertyChanged;
-            if (handler != null)
-            {
-                handler(this, new PropertyChangedEventArgs(propertyName));
             }
         }
     }

@@ -531,9 +531,12 @@ namespace EtwPilot.ViewModel
                 AddError(nameof(OnnxGenAIConfig), "Invalid Onnx GenAI config");
             }
             ClearErrors(nameof(OllamaConfig));
-            if (OllamaConfig != null && OllamaConfig.HasErrors)
+            if (OllamaConfig != null)
             {
-                AddError(nameof(OllamaConfig), "Invalid Ollama config");
+                if (!await OllamaConfig.Validate())
+                {
+                    AddError(nameof(OllamaConfig), "Invalid Ollama config");
+                }
             }
             if (OnnxGenAIConfig == null && OllamaConfig == null)
             {

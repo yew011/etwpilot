@@ -1,0 +1,37 @@
+{
+  "DbghelpPath": "C:\\Program Files (x86)\\Windows Kits\\10\\Debuggers\\x64\\dbghelp.dll",
+  "SymbolPath": "srv*c:\\symbols*https://msdl.microsoft.com/download/symbols",
+  "TraceLevelApp": 31,
+  "TraceLevelEtwlib": 3,
+  "TraceLevelSymbolresolver": 3,
+  "HideProvidersWithoutManifest": true,
+  "UseDefaultEtwColumns": true,
+  "ProviderCacheLocation": "C:\\Users\\lilhoser\\AppData\\Roaming\\etwpilot\\provider-cache.json",
+  "QdrantHostUri": "localhost",
+  "OnnxGenAIConfig": null,
+  "OllamaConfig": {
+    "EndpointUri": "http://localhost:11434/",
+    "ModelName": "phi4-mini:latest",
+    "TextEmbeddingModelName": "phi4-mini:latest",
+    "RuntimeConfigFile": "C:\\Users\\lilhoser\\.ollama\\models\\blobs\\phi4-options.json",
+    "CancelModelDownloadButtonVisibility": 1
+  },
+  "Formatters": [
+    {
+      "Id": "7ca43fd3-972c-4e44-878d-812a9eec1888",
+      "Namespace": "Formatters_7ca43fd3_972c_4e44_878d_812a9eec1888",
+      "ClassName": "Class_7ca43fd3_972c_4e44_878d_812a9eec1888",
+      "Inheritence": null,
+      "FunctionName": "Decimal2Hex",
+      "Body": "if (Args.Length != 3)\r\n{\r\n    throw new Exception($\"Invalid argument length: Got {Args.Length}, expected 3\");\r\n}\r\nvar evt = Args[0] as ParsedEtwEvent;\r\nvar contents = Args[1] as string;\r\nif (evt == null || string.IsNullOrEmpty(contents))\r\n{\r\n    Trace(TraceLoggerType.AsyncFormatter, TraceEventType.Verbose, $\"Decimal2Hex: returning null\");\r\n    return \"\";\r\n}\r\nvar val = System.Convert.ToInt64(contents);\r\nTrace(TraceLoggerType.AsyncFormatter, TraceEventType.Verbose, $\"Decimal2Hex: returning 0x{val:X}\");\r\nreturn $\"0x{val:X}\";"
+    },
+    {
+      "Id": "bf5259b7-a1db-40bb-b099-d3046340d95b",
+      "Namespace": "Formatters_bf5259b7_a1db_40bb_b099_d3046340d95b",
+      "ClassName": "Class_bf5259b7_a1db_40bb_b099_d3046340d95b",
+      "Inheritence": null,
+      "FunctionName": "StackwalkAddressesToString",
+      "Body": "if (Args.Length != 3)\r\n{\r\n    throw new Exception($\"Invalid argument length: Got {Args.Length}, expected 3\");\r\n}\r\nvar evt = Args[0] as ParsedEtwEvent;\r\nvar contents = Args[1] as string;\r\nvar stackwalkHelper = Args[2] as StackwalkHelper;\r\nif (evt == null || string.IsNullOrEmpty(contents) || stackwalkHelper == null)\r\n{\r\n    Trace(TraceLoggerType.AsyncFormatter, TraceEventType.Verbose,\r\n        $\"StackwalkAddressesToString: returning null\");\r\n    return \"\";\r\n}\r\nvar addresses = evt.StackwalkAddresses;\r\nif (addresses == null || addresses.Count == 0)\r\n{\r\n    Trace(TraceLoggerType.AsyncFormatter, TraceEventType.Verbose, \r\n        $\"StackwalkAddressesToString: no stackwalk addresses, returning null\");\r\n    return \"\";\r\n}\r\nvar sb = new StringBuilder();\r\nawait stackwalkHelper.ResolveAddresses((int)evt.ProcessId, addresses, sb);\r\nTrace(TraceLoggerType.AsyncFormatter, TraceEventType.Verbose,\r\n    $\"StackwalkAddressesToString: returning {sb.ToString()}\");\r\nreturn sb.ToString();"
+    }
+  ]
+}

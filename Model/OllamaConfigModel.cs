@@ -26,7 +26,6 @@ using EtwPilot.ViewModel;
 using System.Collections.Concurrent;
 using Meziantou.Framework.WPF.Collections;
 using System.Windows;
-using OllamaSharp.Models.Chat;
 
 //
 // Remove supression after ollama connector is out of alpha
@@ -170,6 +169,8 @@ namespace EtwPilot.Model
         public ConcurrentObservableCollection<string> ModelNames { get; set; }
         [JsonIgnore] // convenience list
         public ConcurrentDictionary<string, OllamaModelInfo> ModelInfo { get; set; }
+        [JsonIgnore] // only used by SettingsFormViewModel.cs
+        public ManualResetEvent ValidationCompleteEvent { get; private set; }
 
         private CancellationTokenSource m_CancellationSource;
 
@@ -179,6 +180,7 @@ namespace EtwPilot.Model
             ModelNames = new ConcurrentObservableCollection<string>();
             ModelInfo = new ConcurrentDictionary<string, OllamaModelInfo>();
             CancelModelDownloadButtonVisibility = Visibility.Hidden;
+            ValidationCompleteEvent = new ManualResetEvent(false);
 
             //
             // Force initial validation
@@ -198,8 +200,15 @@ namespace EtwPilot.Model
                 {
                     return;
                 }
+                ValidationCompleteEvent.Reset();
                 if (string.IsNullOrEmpty(EndpointUri))
                 {
+                    //
+                    // ValidationCompleteEvent remains unsignaled because no value has been
+                    // provided to attempt validation. This special condition exists to account
+                    // for initial null value set in ctor which provides an initial error value
+                    // for user to clear.
+                    //
                     ResetForm();
                     return;
                 }
@@ -209,12 +218,14 @@ namespace EtwPilot.Model
                 {
                     AddError(nameof(EndpointUri), "Endpoint URI is invalid");
                     ResetForm();
+                    ValidationCompleteEvent.Set();
                     return;
                 }
                 if (!await LoadModelList())
                 {
                     AddError(nameof(EndpointUri), "Unable to load model list");
                     ResetForm();
+                    ValidationCompleteEvent.Set();
                     return;
                 }
                 IsEndpointValid = true;
@@ -225,6 +236,7 @@ namespace EtwPilot.Model
                 ValidateModelName();
                 ValidateTextEmbeddingModelName();
                 ValidateRuntimeConfigFile();
+                ValidationCompleteEvent.Set();
             };
         }
 
@@ -380,6 +392,27 @@ namespace EtwPilot.Model
         }
 
         #region validation routines
+
+        public async Task<bool> Validate()
+        {
+            //
+            // A special contract exists with EndpointUri - if it is null, no validation
+            // was attempted, thus the unset state of the event doesn't matter. We immediately
+            // return the error state of the form.
+            //
+            if (string.IsNullOrEmpty(EndpointUri))
+            {
+                return !HasErrors;
+            }
+            //
+            // Wait for validation to complete - we are guaranteed this completes.
+            //
+            return await Task.Run(() =>
+            {
+                ValidationCompleteEvent.WaitOne(Timeout.Infinite);
+                return !HasErrors;
+            });
+        }
 
         private async Task<bool> ValidateEndpointUri()
         {
