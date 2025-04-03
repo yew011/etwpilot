@@ -19,43 +19,96 @@ under the License.
 using Microsoft.Extensions.VectorData;
 using Microsoft.SemanticKernel;
 using System.ComponentModel;
-using static EtwPilot.ViewModel.InsightsViewModel;
 using EtwPilot.Sk.Vector;
-using EtwPilot.Sk.Vector.EtwEvent;
-using EtwPilot.Sk.Vector.EtwProviderManifest;
+using Microsoft.SemanticKernel.Embeddings;
+using System.Text;
+using System.ComponentModel.DataAnnotations;
+
+#pragma warning disable SKEXP0001
 
 namespace EtwPilot.Sk.Plugins
 {
     internal class VectorSearch
     {
-        private readonly EtwVectorDb m_VectorDb;
+        private readonly Kernel m_Kernel;
 
-        public VectorSearch(EtwVectorDb VectorDb)
+        public VectorSearch(Kernel _Kernel)
         {
-            m_VectorDb = VectorDb;
+            m_Kernel = _Kernel;
         }
 
         [KernelFunction("SearchEtwProviderManifests")]
         [Description("Locate an ETW provider manifest of event names, tasks, opcodes, keywords, channels or template fields.")]
-        public async Task<string> SearchEtwProviderManifestsAsync(string query)
+        public async Task<string> SearchEtwProviderManifestsAsync(
+            [Description("ETW provider GUID or ID"), Required] string Provider,
+            [Description("Comma-separated list of event IDs")] string EventIds,
+            [Description("Comma-separated list of template field names")] string TemplateFieldNames,
+            [Description("Comma-separated list of channels")] string Channels,
+            [Description("Comma-separated list of tasks")] string Tasks,
+            [Description("Minimum confidence score to count as a match")] int minScore,
+            CancellationToken Token
+            )
         {
-            var searchOptions = new VectorSearchOptions
+            var vectorDb = m_Kernel.GetRequiredService<EtwVectorDb>();
+            var searchOptions = new VectorSearchOptions<EtwProviderManifestRecord>
             {
-                VectorPropertyName = nameof(EtwProviderManifestRecord.DescriptionEmbedding)
+                VectorProperty = r => r.DescriptionEmbedding
             };
-            return await m_VectorDb.Search(ChatTopic.Manifests, query, searchOptions);
+            var query = EtwProviderManifestRecord.GetDescriptionForVectorSearch(Provider, EventIds, TemplateFieldNames, Channels);
+            var textEmbSvc = m_Kernel.GetRequiredService<ITextEmbeddingGenerationService>();
+            var results = await vectorDb.Search(EtwVectorDb.s_EtwProviderManifestCollectionName,
+                query, textEmbSvc, searchOptions, Token);
+            if (results == null || results.TotalCount == 0)
+            {
+                return string.Empty;
+            }
+            var items = await results.Results.ToListAsync(Token);
+            var sb = new StringBuilder();
+            foreach (var item in items)
+            {
+                if (item.Score < minScore)
+                {
+                    continue;
+                }
+                sb.AppendLine(item.Record.Description);
+            }
+            return sb.ToString();
         }
 
         [KernelFunction("SearchEtwEvents")]
         [Description("Locate ETW events whose ID, provider, task, keyword, etc relate to a particular process, thread, "+
             "activity or user of interest on a running system.")]
-        public async Task<string> SearchEtwEventsAsync(string query)
+        public async Task<string> SearchEtwEventsAsync(
+            [Description("ETW provider GUID or ID"), Required] string Provider,
+            [Description("ETW event ID"), Required] int EventId,
+            [Description("Minimum confidence score to count as a match")] int minScore,
+            CancellationToken Token
+            )
         {
-            var searchOptions = new VectorSearchOptions
+            var vectorDb = m_Kernel.GetRequiredService<EtwVectorDb>();
+            var searchOptions = new VectorSearchOptions<EtwEventRecord>
             {
-                VectorPropertyName = nameof(EtwEventRecord.DescriptionEmbedding)
+                VectorProperty = r => r.DescriptionEmbedding
             };
-            return await m_VectorDb.Search(ChatTopic.EventData, query, searchOptions);
+            var query = EtwEventRecord.GetDescriptionForVectorSearch(EventId, Provider: Provider);
+            var textEmbSvc = m_Kernel.GetRequiredService<ITextEmbeddingGenerationService>();
+            var results = await vectorDb.Search(EtwVectorDb.s_EtwEventCollectionName,
+                query, textEmbSvc, searchOptions, Token);
+            if (results == null || results.TotalCount == 0)
+            {
+                return string.Empty;
+            }
+            var items = await results.Results.ToListAsync(Token);
+            var sb = new StringBuilder();
+            foreach (var item in items)
+            {
+                if (item.Score < minScore)
+                {
+                    continue;
+                }
+                sb.AppendLine(item.Record.Description);
+            }
+            return sb.ToString();
         }
     }
 }

@@ -17,7 +17,6 @@ specific language governing permissions and limitations
 under the License.
 */
 using etwlib;
-using EtwPilot.Sk.Vector;
 using Microsoft.Extensions.VectorData;
 using Microsoft.SemanticKernel.Embeddings;
 using Qdrant.Client.Grpc;
@@ -28,7 +27,7 @@ using Qdrant.Client.Grpc;
 #pragma warning disable SKEXP0001
 #pragma warning disable SKEXP0020
 
-namespace EtwPilot.Sk.Vector.EtwProviderManifest
+namespace EtwPilot.Sk.Vector
 {
     using static VectorHelper;
 
@@ -59,6 +58,34 @@ namespace EtwPilot.Sk.Vector.EtwProviderManifest
             TemplateFields = new List<string>();
             DescriptionEmbedding = new ReadOnlyMemory<float>();
             Description = string.Empty;
+        }
+
+        public static string GetDescriptionForVectorSearch(
+            string Provider,
+            string? EventIds = null,
+            string? TemplateFieldNames = null,
+            string? Channels = null,
+            string? Tasks = null
+            )
+        {
+            var formatted = $"An ETW provider {Provider}";
+            if (!string.IsNullOrWhiteSpace(EventIds))
+            {
+                formatted += $" with supported event IDs {EventIds}";
+            }
+            if (!string.IsNullOrWhiteSpace(TemplateFieldNames))
+            {
+                formatted += $" with unique template fields named {TemplateFieldNames}";
+            }
+            if (!string.IsNullOrWhiteSpace(Channels))
+            {
+                formatted += $" defines channels {Channels}";
+            }
+            if (!string.IsNullOrWhiteSpace(Tasks))
+            {
+                formatted += $" defines tasks/opcodes {Tasks}";
+            }
+            return formatted;
         }
 
         public static async Task<EtwProviderManifestRecord> CreateFromParsedEtwManifest(

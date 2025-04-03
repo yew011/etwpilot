@@ -18,11 +18,12 @@ under the License.
 */
 using Microsoft.SemanticKernel.Connectors.Qdrant;
 using Qdrant.Client;
-using EtwPilot.ViewModel;
-using Microsoft.SemanticKernel;
 using Microsoft.Extensions.VectorData;
-using EtwPilot.Sk.Vector.EtwProviderManifest;
-using EtwPilot.Sk.Vector.EtwEvent;
+using System.IO;
+using System.Net.Http;
+using System.Net;
+using Microsoft.SemanticKernel.Embeddings;
+using etwlib;
 
 //
 // Remove supression after SK vector store is out of alpha
@@ -32,209 +33,319 @@ using EtwPilot.Sk.Vector.EtwEvent;
 
 namespace EtwPilot.Sk.Vector
 {
-    using static InsightsViewModel;
-
-    internal class EtwVectorDb : IQdrantVectorStoreRecordCollectionFactory
+    internal class EtwVectorDb : QdrantVectorStore
     {
-        private Kernel m_Kernel;
-        public bool m_Initialized;
-        QdrantCollection<EtwProviderManifestRecord> m_ManifestCollection;
-        QdrantCollection<EtwEventRecord> m_EventCollection;
+        #region collection definitions
+        //
+        // BGE (BERT) micro v2 (https://huggingface.co/TaylorAI/bge-micro-v2)
+        //
+        private static readonly int s_Dimensions = 384;
+        private static readonly VectorStoreRecordDefinition s_EtwEventCollectionRecordDefinition =
+            new VectorStoreRecordDefinition
+            {
+                Properties = new List<VectorStoreRecordProperty>
+                    {
+                        new VectorStoreRecordKeyProperty("Id", typeof(Guid)),
+                        new VectorStoreRecordDataProperty("EventJson", typeof(string)),
+                        new VectorStoreRecordDataProperty("Description", typeof(string)) { IsFilterable = true, IsFullTextSearchable = true },
+                        new VectorStoreRecordVectorProperty("DescriptionEmbedding", typeof(ReadOnlyMemory<float>)) {
+                            Dimensions = s_Dimensions,
+                            IndexKind = IndexKind.Hnsw,
+                            DistanceFunction = DistanceFunction.CosineSimilarity
+                        },
+                    }
+            };
+        private static readonly VectorStoreRecordDefinition s_EtwProviderManifestRecordDefinition =
+            new VectorStoreRecordDefinition
+            {
+                Properties = new List<VectorStoreRecordProperty>
+                    {
+                        new VectorStoreRecordKeyProperty("Id", typeof(Guid)),
+                        new VectorStoreRecordDataProperty("Name", typeof(string)) { IsFilterable = true, IsFullTextSearchable=true },
+                        new VectorStoreRecordDataProperty("Source", typeof(string)),
+                        new VectorStoreRecordDataProperty("EventIds", typeof(List<int>)),
+                        new VectorStoreRecordDataProperty("Channels", typeof(List<string>)),
+                        new VectorStoreRecordDataProperty("Tasks", typeof(List<string>)),
+                        new VectorStoreRecordDataProperty("Keywords", typeof(List<string>)),
+                        new VectorStoreRecordDataProperty("Strings", typeof(List<string>)),
+                        new VectorStoreRecordDataProperty("TemplateFields", typeof(List<string>)),
+                        new VectorStoreRecordDataProperty("Description", typeof(string)) { IsFilterable = true, IsFullTextSearchable = true },
+                        new VectorStoreRecordVectorProperty("DescriptionEmbedding", typeof(ReadOnlyMemory<float>)) {
+                            Dimensions = s_Dimensions,
+                            IndexKind = IndexKind.Hnsw,
+                            DistanceFunction = DistanceFunction.CosineSimilarity
+                        },
+                    }
+            };
+        public static readonly string s_EtwProviderManifestCollectionName = "manifests";
+        public static readonly string s_EtwEventCollectionName = "events";
+        #endregion
 
-        public EtwVectorDb()
+        private readonly string m_ClientUri; // needed for HttpClient requests
+        private readonly QdrantClient m_Client;
+        public bool m_Initialized { get; set; }
+
+        public EtwVectorDb(QdrantClient Client, string clientUri) : base(Client, new() { HasNamedVectors = true })
         {
+            m_Client = Client;
+            m_ClientUri = clientUri;
         }
 
-        public async Task Initialize(Kernel kernel, string QdrantHostUri, ProgressState progress)
+        public async Task Initialize()
         {
-            m_Kernel = kernel;
-            m_Initialized = true;
-
-            m_ManifestCollection = new ManifestCollection(kernel, progress, QdrantHostUri);
-            m_EventCollection = new EventCollection(kernel, progress, QdrantHostUri);
-
-            var store = m_Kernel.GetRequiredService<IVectorStore>();
             //
             // Create collections if needed
             //
-            var collections = store.ListCollectionNamesAsync().ToBlockingEnumerable().ToList();
-            if (collections == null || !collections.Contains(m_ManifestCollection.GetName()))
+            var collections = ListCollectionNamesAsync().ToBlockingEnumerable().ToList();
+            if (collections == null || !collections.Contains(s_EtwProviderManifestCollectionName))
             {
-                _ = await m_ManifestCollection.Create(true);
+                var collection = GetCollection<ulong, EtwProviderManifestRecord>(s_EtwProviderManifestCollectionName);
+                await collection.CreateCollectionIfNotExistsAsync();
             }
-            if (collections == null || !collections.Contains(m_EventCollection.GetName()))
+            if (collections == null || !collections.Contains(s_EtwEventCollectionName))
             {
-                _ = await m_EventCollection.Create(true);
+                var collection = GetCollection<ulong, EtwEventRecord>(s_EtwEventCollectionName);
+                await collection.CreateCollectionIfNotExistsAsync();
             }
             m_Initialized = true;
         }
 
-        public IVectorStoreRecordCollection<TKey, TRecord> CreateVectorStoreRecordCollection<TKey, TRecord>(
-            QdrantClient qdrantClient,
+        #region IVectorStore
+        public override IVectorStoreRecordCollection<TKey, TRecord> GetCollection<TKey, TRecord>(
             string name,
-            VectorStoreRecordDefinition? vectorStoreRecordDefinition) where TKey : notnull
+            VectorStoreRecordDefinition? vectorStoreRecordDefinition = null
+            )
         {
-            if (m_ManifestCollection.GetName() == name && typeof(TRecord) == typeof(EtwProviderManifestRecord))
+            //
+            // This routine is invoked whenever we need to retrieve an IVectorStoreRecordCollection
+            // interface in order to invoke collection-related operations like UpsertAsync. Note that
+            // the QdrantVectorStoreRecordCollection class is a wrapper class for Qdrant related
+            // functionality, it does not actually map to an existing collection on the qdrant node,
+            // necessarily (unless CreateAsync is invoked).
+            //
+            if (s_EtwProviderManifestCollectionName == name && typeof(TRecord) == typeof(EtwProviderManifestRecord))
             {
                 var customCollection = new QdrantVectorStoreRecordCollection<EtwProviderManifestRecord>(
-                    qdrantClient,
+                    m_Client,
                     name,
                     new()
                     {
                         HasNamedVectors = true,
                         PointStructCustomMapper = new EtwProviderManifestRecordMapper(),
-                        VectorStoreRecordDefinition = vectorStoreRecordDefinition
+                        VectorStoreRecordDefinition = s_EtwProviderManifestRecordDefinition
                     }) as IVectorStoreRecordCollection<TKey, TRecord>;
                 return customCollection!;
             }
-            else if (m_EventCollection.GetName() == name && typeof(TRecord) == typeof(EtwEventRecord))
+            else if (s_EtwEventCollectionName == name && typeof(TRecord) == typeof(EtwEventRecord))
             {
                 var customCollection = new QdrantVectorStoreRecordCollection<EtwEventRecord>(
-                    qdrantClient,
+                    m_Client,
                     name,
                     new()
                     {
                         HasNamedVectors = true,
                         PointStructCustomMapper = new EtwEventRecordMapper(),
-                        VectorStoreRecordDefinition = vectorStoreRecordDefinition
+                        VectorStoreRecordDefinition = s_EtwEventCollectionRecordDefinition
                     }) as IVectorStoreRecordCollection<TKey, TRecord>;
                 return customCollection!;
             }
             throw new NotImplementedException();
         }
+        #endregion
 
-        public async Task<ulong> GetRecordCount(ChatTopic Topic)
+        public async Task SaveCollection(string CollectionName, string OutputPath, CancellationToken Token)
         {
-            switch (Topic)
+            var collection = GetCollection<ulong, EtwEventRecord>(CollectionName);
+            if (!await collection.CollectionExistsAsync())
             {
-                case ChatTopic.Manifests:
-                    {
-                        return await m_ManifestCollection.GetRecordCount();
-                    }
-                case ChatTopic.EventData:
-                    {
-                        return await m_EventCollection.GetRecordCount();
-                    }
-                default:
-                    {
-                        return 0;
-                    }
+                throw new InvalidOperationException($"Collection {CollectionName} does not exist");
+            }
+
+            //
+            // Generate the snapshot on the qdrant node's local storage
+            //
+            var snapshotName = "";
+            var result = await m_Client.CreateSnapshotAsync(CollectionName);
+            if (string.IsNullOrEmpty(result.Name))
+            {
+                throw new Exception("The returned snapshot name is empty");
+            }
+            snapshotName = result.Name;
+
+            //
+            // Download the snapshot locally.
+            //
+            // TODO: Hopefully either SK (via http api) or qdrant-dotnet (via grpc) will
+            // add the ability to actually download the generated snapshots.. ?!
+            //
+            using (var httpClient = new HttpClient())
+            {
+                httpClient.BaseAddress = new Uri(@$"http://{m_ClientUri}:6333");
+                var uri = $"collections/{CollectionName}/snapshots/" +
+                        $"{snapshotName}";
+                var request = new HttpRequestMessage(HttpMethod.Get, uri);
+                var response = await httpClient.SendAsync(request, HttpCompletionOption.ResponseContentRead).ConfigureAwait(false);
+                if (response.StatusCode != HttpStatusCode.OK)
+                {
+                    throw new Exception($"HTTP status code is {response.StatusCode}");
+                }
+                var target = Path.Combine(OutputPath, snapshotName);
+                using var downloadStream = await response.Content.ReadAsStreamAsync().ConfigureAwait(false);
+                using var fileStream = new FileStream(target, FileMode.Create, FileAccess.Write, FileShare.None, bufferSize: 4096, useAsync: true);
+                await downloadStream.CopyToAsync(fileStream).ConfigureAwait(false);
             }
         }
 
-        public async Task<string> Search(ChatTopic Topic, string Query, VectorSearchOptions Options)
+        public async Task RestoreCollection(string CollectionName, string InputPath, CancellationToken Token)
         {
-            switch (Topic)
+            //
+            // TODO: Hopefully either SK (via http api) or qdrant-dotnet (via grpc) will
+            // add the ability to actually upload the snapshots for restore.. ?!
+            //
+            using (var httpClient = new HttpClient())
             {
-                case ChatTopic.Manifests:
+                httpClient.BaseAddress = new Uri($@"http://{m_ClientUri}:6333");
+                var uri = $"collections/{CollectionName}/snapshots/" +
+                    $"upload?priority=snapshot"; // priority overrides local data
+                var snapshotData = File.ReadAllBytes(InputPath);
+                var content = new MultipartFormDataContent()
                     {
-                        var result = await m_ManifestCollection.VectorSearch(Query, Options);
-                        await foreach (var item in result.Results)
-                        {
-                            return item.Record.Description;
-                        }
-                        break;
-                    }
-                case ChatTopic.EventData:
-                    {
-                        var result = await m_EventCollection.VectorSearch(Query, Options);
-                        await foreach (var item in result.Results)
-                        {
-                            return item.Record.Description;
-                        }
-                        break;
-                    }
-                default:
-                    {
-                        break;
-                    }
-            }
-            return string.Empty;
-        }
-
-        public async Task<string> Erase(ChatTopic Topic)
-        {
-            switch (Topic)
-            {
-                case ChatTopic.Manifests:
-                    {
-                        await m_ManifestCollection.Erase();
-                        break;
-                    }
-                case ChatTopic.EventData:
-                    {
-                        await m_EventCollection.Erase();
-                        break;
-                    }
-                default:
-                    {
-                        break;
-                    }
-            }
-            return string.Empty;
-        }
-
-        public async Task ImportData<T>(ChatTopic Topic, List<T> Data, CancellationToken Token)
-        {
-            switch (Topic)
-            {
-                case ChatTopic.Manifests:
-                    {
-                        await m_ManifestCollection.Import(Data, Token);
-                        break;
-                    }
-                case ChatTopic.EventData:
-                    {
-                        await m_EventCollection.Import(Data, Token);
-                        break;
-                    }
-                default:
-                    {
-                        break;
-                    }
-            }
-        }        
-
-        public async Task SaveCollection(ChatTopic Topic, string Path)
-        {
-            switch (Topic)
-            {
-                case ChatTopic.Manifests:
-                    {
-                        await m_ManifestCollection.Save(Path);
-                        break;
-                    }
-                case ChatTopic.EventData:
-                    {
-                        await m_EventCollection.Save(Path);
-                        break;
-                    }
-                default:
-                    {
-                        break;
-                    }
+                        {new ByteArrayContent(snapshotData), "snapshot"}
+                    };
+                var response = await httpClient.PostAsync(uri, content).ConfigureAwait(false);
+                if (response.StatusCode != HttpStatusCode.OK)
+                {
+                    throw new Exception($"HTTP status code is {response.StatusCode}");
+                }
             }
         }
 
-        public async Task RestoreCollection(ChatTopic Topic, string Path)
+        public async Task<ulong> GetRecordCount(string CollectionName, CancellationToken Token)
         {
-            switch (Topic)
+            if (CollectionName == s_EtwEventCollectionName)
             {
-                case ChatTopic.Manifests:
-                    {
-                        await m_ManifestCollection.Restore(Path);
-                        break;
-                    }
-                case ChatTopic.EventData:
-                    {
-                        await m_EventCollection.Restore(Path);
-                        break;
-                    }
-                default:
-                    {
-                        break;
-                    }
+                var collection = GetCollection<ulong, EtwEventRecord>(CollectionName);
+                if (!await collection.CollectionExistsAsync())
+                {
+                    return 0;
+                }
             }
+            else if (CollectionName == s_EtwProviderManifestCollectionName)
+            {
+                var collection = GetCollection<ulong, EtwProviderManifestRecord>(CollectionName);
+                if (!await collection.CollectionExistsAsync())
+                {
+                    return 0;
+                }
+            }
+            else
+            {
+                throw new InvalidOperationException($"Unknown collection {CollectionName}");
+            }
+            return await m_Client.CountAsync(CollectionName);
+        }
+
+        public async Task<VectorSearchResults<T>?> Search<T>(
+            string CollectionName,
+            string Query,
+            ITextEmbeddingGenerationService EmbeddingService,
+            VectorSearchOptions<T> Options,
+            CancellationToken Token
+            )
+        {
+            if (CollectionName == s_EtwEventCollectionName)
+            {
+                var collection = GetCollection<ulong, EtwEventRecord>(CollectionName);
+                if (!await collection.CollectionExistsAsync())
+                {
+                    throw new InvalidOperationException($"Collection {CollectionName} does not exist");
+                }
+                var options = Options as VectorSearchOptions<EtwEventRecord>;
+                var searchVector = await EmbeddingService.GenerateEmbeddingAsync(Query);
+                return await collection.VectorizedSearchAsync(searchVector, options, Token) as VectorSearchResults<T>;
+            }
+            else if (CollectionName == s_EtwProviderManifestCollectionName)
+            {
+                var collection = GetCollection<ulong, EtwProviderManifestRecord>(CollectionName);
+                if (!await collection.CollectionExistsAsync())
+                {
+                    throw new InvalidOperationException($"Collection {CollectionName} does not exist");
+                }
+                var options = Options as VectorSearchOptions<EtwProviderManifestRecord>;
+                var searchVector = await EmbeddingService.GenerateEmbeddingAsync(Query);
+                return await collection.VectorizedSearchAsync(searchVector, options, Token) as VectorSearchResults<T>;
+            }
+            throw new InvalidOperationException($"Unknown collection {CollectionName}");
+        }
+
+        public async Task Erase(string CollectionName, CancellationToken Token)
+        {
+            if (CollectionName == s_EtwEventCollectionName)
+            {
+                var collection = GetCollection<ulong, EtwEventRecord>(CollectionName);
+                if (!await collection.CollectionExistsAsync())
+                {
+                    return;
+                }
+                await collection.DeleteCollectionAsync();
+            }
+            else if (CollectionName == s_EtwProviderManifestCollectionName)
+            {
+                var collection = GetCollection<ulong, EtwProviderManifestRecord>(CollectionName);
+                if (!await collection.CollectionExistsAsync())
+                {
+                    return;
+                }
+                await collection.DeleteCollectionAsync();
+            }
+            throw new InvalidOperationException($"Unknown collection {CollectionName}");
+        }
+
+        public async Task ImportData(
+            string CollectionName,
+            dynamic Data,
+            ITextEmbeddingGenerationService EmbeddingService,
+            CancellationToken Token
+            )
+        {
+            if (CollectionName == s_EtwEventCollectionName)
+            {
+                var collection = GetCollection<ulong, EtwEventRecord>(CollectionName);
+                if (!await collection.CollectionExistsAsync())
+                {
+                    throw new InvalidOperationException($"Collection {CollectionName} does not exist");
+                }
+                foreach (var item in Data)
+                {
+                    if (Token.IsCancellationRequested)
+                    {
+                        throw new OperationCanceledException();
+                    }
+                    var evt = item as ParsedEtwEvent;
+                    var record = await EtwEventRecord.CreateFromParsedEtwEvent(evt!, EmbeddingService);
+                    await collection.UpsertAsync(record, cancellationToken: Token);
+                }
+            }
+            else if (CollectionName == s_EtwProviderManifestCollectionName)
+            {
+                var collection = GetCollection<ulong, EtwProviderManifestRecord>(CollectionName);
+                if (!await collection.CollectionExistsAsync())
+                {
+                    throw new InvalidOperationException($"Collection {CollectionName} does not exist");
+                }
+                foreach (var item in Data)
+                {
+                    if (Token.IsCancellationRequested)
+                    {
+                        throw new OperationCanceledException();
+                    }
+                    var manifest = item as ParsedEtwManifest;
+                    var record = await EtwProviderManifestRecord.CreateFromParsedEtwManifest(
+                        manifest!, EmbeddingService);
+                    await collection.UpsertAsync(record, cancellationToken: Token);
+                }
+            }
+            throw new InvalidOperationException($"Unknown collection {CollectionName}");
         }
     }
 }

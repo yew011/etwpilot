@@ -1,0 +1,529 @@
+﻿/* 
+Licensed to the Apache Software Foundation (ASF) under one
+or more contributor license agreements.  See the NOTICE file
+distributed with this work for additional information
+regarding copyright ownership.  The ASF licenses this file
+to you under the Apache License, Version 2.0 (the
+"License"); you may not use this file except in compliance
+with the License.  You may obtain a copy of the License at
+
+  http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing,
+software distributed under the License is distributed on an
+"AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+KIND, either express or implied.  See the License for the
+specific language governing permissions and limitations
+under the License.
+*/
+using System.Diagnostics;
+using System.IO;
+using Microsoft.SemanticKernel.Connectors.Ollama;
+using EtwPilot.Utilities;
+using Newtonsoft.Json;
+using OllamaSharp;
+using EtwPilot.ViewModel;
+using System.Collections.Concurrent;
+using Meziantou.Framework.WPF.Collections;
+using System.Windows;
+using OllamaSharp.Models.Chat;
+
+//
+// Remove supression after ollama connector is out of alpha
+//
+#pragma warning disable SKEXP0070
+
+namespace EtwPilot.Model
+{
+    using static EtwPilot.Utilities.TraceLogger;
+
+    public class OllamaModelInfo
+    {
+        public OllamaSharp.Models.Model ModelObject { get; set; }
+        public OllamaSharp.Models.ShowModelResponse ShowModelResponse { get; set; }
+    }
+
+    public class OllamaConfigModel : NotifyPropertyAndErrorInfoBase
+    {
+        #region default runtime config options
+        //
+        // See https://github.com/ollama/ollama/blob/main/docs/api.md
+        //
+        public static readonly string s_DefaultRuntimeConfigJson = @"
+        {
+            ""num_keep"": 5,
+            ""seed"": 42,
+            ""num_predict"": 100,
+            ""top_k"": 20,
+            ""top_p"": 0.9,
+            ""min_p"": 0.0,
+            ""typical_p"": 0.7,
+            ""repeat_last_n"": 33,
+            ""temperature"": 0.8,
+            ""repeat_penalty"": 1.2,
+            ""presence_penalty"": 1.5,
+            ""frequency_penalty"": 1.0,
+            ""mirostat"": 1,
+            ""mirostat_tau"": 0.8,
+            ""mirostat_eta"": 0.6,
+            ""penalize_newline"": true,
+            ""stop"": [""\n"", ""user:""],
+            ""numa"": false,
+            ""num_ctx"": 1024,
+            ""num_batch"": 2,
+            ""num_gpu"": 1,
+            ""main_gpu"": 0,
+            ""low_vram"": false,
+            ""vocab_only"": false,
+            ""use_mmap"": true,
+            ""use_mlock"": false,
+            ""num_thread"": 8
+        }";
+
+        #endregion
+
+        #region observable properties
+
+        private string? _EndpointUri;
+        public string? EndpointUri
+        {
+            get => _EndpointUri;
+            set
+            {
+                _EndpointUri = value;
+                ClearErrors(nameof(EndpointUri));
+                //
+                // Note: Further validation on the endpoint is done async from
+                // PropertyChanged callback defined in ctor
+                //
+                AddError(nameof(EndpointUri), "Ollama endpoint awaiting validation...");
+                OnPropertyChanged(nameof(EndpointUri));
+            }
+        }
+
+        private bool _IsEndpointValid;
+        [JsonIgnore] // UI only
+        public bool IsEndpointValid
+        {
+            get => _IsEndpointValid;
+            set
+            {
+                _IsEndpointValid = value;
+                OnPropertyChanged(nameof(IsEndpointValid));
+            }
+        }
+
+        private string? _ModelName;
+        public string? ModelName
+        {
+            get => _ModelName;
+            set
+            {
+                _ModelName = value;
+                ValidateModelName();
+                OnPropertyChanged(nameof(ModelName));
+            }
+        }
+
+        private string? _TextEmbeddingModelName;
+        public string? TextEmbeddingModelName
+        {
+            get => _TextEmbeddingModelName;
+            set
+            {
+                _TextEmbeddingModelName = value;                
+                ValidateTextEmbeddingModelName();
+                OnPropertyChanged("TextEmbeddingModelName");
+            }
+        }
+
+        private string? _RuntimeConfigFile;
+        public string? RuntimeConfigFile
+        {
+            get => _RuntimeConfigFile;
+            set
+            {
+                _RuntimeConfigFile = value;
+                ValidateRuntimeConfigFile();
+                OnPropertyChanged(nameof(RuntimeConfigFile));
+            }
+        }
+
+        [JsonIgnore] // UI Only
+        private Visibility _CancelModelDownloadButtonVisibility;
+        public Visibility CancelModelDownloadButtonVisibility
+        {
+            get => _CancelModelDownloadButtonVisibility;
+            set
+            {
+                _CancelModelDownloadButtonVisibility = value;
+                OnPropertyChanged(nameof(CancelModelDownloadButtonVisibility));
+            }
+        }
+
+        #endregion
+
+        [JsonIgnore] // recomputed on each load
+        public OllamaPromptExecutionSettings? PromptExecutionSettings { get; set; }
+
+        [JsonIgnore] // only used by UI
+        public ConcurrentObservableCollection<string> ModelNames { get; set; }
+        [JsonIgnore] // convenience list
+        public ConcurrentDictionary<string, OllamaModelInfo> ModelInfo { get; set; }
+
+        private CancellationTokenSource m_CancellationSource;
+
+        public OllamaConfigModel()
+        {
+            m_CancellationSource = new CancellationTokenSource();
+            ModelNames = new ConcurrentObservableCollection<string>();
+            ModelInfo = new ConcurrentDictionary<string, OllamaModelInfo>();
+            CancelModelDownloadButtonVisibility = Visibility.Hidden;
+
+            //
+            // Force initial validation
+            //
+            EndpointUri = null;
+            IsEndpointValid = false;
+            ModelName = null;
+            TextEmbeddingModelName = null;
+            RuntimeConfigFile = null;
+
+            //
+            // Add a PropertyChanged listener for Endpoint URI, because it must be validated
+            // asynchronously and info needs to be pulled from the ollama endpoint.
+            //
+            PropertyChanged += async (obj, args) => {
+                if (args.PropertyName != nameof(EndpointUri))
+                {
+                    return;
+                }
+                if (string.IsNullOrEmpty(EndpointUri))
+                {
+                    ResetForm();
+                    return;
+                }
+                ClearErrors(nameof(EndpointUri));
+                IsEndpointValid = false;
+                if (!await ValidateEndpointUri())
+                {
+                    AddError(nameof(EndpointUri), "Endpoint URI is invalid");
+                    ResetForm();
+                    return;
+                }
+                if (!await LoadModelList())
+                {
+                    AddError(nameof(EndpointUri), "Unable to load model list");
+                    ResetForm();
+                    return;
+                }
+                IsEndpointValid = true;
+                //
+                // The endpoint is valid, now all settings related to endpoint
+                // must be re-evaluated.
+                //
+                ValidateModelName();
+                ValidateTextEmbeddingModelName();
+                ValidateRuntimeConfigFile();
+            };
+        }
+
+        public async Task<bool> LoadModelList()
+        {
+            if (string.IsNullOrEmpty(EndpointUri))
+            {
+                Trace(TraceLoggerType.Settings,
+                      TraceEventType.Error,
+                      $"Endpoint URI {EndpointUri} is not valid");
+                return false;
+            }
+            ModelNames.Clear();
+            ModelInfo.Clear();
+
+            Application.Current.Dispatcher.Invoke(new Action(() =>
+            {
+                GlobalStateViewModel.Instance.Settings.OperationInProgressVisibility = Visibility.Visible;
+                GlobalStateViewModel.Instance.Settings.OperationInProgressMessage =
+                    $"Loading model list from endpoint {EndpointUri}...";
+            }));
+
+            try
+            {
+                var uri = new Uri(EndpointUri);
+                using (var ollama = new OllamaApiClient(uri))
+                {
+                    var models = await ollama.ListLocalModelsAsync();
+                    foreach (var m in models)
+                    {
+                        ModelNames.Add(m.Name);
+                        var r = await ollama.ShowModelAsync(m.Name);
+                        if (!ModelInfo.TryAdd(m.Name, new OllamaModelInfo()
+                        {
+                            ModelObject = m,
+                            ShowModelResponse = r
+                        }))
+                        {
+                            throw new Exception($"Unable to add model named {m.Name}, key already exists");
+                        }
+                    }
+                }
+                Application.Current.Dispatcher.Invoke(new Action(() =>
+                {
+                    GlobalStateViewModel.Instance.Settings.OperationInProgressMessage =
+                    $"Loaded {ModelNames.Count} models";
+                }));
+                return true;
+            }
+            catch (Exception ex)
+            {
+                var err = $"Exception loading model list: {ex.Message}";
+                Trace(TraceLoggerType.Settings, TraceEventType.Error, err);
+                GlobalStateViewModel.Instance.Settings.OperationInProgressMessage = err;
+                return false;
+            }
+        }
+
+        public async Task<bool> DownloadNewModel(string ModelName)
+        {
+            if (!IsEndpointValid || string.IsNullOrEmpty(EndpointUri))
+            {
+                Trace(TraceLoggerType.Settings,
+                      TraceEventType.Error,
+                      $"Endpoint URI {EndpointUri} is not valid");
+                return false;
+            }
+            if (ModelNames.Contains(ModelName))
+            {
+                return true;
+            }
+
+            CancelModelDownloadButtonVisibility = Visibility.Visible;
+            GlobalStateViewModel.Instance.Settings.OperationInProgressVisibility = Visibility.Visible;
+            GlobalStateViewModel.Instance.Settings.OperationInProgressMessage =
+                $"Downloading model {ModelName}...";
+
+            return await Task.Run(async () =>
+            {
+                long total = 0;
+                try
+                {
+                    var uri = new Uri(EndpointUri);
+                    using (var ollama = new OllamaApiClient(uri))
+                    {
+                        await foreach (var status in ollama.PullModelAsync(ModelName, m_CancellationSource.Token))
+                        {
+                            if (status == null || m_CancellationSource.IsCancellationRequested)
+                            {
+                                break;
+                            }
+                            Application.Current.Dispatcher.Invoke(new Action(() =>
+                            {
+                                GlobalStateViewModel.Instance.Settings.OperationInProgressMessage =
+                                $"{status.Percent}% {status.Status}";
+                            }));
+
+                            total += status.Completed;
+                        }
+                    }
+                    //
+                    // save current selections
+                    //
+                    var currentModelName = ModelName;
+                    var currentTextEmbeddingModelName = TextEmbeddingModelName;
+                    _ = await LoadModelList();
+                    this.ModelName = currentModelName;
+                    this.TextEmbeddingModelName = currentTextEmbeddingModelName;
+                }
+                catch (OperationCanceledException)
+                {
+                    GlobalStateViewModel.Instance.Settings.OperationInProgressMessage = "Download canceled.";
+                    return false;
+                }
+                catch (Exception ex)
+                {
+                    Trace(TraceLoggerType.Settings,
+                          TraceEventType.Error,
+                          $"Exception downloading model: {ex.Message}");
+                    return false;
+                }
+                finally
+                {
+                    CancelModelDownloadButtonVisibility = Visibility.Hidden;
+                }
+                Application.Current.Dispatcher.Invoke(new Action(() =>
+                {
+                    GlobalStateViewModel.Instance.Settings.OperationInProgressMessage =
+                        $"Model downloaded ({MiscHelper.FormatByteSizeString(total)})";
+                }));
+                return true;
+            });
+        }
+
+        public void CancelNewModelDownload()
+        {
+            if (!m_CancellationSource.Token.CanBeCanceled)
+            {
+                return;
+            }
+            GlobalStateViewModel.Instance.Settings.OperationInProgressMessage = "Download cancellation requested...";
+            m_CancellationSource.Cancel();
+            CancelModelDownloadButtonVisibility = Visibility.Hidden;
+        }
+
+        public string? GetModelFileLocation()
+        {
+            if (string.IsNullOrEmpty(ModelName))
+            {
+                return null;
+            }
+            return ParseModelFileLocation(ModelInfo[ModelName].ShowModelResponse.Modelfile);
+        }
+
+        #region validation routines
+
+        private async Task<bool> ValidateEndpointUri()
+        {
+            if (string.IsNullOrEmpty(EndpointUri))
+            {
+                return false;
+            }
+
+            try
+            {
+                var uri = new Uri(EndpointUri);
+                using (var ollama = new OllamaApiClient(uri))
+                {
+                    return await ollama.IsRunningAsync();
+                }
+            }
+            catch (Exception ex)
+            {
+                Trace(TraceLoggerType.Settings,
+                      TraceEventType.Error,
+                      $"Exception validating endpoint URI {EndpointUri}: {ex.Message}");
+                return false;
+            }
+        }
+
+        private void ValidateModelName()
+        {
+            //
+            // Because the runtime config file is tied to the model name being valid,
+            // if this validation fails, config file is cleared
+            //
+            ClearErrors(nameof(ModelName));
+            if (string.IsNullOrEmpty(ModelName) || !ModelNames.Contains(ModelName) || !ModelInfo.ContainsKey(ModelName))
+            {
+                AddError(nameof(ModelName), "Model name is invalid");
+                RuntimeConfigFile = null;
+                return;
+            }
+
+            if (string.IsNullOrEmpty(ParseModelFileLocation(
+                ModelInfo[ModelName].ShowModelResponse.Modelfile)))
+            {
+                AddError(nameof(ModelName), "Model file not found");
+                RuntimeConfigFile = null;
+                return;
+            }
+        }
+
+        private void ValidateTextEmbeddingModelName()
+        {
+            ClearErrors(nameof(TextEmbeddingModelName));
+            if (string.IsNullOrEmpty(TextEmbeddingModelName) || !ModelNames.Contains(TextEmbeddingModelName) ||
+                !ModelInfo.ContainsKey(TextEmbeddingModelName))
+            {
+                AddError(nameof(TextEmbeddingModelName), "Text embedding model name is invalid");
+                return;
+            }
+            if (string.IsNullOrEmpty(ParseModelFileLocation(
+                ModelInfo[TextEmbeddingModelName].ShowModelResponse.Modelfile)))
+            {
+                AddError(nameof(TextEmbeddingModelName), "Text embedding model file not found");
+                return;
+            }
+        }
+
+        private void ValidateRuntimeConfigFile()
+        {
+            ClearErrors(nameof(RuntimeConfigFile));
+            if (string.IsNullOrEmpty(RuntimeConfigFile) || !File.Exists(RuntimeConfigFile))
+            {
+                AddError(nameof(RuntimeConfigFile), "Runtime config file is invalid");
+                PromptExecutionSettings = null;
+            }
+            else
+            {
+                try
+                {
+                    var json = File.ReadAllText(RuntimeConfigFile);
+                    PromptExecutionSettings = JsonConvert.DeserializeObject<OllamaPromptExecutionSettings>(json);
+                }
+                catch (Exception ex)
+                {
+                    AddError(nameof(RuntimeConfigFile), "Failed to deserialize runtime config file");
+                    Trace(TraceLoggerType.Settings,
+                          TraceEventType.Error,
+                          $"Exception occurred when deserializing {RuntimeConfigFile} into OllamaPromptExecutionSettings: {ex.Message}");
+                }
+            }
+        }
+
+        #endregion
+
+
+        private string? ParseModelFileLocation(string? Contents)
+        {
+            //
+            // Parse the MODELFILE .. this might be brittle..
+            //
+            if (string.IsNullOrEmpty(Contents))
+            {
+                return null;
+            }
+            var lines = Contents.Split('\n'); // NB: Unix line ending!
+            foreach (var line in lines)
+            {
+                if (string.IsNullOrEmpty(line))
+                {
+                    continue;
+                }
+                if (line[0] == '#') // skip comment
+                {
+                    continue;
+                }
+                if (line.StartsWith("FROM "))
+                {
+                    var parts = line.Split(' ', 2, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+                    if (parts.Length == 2)
+                    {
+                        var fullpath = parts[1];
+                        if (!File.Exists(fullpath))
+                        {
+                            return null;
+                        }
+                        return fullpath;
+                    }
+                }
+            }
+
+            //
+            // MODELFILE format has changed. See https://github.com/ollama/ollama/blob/main/docs/modelfile.md
+            //
+            Debug.Assert(false);
+            return null;
+        }
+
+        private void ResetForm()
+        {
+            ModelNames.Clear();
+            ModelName = null;
+            TextEmbeddingModelName = null;
+            RuntimeConfigFile = null;
+            IsEndpointValid = false;
+            GlobalStateViewModel.Instance.Settings.OperationInProgressMessage = "";
+            GlobalStateViewModel.Instance.Settings.OperationInProgressVisibility = Visibility.Hidden;
+        }
+    }
+}

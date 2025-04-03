@@ -470,7 +470,7 @@ namespace EtwPilot.Utilities
                 BindingFlags.Default | BindingFlags.InvokeMethod,
                 null,
                 obj,
-                new object[] { Args });
+                new object?[] { Args });
         }
 
         public async Task<T?> InvokeMethodAsync<T>(Formatter Formatter, object[] Args)

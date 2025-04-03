@@ -22,13 +22,14 @@ using System.ComponentModel.DataAnnotations;
 using etwlib;
 using static etwlib.NativeTraceConsumer;
 using static etwlib.NativeTraceControl;
-using System.Configuration;
 using System.Diagnostics;
 using EtwPilot.Utilities;
 using System.Runtime.InteropServices;
 using Meziantou.Framework.WPF.Collections;
-using Newtonsoft.Json.Linq;
 using EtwPilot.Sk.Vector;
+using Microsoft.SemanticKernel.Embeddings;
+
+#pragma warning disable SKEXP0001 // ITextEmbeddingGenerationService
 
 namespace EtwPilot.Sk.Plugins
 {
@@ -84,30 +85,42 @@ namespace EtwPilot.Sk.Plugins
                 }
             }
         }
-        private readonly EtwVectorDb m_VectorDb;
 
-        public EtwTraceSession(EtwVectorDb VectorDb)
+        private readonly Kernel m_Kernel;
+
+        public EtwTraceSession(Kernel kernel)
         {
-            m_VectorDb = VectorDb;
             _Stopwatch = new Stopwatch();
             Data = new ConcurrentObservableCollection<ParsedEtwEvent>();
             EventsConsumed = 0;
             BytesConsumed = 0;
+            m_Kernel = kernel;
         }
 
         [KernelFunction("StartTrace")]
         [Description("Starts an ETW trace session to find ETW events of interest.")]
         public async Task StartTrace(
-            [Description("Settings that control what ETW data is collected")]
-            [Required()]TraceSessionParameters Parameters,
+            [Description("The name or GUID of the ETW provider")]
+            [Required()]string Provider,
             CancellationToken Token)
         {
             EventsConsumed = 0;
             BytesConsumed = 0;
             Data.Clear();
             StartTime = DateTime.Now;
-            await Task.Run(() => ConsumeTraceEvents(Parameters, Token));
-            await m_VectorDb.ImportData(ViewModel.InsightsViewModel.ChatTopic.EventData, Data.ToList(), Token);
+
+            //
+            // To-do: When onnx supports function calling, let Sk serialization handle
+            // brokering the TraceSessionParameters argument directly from the model.
+            //
+            var parameters = new TraceSessionParameters();
+            parameters.StopOnTimeSec = 10;
+            parameters.ProviderNamesOrGuids.Add(Provider);
+
+            await Task.Run(() => ConsumeTraceEvents(parameters, Token));
+            var textEmbSvc = m_Kernel.GetRequiredService<ITextEmbeddingGenerationService>();
+            var vectorDb = m_Kernel.GetRequiredService<EtwVectorDb>();
+            await vectorDb.ImportData(EtwVectorDb.s_EtwEventCollectionName, Data.ToList(), textEmbSvc, Token);
         }
 
         private void ConsumeTraceEvents(TraceSessionParameters Parameters, CancellationToken Token)

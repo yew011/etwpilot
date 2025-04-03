@@ -32,9 +32,67 @@ namespace EtwPilot.ViewModel
     {
         public Guid TabId { get; set; }
         public ParsedEtwManifest Manifest { get; set; }
-        public ScopeFilterViewModel ScopeFilter { get; set; }
-        public AttributeFilterViewModel AttributeFilter { get; set; }
-        public StackwalkFilterViewModel StackwalkFilter { get; set; }
+
+        private ScopeFilterViewModel? _ScopeFilter;
+        public ScopeFilterViewModel? ScopeFilter
+        {
+            get => _ScopeFilter;
+            set
+            {
+                if (_ScopeFilter != null)
+                {
+                    UnsubscribeFromChildErrors(_ScopeFilter);
+                }
+                if (value != null)
+                {
+                    ClearErrors(nameof(ScopeFilter));
+                    SubscribeToChildErrors(value, nameof(ScopeFilter));
+                }
+                _ScopeFilter = value;
+                OnPropertyChanged(nameof(ScopeFilter));
+            }
+        }
+
+        private AttributeFilterViewModel? _AttributeFilter;
+        public AttributeFilterViewModel? AttributeFilter
+        {
+            get => _AttributeFilter;
+            set
+            {
+                if (_AttributeFilter != null)
+                {
+                    UnsubscribeFromChildErrors(_AttributeFilter);
+                }
+                if (value != null)
+                {
+                    ClearErrors(nameof(AttributeFilter));
+                    SubscribeToChildErrors(value, nameof(AttributeFilter));
+                }
+                _AttributeFilter = value;                
+                OnPropertyChanged(nameof(AttributeFilter));
+            }
+        }
+
+        private StackwalkFilterViewModel? _StackwalkFilter;
+        public StackwalkFilterViewModel? StackwalkFilter
+        {
+            get => _StackwalkFilter;
+            set
+            {
+                if (_StackwalkFilter != null)
+                {
+                    UnsubscribeFromChildErrors(_StackwalkFilter);
+                }
+                if (value != null)
+                {
+                    ClearErrors(nameof(StackwalkFilter));
+                    SubscribeToChildErrors(value, nameof(StackwalkFilter));
+                }
+                _StackwalkFilter = value;
+                OnPropertyChanged(nameof(StackwalkFilter));
+            }
+        }
+
         public List<ParsedEtwManifestEvent> EventsWithTemplates { get; set; }
         public bool MatchAnyPredicate {get; set; }
         private static readonly int s_MaxColCount = 20;
@@ -95,9 +153,9 @@ namespace EtwPilot.ViewModel
         {
             return TabId.GetHashCode() +
                 Manifest.GetHashCode() +
-                ScopeFilter.GetHashCode() +
-                AttributeFilter.GetHashCode() +
-                StackwalkFilter.GetHashCode() +
+                (ScopeFilter?.GetHashCode() ?? 0) +
+                (AttributeFilter?.GetHashCode() ?? 0) +
+                (StackwalkFilter?.GetHashCode() ?? 0)+
                 EventsWithTemplates.GetHashCode();
         }
         #endregion
@@ -188,22 +246,24 @@ namespace EtwPilot.ViewModel
             }
         }
 
-        private PayloadFilterPredicateViewModel _SelectedPredicate;
-        public PayloadFilterPredicateViewModel SelectedPredicate
+        private PayloadFilterPredicateViewModel? _SelectedPredicate;
+        public PayloadFilterPredicateViewModel? SelectedPredicate
         {
             get => _SelectedPredicate;
             set
             {
-                if (_SelectedPredicate != value)
+                if (_SelectedPredicate != null)
                 {
-                    _SelectedPredicate = value;
-                    OnPropertyChanged("SelectedPredicate");
-
+                    UnsubscribeFromChildErrors(_SelectedPredicate);
+                }
+                if (value != null)
+                {
+                    SubscribeToChildErrors(value, nameof(SelectedPredicate));
                     //
                     // Subscribe to property change events in selected predicate form, so when the form becomes valid,
                     // the control buttons and associated commands are available.
                     //
-                    _SelectedPredicate.PropertyChanged += (object? sender, PropertyChangedEventArgs Args) =>
+                    value.PropertyChanged += (object? sender, PropertyChangedEventArgs Args) =>
                     {
                         AddPredicateCommand.NotifyCanExecuteChanged();
                         UpdatePredicateCommand.NotifyCanExecuteChanged();
@@ -211,6 +271,8 @@ namespace EtwPilot.ViewModel
                         RemovePredicateCommand.NotifyCanExecuteChanged();
                     };
                 }
+                _SelectedPredicate = value;
+                OnPropertyChanged("SelectedPredicate");
             }
         }
 
@@ -309,13 +371,6 @@ namespace EtwPilot.ViewModel
                 e => !string.IsNullOrEmpty(e.Template)));
 
             //
-            // Bubble up any errors in sub-forms to parent form
-            //
-            ScopeFilter.SetParentFormNotifyErrorsChanged(this);
-            AttributeFilter.SetParentFormNotifyErrorsChanged(this);
-            StackwalkFilter.SetParentFormNotifyErrorsChanged(this);
-
-            //
             // There are two column lists - one for available columns which changes as other
             // parts of the form are completed and one for the chosen columns which can be
             // edited by the user.
@@ -376,6 +431,11 @@ namespace EtwPilot.ViewModel
 
         private void ChosenEtwColumns_CollectionChanged(object? sender, System.Collections.Specialized.NotifyCollectionChangedEventArgs e)
         {
+            HandleChildSubscriptionForCollectionChangedNotification<EtwColumnViewModel>(e);
+
+            //
+            // Validate the full list
+            //
             ClearErrors(nameof(ChosenEtwColumns));
             if (ChosenEtwColumns.Count == 0)
             {
@@ -401,10 +461,6 @@ namespace EtwPilot.ViewModel
                         TemplateFieldType = dc.TemplateFieldType,
                         Formatter = dc.Formatter
                     };
-                    //
-                    // Bubble up any errors to parent form
-                    //
-                    newCol.SetParentFormNotifyErrorsChanged(this);
                     ChosenEtwColumns.Add(newCol);
                 }
             });
@@ -446,6 +502,11 @@ namespace EtwPilot.ViewModel
 
         private void Command_AddPredicate()
         {
+            if (SelectedPredicate == null)
+            {
+                Debug.Assert(false);
+                return;
+            }
             Debug.Assert(!SelectedPredicate.HasErrors);
             Debug.Assert(SelectedPredicate.Event != null);
             Debug.Assert(SelectedPredicate.Operator != null);
@@ -454,10 +515,6 @@ namespace EtwPilot.ViewModel
             PayloadFilterPredicates.Add(SelectedPredicate);
             SelectedPredicate = new PayloadFilterPredicateViewModel();
             //
-            // Bubble up any errors in sub-forms to parent form
-            //
-            SelectedPredicate.SetParentFormNotifyErrorsChanged(this);
-            //
             // Synchronize available columns
             //
             RefreshAvailableEtwColumnsCommand.Execute(null);
@@ -465,6 +522,11 @@ namespace EtwPilot.ViewModel
 
         private void Command_UpdatePredicate()
         {
+            if (SelectedPredicate == null)
+            {
+                Debug.Assert(false);
+                return;
+            }
             Debug.Assert(SelectedPredicate.IsUpdateMode);
             SelectedPredicate.IsUpdateMode = false;
             SelectedPredicate = new PayloadFilterPredicateViewModel();
@@ -472,6 +534,11 @@ namespace EtwPilot.ViewModel
 
         private void Command_CancelUpdatePredicate()
         {
+            if (SelectedPredicate == null)
+            {
+                Debug.Assert(false);
+                return;
+            }
             Debug.Assert(SelectedPredicate.IsUpdateMode);
             SelectedPredicate.IsUpdateMode = false;
             SelectedPredicate = new PayloadFilterPredicateViewModel();
@@ -519,10 +586,6 @@ namespace EtwPilot.ViewModel
                         TemplateFieldType = cc.TemplateFieldType,
                         Formatter = cc.Formatter
                     };
-                    //
-                    // Bubble up any errors to parent form
-                    //
-                    newCol.SetParentFormNotifyErrorsChanged(this);
                     ChosenEtwColumns.Add(newCol);
                 }
             });
@@ -549,9 +612,9 @@ namespace EtwPilot.ViewModel
             // naturally want to see the fields of those events as columns in the data view.
             //
             var uniqueEvents = new List<ParsedEtwManifestEvent>();
-            uniqueEvents = uniqueEvents.Union(AttributeFilter.Events).
-                                        Union(StackwalkFilter.Events).
-                                        Union(PayloadFilterPredicates.Select(p => p.Event).ToList()).ToList();
+            uniqueEvents = uniqueEvents.Union(AttributeFilter!.Events!).
+                                        Union(StackwalkFilter!.Events!).
+                                        Union(PayloadFilterPredicates.Select(p => p.Event).ToList()).ToList()!;
             if (uniqueEvents.Count == 0)
             {
                 //
@@ -1038,8 +1101,8 @@ namespace EtwPilot.ViewModel
             Event = null; // force initial error state
         }
 
-        private ParsedEtwManifestEvent _Event;
-        public ParsedEtwManifestEvent Event
+        private ParsedEtwManifestEvent? _Event;
+        public ParsedEtwManifestEvent? Event
         {
             get => _Event;
             set
@@ -1133,7 +1196,7 @@ namespace EtwPilot.ViewModel
         public override string ToString()
         {
             var sb = new StringBuilder();
-            sb.AppendLine($"   Event: {Event.Id}:{Event.Version}");
+            sb.AppendLine($"   Event: {Event!.Id}:{Event.Version}");
             sb.AppendLine($"     {Field.Name} {Operator!.Value} {FieldValue}");
             return sb.ToString();
         }

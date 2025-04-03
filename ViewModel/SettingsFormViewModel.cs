@@ -24,6 +24,8 @@ using EtwPilot.Model;
 using Microsoft.Win32;
 using Newtonsoft.Json;
 using EtwPilot.Utilities;
+using System.ComponentModel;
+using System.Windows;
 
 namespace EtwPilot.ViewModel
 {
@@ -250,81 +252,53 @@ namespace EtwPilot.ViewModel
             }
         }
 
-        private string _ModelPath;
-        public string ModelPath
+        private OnnxGenAIConfigModel? _OnnxGenAIConfig;
+        public OnnxGenAIConfigModel? OnnxGenAIConfig
         {
-            get => _ModelPath;
+            get => _OnnxGenAIConfig;
             set
             {
-                if (_ModelPath != value)
+                if (_OnnxGenAIConfig != null)
                 {
-                    _ModelPath = value;
-                    if (!string.IsNullOrEmpty(value))
-                    {
-                        ClearErrors(nameof(ModelPath));
-                        if (!OnnxGenAIConfigModel.ValidateModelPath(ModelPath))
-                        {
-                            AddError(nameof(ModelPath), "Model path is invalid");
-                        }
-                        else
-                        {
-                            OnPropertyChanged("ModelPath");
-                        }
-                    }
-                    else
-                    {
-                        OnPropertyChanged("ModelPath");
-                    }
+                    UnsubscribeFromChildErrors(_OnnxGenAIConfig);
                 }
+                if (value != null)
+                {
+                    _OnnxGenAIConfig = value;
+                    ClearErrors(nameof(OnnxGenAIConfig));
+                    SubscribeToChildErrors(value, nameof(OnnxGenAIConfig));
+                    OperationInProgressVisibility = Visibility.Hidden;
+                    OperationInProgressMessage = "";
+                }
+                _OnnxGenAIConfig = value;
+                OnPropertyChanged(nameof(OnnxGenAIConfig));
             }
         }
 
-        private string _EmbeddingsModelFile;
-        public string EmbeddingsModelFile
+        private OllamaConfigModel? _OllamaConfig;
+        public OllamaConfigModel? OllamaConfig
         {
-            get => _EmbeddingsModelFile;
+            get => _OllamaConfig;
             set
             {
-                if (_EmbeddingsModelFile != value)
+                if (_OllamaConfig != null)
                 {
-                    _EmbeddingsModelFile = value;
-                    if (!string.IsNullOrEmpty(value))
-                    {
-                        ClearErrors(nameof(EmbeddingsModelFile));
-                        if (!OnnxGenAIConfigModel.ValidateEmbeddingsModelFile(EmbeddingsModelFile))
-                        {
-                            AddError(nameof(EmbeddingsModelFile), "Embeddings model file is invalid");
-                        }
-                        else
-                        {
-                            OnPropertyChanged("EmbeddingsModelFile");
-                        }
-                    }
-                    else
-                    {
-                        ModelConfig = null;
-                        OnPropertyChanged("EmbeddingsModelFile");
-                    }
+                    UnsubscribeFromChildErrors(_OllamaConfig);
                 }
+                if (value != null)
+                {
+                    ClearErrors(nameof(OllamaConfig));
+                    SubscribeToChildErrors(value, nameof(OllamaConfig));
+                    OperationInProgressVisibility = Visibility.Hidden;
+                    OperationInProgressMessage = "";
+                }
+                _OllamaConfig = value;
+                OnPropertyChanged(nameof(OllamaConfig));
             }
         }
 
-        private OnnxGenAIConfigModel? _ModelConfig;
-        public OnnxGenAIConfigModel? ModelConfig
-        {
-            get => _ModelConfig;
-            set
-            {
-                if (_ModelConfig != value)
-                {
-                    _ModelConfig = value;
-                    OnPropertyChanged("ModelConfig");
-                }
-            }
-        }
-
-        [JsonIgnore] // only used for UI
         private bool _Valid;
+        [JsonIgnore] // only used for UI
         public bool Valid
         {
             get => _Valid;
@@ -335,6 +309,30 @@ namespace EtwPilot.ViewModel
                     _Valid = value;
                     OnPropertyChanged("Valid");
                 }
+            }
+        }
+
+        private Visibility _OperationInProgressVisibility;
+        [JsonIgnore] // UI only
+        public Visibility OperationInProgressVisibility
+        {
+            get => _OperationInProgressVisibility;
+            set
+            {
+                _OperationInProgressVisibility = value;
+                OnPropertyChanged(nameof(OperationInProgressVisibility));
+            }
+        }
+
+        private string _OperationInProgressMessage;
+        [JsonIgnore] // UI only
+        public string OperationInProgressMessage
+        {
+            get => _OperationInProgressMessage;
+            set
+            {
+                _OperationInProgressMessage = value;
+                OnPropertyChanged(nameof(OperationInProgressMessage));
             }
         }
 
@@ -393,10 +391,12 @@ namespace EtwPilot.ViewModel
                 Command_UpdateFormatter, _ => { return true; });
             AddDefaultFormattersCommand = new RelayCommand(
                 Command_AddDefaultFormatters, () => { return true; });
-
+            
             ChangedProperties = new List<string>();
             Formatters = new ObservableCollection<Formatter>();
             m_FormatterLibrary = new FormatterLibrary();
+            OperationInProgressMessage = "";
+            OperationInProgressVisibility = Visibility.Hidden;
 
             if (!Directory.Exists(DefaultWorkingDirectory))
             {
@@ -421,10 +421,33 @@ namespace EtwPilot.ViewModel
             TraceLevelSymbolresolver = SourceLevels.Critical;
             Valid = true;
 
-            ErrorsChanged += (object? sender, System.ComponentModel.DataErrorsChangedEventArgs e) =>
+            ErrorsChanged += (object? sender, DataErrorsChangedEventArgs e) =>
             {
                 //
-                // This is solely used to update UI
+                // If this is an error change on a property in a child, update our global
+                // error on that child
+                //
+                var child = GetChild(e.PropertyName);
+                if (child != null)
+                {
+                    if (child == OllamaConfig)
+                    {
+                        if (!OllamaConfig!.HasErrors)
+                        {
+                            ClearErrors(nameof(OllamaConfig));
+                        }
+                    }
+                    else if (child == OnnxGenAIConfig)
+                    {
+                        if (!OnnxGenAIConfig!.HasErrors)
+                        {
+                            ClearErrors(nameof(OnnxGenAIConfig));
+                        }
+                    }
+                }
+
+                //
+                // This is only used to update UI
                 //
                 Valid = !HasErrors;
             };
@@ -497,6 +520,25 @@ namespace EtwPilot.ViewModel
             if (!await m_FormatterLibrary.Publish(Formatters.ToList()))
             {
                 AddError(nameof(Formatters), "Failed to publish formatters");
+            }
+
+            //
+            // Onnx or Ollama runtime must be valid.
+            //
+            ClearErrors(nameof(OnnxGenAIConfig));
+            if (OnnxGenAIConfig != null && OnnxGenAIConfig.HasErrors)
+            {
+                AddError(nameof(OnnxGenAIConfig), "Invalid Onnx GenAI config");
+            }
+            ClearErrors(nameof(OllamaConfig));
+            if (OllamaConfig != null && OllamaConfig.HasErrors)
+            {
+                AddError(nameof(OllamaConfig), "Invalid Ollama config");
+            }
+            if (OnnxGenAIConfig == null && OllamaConfig == null)
+            {
+                AddError(nameof(OnnxGenAIConfig), "A chat completion runtime must be selected");
+                AddError(nameof(OllamaConfig), "A chat completion runtime must be selected");
             }
 
             //
@@ -648,17 +690,26 @@ namespace EtwPilot.ViewModel
                 var json = File.ReadAllText(Location);
                 var settings = (SettingsFormViewModel)JsonConvert.DeserializeObject(
                     json, typeof(SettingsFormViewModel))!;
-                if (settings.ModelConfig != null)
+                //
+                // Add a listener for any property change in these child classes.
+                //
+                if (settings.OnnxGenAIConfig != null)
                 {
-                    //
-                    // Add a listener for any property change in the UI sliders
-                    // and remember to save it later.
-                    //
-                    settings.ModelConfig.SearchOptions.PropertyChanged += (obj, p) =>
+                    settings.OnnxGenAIConfig.PropertyChanged += (obj, p) =>
                     {
-                        if (!settings.ChangedProperties.Contains(nameof(ModelConfig)))
+                        if (!settings.ChangedProperties.Contains(p.PropertyName!))
                         {
-                            settings.ChangedProperties.Add(nameof(ModelConfig));
+                            settings.ChangedProperties.Add(p.PropertyName!);
+                        }
+                    };
+                }
+                if (settings.OllamaConfig != null)
+                {
+                    settings.OllamaConfig.PropertyChanged += (obj, p) =>
+                    {
+                        if (!settings.ChangedProperties.Contains(p.PropertyName!))
+                        {
+                            settings.ChangedProperties.Add(p.PropertyName!);
                         }
                     };
                 }
@@ -681,40 +732,6 @@ namespace EtwPilot.ViewModel
             catch (Exception ex)
             {
                 throw new Exception($"Could not deserialize settings: {ex.Message}");
-            }
-        }
-
-        public void TryCreateModelConfig()
-        {
-            //
-            // This routine is invoked only from XAML code-behind for the form,
-            // after a user has browsed to a new model path or embeddings model,
-            // so that the proper config can be loaded and parsed. This cannot
-            // be done from within setters in this class because it would interfere
-            // with deserialization during the loading process.
-            //
-            if (!PropertyHasErrors(nameof(ModelPath)) &&
-                !PropertyHasErrors(nameof(EmbeddingsModelFile)))
-            {
-                ModelConfig = OnnxGenAIConfigModel.Load(ModelPath, EmbeddingsModelFile);
-                if (ModelConfig == null)
-                {
-                    AddError(nameof(ModelPath), "Unable to load model config JSON");
-                }
-                else
-                {
-                    //
-                    // Add a listener for any property change in the UI sliders
-                    // and remember to save it later.
-                    //
-                    ModelConfig.SearchOptions.PropertyChanged += (obj, p) =>
-                    {
-                        if (!ChangedProperties.Contains(nameof(ModelConfig)))
-                        {
-                            ChangedProperties.Add(nameof(ModelConfig));
-                        }
-                    };
-                }
             }
         }
     }

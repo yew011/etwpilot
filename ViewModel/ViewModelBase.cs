@@ -218,7 +218,7 @@ namespace EtwPilot.ViewModel
         #endregion
 
         public event PropertyChangedEventHandler? PropertyChanged;
-        public dynamic m_CurrentCommand { get; set; }
+        public dynamic? m_CurrentCommand { get; set; }
         private FollowupAction m_FollowupAction { get; set; }
 
         public ProgressState()

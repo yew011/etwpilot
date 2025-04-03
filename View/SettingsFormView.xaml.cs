@@ -16,12 +16,14 @@ KIND, either express or implied.  See the License for the
 specific language governing permissions and limitations
 under the License.
 */
-using EtwPilot.Model;
 using EtwPilot.Utilities;
 using EtwPilot.ViewModel;
 using Microsoft.Win32;
 using System.Diagnostics;
 using System.Windows;
+using System.IO;
+using EtwPilot.Model;
+using EtwPilot.InferenceRuntimes;
 
 namespace EtwPilot.View
 {
@@ -33,6 +35,8 @@ namespace EtwPilot.View
         {
             InitializeComponent();
         }
+
+        #region Debug tab
 
         private void BrowseSymbolPathButton_Click(object sender, RoutedEventArgs e)
         {
@@ -72,8 +76,41 @@ namespace EtwPilot.View
             }
             ProviderCachePathTextBox.Text = browser.FolderName;
         }
+        #endregion
 
-        private void BrowseModelPathButton_Click(object sender, RoutedEventArgs e)
+        #region Insights - Onnx
+
+        private void BrowseOnnxModelPathButton_Click(object sender, RoutedEventArgs e)
+        {
+            var browser = new OpenFolderDialog();
+            browser.Title = "Select the model path";
+            browser.InitialDirectory = Environment.SpecialFolder.MyComputer.ToString();
+            var result = browser.ShowDialog();
+            if (!result.HasValue || !result.Value)
+            {
+                return;
+            }
+            OnnxModelPathTextbox.Text = browser.FolderName;
+        }
+
+        private void BrowseOnnxRuntimeConfigFileButton_Click(object sender, RoutedEventArgs e)
+        {
+            var browser = new OpenFileDialog();
+            browser.Title = "Select a JSON config file";
+            browser.Filter = "JSON files (*.json)|*.json";
+            if (!string.IsNullOrEmpty(OnnxModelPathTextbox.Text))
+            {
+                browser.RootDirectory = OnnxModelPathTextbox.Text;
+            }
+            var result = browser.ShowDialog();
+            if (!result.HasValue || !result.Value)
+            {
+                return;
+            }
+            OnnxRuntimeConfigFileTextbox.Text = browser.FileName;
+        }
+
+        private void BrowseBertModelPathButton_Click(object sender, RoutedEventArgs e)
         {
             var browser = new OpenFolderDialog();
             browser.Title = "Select a location";
@@ -83,35 +120,140 @@ namespace EtwPilot.View
             {
                 return;
             }
-            var vm = UiHelper.GetViewModelFromFrameworkElement<
-                SettingsFormViewModel>(sender as FrameworkElement);
+            BertModelPathTextbox.Text = browser.FolderName;
+        }
+
+        private async void runtimeOnnxRadioButton_Checked(object sender, RoutedEventArgs e)
+        {
+            var vm = DataContext as SettingsFormViewModel;
             if (vm == null)
+            {
+                Debug.Assert(false);
+                return;
+            }
+            vm.OllamaConfig = null;
+            vm.OnnxGenAIConfig = new Model.OnnxGenAIConfigModel();
+            await vm.Validate();
+        }
+
+        #endregion
+
+        #region Insights - Ollama
+
+        private async void OllamaDownloadNewModelButton_Click(object sender, RoutedEventArgs e)
+        {
+            var vm = DataContext as SettingsFormViewModel;
+            if (vm == null)
+            {
+                Debug.Assert(false);
+                return;
+            }
+            var ollama = vm.OllamaConfig;
+            if (ollama == null)
+            {
+                Debug.Assert(false);
+                return;
+            }
+            if (!await ollama.DownloadNewModel(OllamaDownloadNewModelTextbox.Text))
             {
                 return;
             }
-            ModelPathTextbox.Text = browser.FolderName;
-            vm.TryCreateModelConfig();
         }
 
-        private void BrowseEmbeddingsModelFileButton_Click(object sender, RoutedEventArgs e)
+        private void OllamaCancelDownloadNewModelButton_Click(object sender, RoutedEventArgs e)
         {
+            var vm = DataContext as SettingsFormViewModel;
+            if (vm == null)
+            {
+                Debug.Assert(false);
+                return;
+            }
+            var ollama = vm.OllamaConfig;
+            if (ollama == null)
+            {
+                Debug.Assert(false);
+                return;
+            }
+            ollama.CancelNewModelDownload();
+        }
+
+        private void BrowseOllamaRuntimeConfigFileButton_Click(object sender, RoutedEventArgs e)
+        {
+            var vm = DataContext as SettingsFormViewModel;
+            if (vm == null || vm.OllamaConfig == null)
+            {
+                Debug.Assert(false);
+                return;
+            }
+
+            var modelFolder = vm.OllamaConfig.GetModelFileLocation();
             var browser = new OpenFileDialog();
-            browser.Title = "Select a text embeddings model file";
-            browser.Filter = "ONNX model files (*.onnx)|*.onnx";
+            browser.Title = "Select a config file";
+            browser.Filter = "JSON files (*.json)|*.json";
+            if (!string.IsNullOrEmpty(modelFolder) && Directory.Exists(modelFolder))
+            {
+                browser.InitialDirectory = modelFolder;
+            }
             var result = browser.ShowDialog();
             if (!result.HasValue || !result.Value)
             {
                 return;
             }
-            var vm = UiHelper.GetViewModelFromFrameworkElement<
-                SettingsFormViewModel>(sender as FrameworkElement);
+            OllamaRuntimeConfigFileTextbox.Text = browser.FileName;
+        }
+
+        private void CreateOllamaRuntimeConfigFileButton_Click(object sender, RoutedEventArgs e)
+        {
+            var vm = DataContext as SettingsFormViewModel;
             if (vm == null)
             {
+                Debug.Assert(false);
                 return;
             }
-            EmbeddingsModelPathTextbox.Text = browser.FileName;
-            vm.TryCreateModelConfig();
+            var ollama = vm.OllamaConfig;
+            if (ollama == null)
+            {
+                Debug.Assert(false);
+                return;
+            }
+            var saveFileDialog = new SaveFileDialog
+            {
+                Title = "Choose a location to save model runtime config file",
+                Filter = "JSON files (*.json)|*.json",
+                DefaultExt = "json",
+            };
+            var modelFolder = OllamaRuntimeConfigFileTextbox.Tag as string;
+            if (!string.IsNullOrEmpty(modelFolder) && Directory.Exists(modelFolder))
+            {
+                saveFileDialog.InitialDirectory = modelFolder;
+            }
+            if (saveFileDialog.ShowDialog() == true)
+            {
+                string filePath = saveFileDialog.FileName;
+                File.WriteAllText(filePath, OllamaConfigModel.s_DefaultRuntimeConfigJson);
+                ollama.RuntimeConfigFile = filePath;
+                Process.Start(new ProcessStartInfo(filePath) { UseShellExecute = true });
+            }
         }
+
+        private void runtimeOllamaRadioButton_Checked(object sender, RoutedEventArgs e)
+        {
+            var vm = DataContext as SettingsFormViewModel;
+            if (vm == null)
+            {
+                Debug.Assert(false);
+                return;
+            }
+            vm.OnnxGenAIConfig = null;
+            if (vm.OllamaConfig == null)
+            {
+                vm.OllamaConfig = new Model.OllamaConfigModel();
+            }
+        }
+
+        #endregion
+
+        #region Formatters
 
         private void UpdateFormatterButton_Click(object sender, RoutedEventArgs e)
         {
@@ -148,6 +290,8 @@ namespace EtwPilot.View
             }
         }
 
+        #endregion
+
         private void SettingsFormViewControl_Loaded(object sender, RoutedEventArgs e)
         {
             var vm = DataContext as SettingsFormViewModel;
@@ -158,5 +302,12 @@ namespace EtwPilot.View
             }
             vm.InitializeFromCodeBehind();
         }
+
+        private void Hyperlink_RequestNavigate(object sender, System.Windows.Navigation.RequestNavigateEventArgs e)
+        {
+            Process.Start(new ProcessStartInfo(e.Uri.AbsoluteUri) { UseShellExecute = true });
+            e.Handled = true;
+        }
+
     }
 }

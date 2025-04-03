@@ -28,12 +28,11 @@ using etwlib;
 using EtwPilot.Utilities;
 using System.Text;
 using Microsoft.SemanticKernel.ChatCompletion;
-using System;
-using Microsoft.SemanticKernel.Connectors.Onnx;
-using System.Collections.ObjectModel;
-using System.Windows.Controls;
 using EtwPilot.Sk.Plugins;
 using EtwPilot.Sk.Vector;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.SemanticKernel.Embeddings;
+using EtwPilot.InferenceRuntimes;
 
 //
 // Remove supression after onnx connector is out of alpha
@@ -187,7 +186,7 @@ namespace EtwPilot.ViewModel
         public RelayCommand ClearCommand { get; set; }
         public RelayCommand CopyCommand { get; set; }
         public AsyncRelayCommand GenerateCommand { get; set; }
-        public RelayCommand<ChatTopic> SetChatTopicCommand { get; set; }
+        public AsyncRelayCommand<ChatTopic> SetChatTopicCommand { get; set; }
         public AsyncRelayCommand ReinitializeCommand { get; set; }
         #endregion
 
@@ -196,7 +195,11 @@ namespace EtwPilot.ViewModel
         private ChatHistory m_ChatHistory { get; set; }
         private bool m_ModelBusy;
         private Kernel m_Kernel;
-        private EtwVectorDb m_VectorDb;
+        private EtwVectorDb? m_VectorDb;
+        private OnnxGenAI? m_OnnxGenAIRuntime;
+        private LlamaCpp? m_LlamaCppRuntime;
+        private Ollama? m_OllamaRuntime;
+
         public InsightsViewModel() : base()
         {
             ImportVectorDbDataCommand = new AsyncRelayCommand<DataSource>(
@@ -213,19 +216,18 @@ namespace EtwPilot.ViewModel
                 Command_Copy, () => { return true; });
             GenerateCommand = new AsyncRelayCommand(
                 Command_Generate, CanExecuteGenerate);
-            SetChatTopicCommand = new RelayCommand<ChatTopic>(
+            SetChatTopicCommand = new AsyncRelayCommand<ChatTopic>(
                 Command_SetChatTopic, CanExecuteSetChatTopic);
             ReinitializeCommand = new AsyncRelayCommand(
                 Command_Reinitialize, CanExecuteReinitialize);
             m_ChatHistory = new ChatHistory();
             ResultHistory = new ConcurrentObservableCollection<InsightsInferenceResultModel>();
-            Prompt = null;
+            Prompt = string.Empty;
             Initialized = false;
             VecDbCommandsAllowed = false;
             IsManifestDataAvailable = false;
             IsEventDataAvailable = false;
             Topic = ChatTopic.Invalid;
-            m_VectorDb = new EtwVectorDb();
 
             ErrorsChanged += (object? sender, DataErrorsChangedEventArgs e) =>
             {
@@ -256,26 +258,56 @@ namespace EtwPilot.ViewModel
             ProgressState.InitializeProgress(2);
             try
             {
-                if (GlobalStateViewModel.Instance.Settings.ModelConfig == null)
+                var ollamaRuntimeConfig = GlobalStateViewModel.Instance.Settings.OllamaConfig;
+                var onnxRuntimeConfig = GlobalStateViewModel.Instance.Settings.OnnxGenAIConfig;
+                if (ollamaRuntimeConfig == null && onnxRuntimeConfig == null)
                 {
-                    throw new Exception("Model configuration missing in settings.");
+                    throw new Exception("Chat completion runtime not selected.");
                 }
                 EraseResultHistory();
                 ProgressState.UpdateProgressMessage($"Initializing Semantic Kernel....");
                 await Task.Run(async () =>
                 {
-                    var modelPath = GlobalStateViewModel.Instance.Settings.ModelPath;
-                    var embeddingsModelFile = GlobalStateViewModel.Instance.Settings.EmbeddingsModelFile;
-                    var embeddingsVocabFile = GlobalStateViewModel.Instance.Settings.ModelConfig!.EmbeddingsVocabFile;
-                    var modelId = GlobalStateViewModel.Instance.Settings.ModelConfig.ModelOptions.Type;
                     var qdrantHostUri = GlobalStateViewModel.Instance.Settings.QdrantHostUri;
+                    var builder = Kernel.CreateBuilder();
 
                     //
-                    // SK builder is based on onnxruntime-genai and bert text embedding service.
+                    // Select chat completion service based on selected runtime.
                     //
-                    var builder = Kernel.CreateBuilder().
-                    AddOnnxRuntimeGenAIChatCompletion(modelId, modelPath).
-                    AddBertOnnxTextEmbeddingGeneration(embeddingsModelFile, embeddingsVocabFile);
+                    if (onnxRuntimeConfig != null)
+                    {
+                        if (onnxRuntimeConfig.PromptExecutionSettings == null)
+                        {
+                            throw new Exception("Onnx runtime prompt execution settings are missing");
+                        }
+                        var modelPath = onnxRuntimeConfig.ModelPath;
+                        var embeddingsModelPath = onnxRuntimeConfig.BertModelPath;
+                        var embeddingsVocabFile = onnxRuntimeConfig.GetVocabFile();
+                        var modelId  = onnxRuntimeConfig.PromptExecutionSettings.ModelId;
+                        if (string.IsNullOrEmpty(modelId))
+                        {
+                            throw new Exception("Model ID is missing from prompt execution settings");
+                        }
+                        builder.AddOnnxRuntimeGenAIChatCompletion(modelId, modelPath!);
+                        builder.AddBertOnnxTextEmbeddingGeneration(embeddingsModelPath, embeddingsVocabFile);
+                    }
+                    else if (ollamaRuntimeConfig != null)
+                    {
+                        if (ollamaRuntimeConfig.PromptExecutionSettings == null)
+                        {
+                            throw new Exception("Onnx runtime prompt execution settings are missing");
+                        }
+                        //
+                        // Ollama config doesn't hold a model ID, even though SK supplies
+                        // a property for it. The model ID is the model name selected from
+                        // the list of models available in the ollama server.
+                        //
+                        var modelId = ollamaRuntimeConfig.ModelName!;                        
+                        builder.AddOllamaChatCompletion(modelId, new Uri(ollamaRuntimeConfig.EndpointUri!));
+                        builder.AddOllamaTextEmbeddingGeneration(ollamaRuntimeConfig.TextEmbeddingModelName!,
+                            new Uri(ollamaRuntimeConfig.EndpointUri!));
+                    }
+
                     ProgressState.UpdateProgressValue();
 
                     //
@@ -288,37 +320,51 @@ namespace EtwPilot.ViewModel
                         //
                         // Quick validity test on host uri
                         //
-                        using (var client = new QdrantClient(qdrantHostUri, grpcTimeout: TimeSpan.FromSeconds(10)))
-                        {
-                            var health = await client.HealthAsync();
-                            ProgressState.UpdateProgressMessage(
-                                $"{health.Title} version {health.Version} commit {health.Commit}");
-                        }
-                        builder.AddQdrantVectorStore(qdrantHostUri, options: new()
-                        {
-                            //
-                            // Note: must set HasNamedVectors here, even though we also set it when we
-                            // create the collection from VectorDb.cs. This is due to how SK abstraction
-                            // implements GetCollection()
-                            //
-                            HasNamedVectors = true,
-                            VectorStoreCollectionFactory = m_VectorDb
-                        });
+                        var client = new QdrantClient(qdrantHostUri, grpcTimeout: TimeSpan.FromSeconds(10));
+                        var health = await client.HealthAsync();
+                        ProgressState.UpdateProgressMessage(
+                            $"{health.Title} version {health.Version} commit {health.Commit}");
+                        //
+                        // Setup vector db kernel service
+                        //
+                        m_VectorDb = new EtwVectorDb(client, qdrantHostUri);
+                        await m_VectorDb.Initialize();
+                        builder.Services.AddKeyedSingleton<EtwVectorDb>(m_VectorDb);
+                        //
+                        // Build the kernel
+                        //
                         m_Kernel = builder.Build();
-                        await m_VectorDb.Initialize(m_Kernel, qdrantHostUri, ProgressState);
                     }
                     else
                     {
-
+                        //
+                        // Build the kernel
+                        //
                         m_Kernel = builder.Build();
                     }
                     ProgressState.UpdateProgressValue();
                     //
                     // Add SK plugins
                     //
-                    m_Kernel.Plugins.AddFromObject(new VectorSearch(m_VectorDb), "etwVectorSearch");
-                    m_Kernel.Plugins.AddFromObject(new EtwTraceSession(m_VectorDb), "etwTraceSession");
+                    m_Kernel.Plugins.AddFromObject(new VectorSearch(m_Kernel), "etwVectorSearch");
+                    m_Kernel.Plugins.AddFromObject(new EtwTraceSession(m_Kernel), "etwTraceSession");
                     m_Kernel.Plugins.AddFromObject(new ProcessInfo(), "processInfo");
+                    //
+                    // Initialize an inference runtime
+                    //
+                    m_OnnxGenAIRuntime = null;
+                    m_OllamaRuntime = null;
+                    m_LlamaCppRuntime = null;
+
+                    if (onnxRuntimeConfig != null)
+                    {
+                        m_OnnxGenAIRuntime = new OnnxGenAI(onnxRuntimeConfig, m_Kernel, m_ChatHistory);
+                    }
+                    else if (ollamaRuntimeConfig != null)
+                    {
+                        m_OllamaRuntime = new Ollama(ollamaRuntimeConfig, m_Kernel, m_ChatHistory);
+                    }
+
                 });
                 ProgressState.FinalizeProgress($"Ready.");
                 Initialized = true;
@@ -341,39 +387,28 @@ namespace EtwPilot.ViewModel
         {
             var changed = GlobalStateViewModel.Instance.Settings.ChangedProperties;
 
-            if (changed.Contains(nameof(SettingsFormViewModel.ModelPath)) ||
-                changed.Contains(nameof(SettingsFormViewModel.EmbeddingsModelFile)) ||
-                changed.Contains(nameof(SettingsFormViewModel.ModelConfig)) ||
+            if (changed.Contains(nameof(OnnxGenAIConfigModel.PromptExecutionSettings)) ||
+                changed.Contains(nameof(OnnxGenAIConfigModel.BertModelPath)) ||
+                changed.Contains(nameof(OnnxGenAIConfigModel.ModelPath)) ||
+                changed.Contains(nameof(OnnxGenAIConfigModel.RuntimeConfigFile)) ||
+                changed.Contains(nameof(OllamaConfigModel.PromptExecutionSettings)) ||
+                changed.Contains(nameof(OllamaConfigModel.EndpointUri)) ||
+                changed.Contains(nameof(OllamaConfigModel.RuntimeConfigFile)) ||
+                changed.Contains(nameof(OllamaConfigModel.TextEmbeddingModelName)) ||
+                changed.Contains(nameof(OllamaConfigModel.ModelName)) ||
                 changed.Contains(nameof(SettingsFormViewModel.QdrantHostUri)))
             {
-                if (string.IsNullOrEmpty(GlobalStateViewModel.Instance.Settings.ModelPath) ||
-                    string.IsNullOrEmpty(GlobalStateViewModel.Instance.Settings.EmbeddingsModelFile) ||
-                    GlobalStateViewModel.Instance.Settings.ModelConfig == null)
-                {
-                    //
-                    // Ignore clearing of settings that are optional from an app standpoint but
-                    // prevent us from working. In this case, disable the viewmodel entirely
-                    // until a valid value is provided.
-                    //
-                    Reset();
-                }
-                else
-                {
-                    //
-                    // When any of these settings are changed, we must completely re-init
-                    //
-                    await ReinitializeCommand.ExecuteAsync(null);
-                }
+                await ReinitializeCommand.ExecuteAsync(null);
                 CanExecuteChanged();
             }
         }
 
-        private async void Command_SetChatTopic(ChatTopic _Topic)
+        private async Task Command_SetChatTopic(ChatTopic _Topic, CancellationToken Token)
         {
             VecDbCommandsAllowed = (Topic == ChatTopic.EventData || Topic == ChatTopic.Manifests);
             if (Topic == ChatTopic.EventData || Topic == ChatTopic.Manifests)
             {
-                await ShowRecordCount();
+                await ShowRecordCount(Token);
             }
             ShowErrors();
             CanExecuteChanged();
@@ -430,7 +465,8 @@ namespace EtwPilot.ViewModel
                     ProgressState.UpdateProgressMessage($"Importing records....");
                     ProgressState.m_CurrentCommand = ImportVectorDbDataFromLiveSessionCommand;
                     ProgressState.CancelCommandButtonVisibility = System.Windows.Visibility.Visible;
-                    await m_VectorDb.ImportData(Topic, Data, Token);
+                    var textEmbSvc = m_Kernel.GetRequiredService<ITextEmbeddingGenerationService>();
+                    await m_VectorDb!.ImportData(EtwVectorDb.s_EtwEventCollectionName, Data, textEmbSvc, Token);
                     ProgressState.FinalizeProgress($"Imported {Data.Count} records.");
                 }
                 catch (OperationCanceledException)
@@ -449,7 +485,7 @@ namespace EtwPilot.ViewModel
                 ProgressState.CancelCommandButtonVisibility = System.Windows.Visibility.Hidden;
                 ProgressState.m_CurrentCommand = null;
                 IsViewEnabled = true;
-                await ShowRecordCount();
+                await ShowRecordCount(Token);
             }
         }
 
@@ -474,7 +510,8 @@ namespace EtwPilot.ViewModel
                     }
                     ProgressState.UpdateProgressValue();
                     ProgressState.UpdateProgressMessage($"Importing data...");
-                    await m_VectorDb.ImportData(Topic, data, Token);
+                    var textEmbSvc = m_Kernel.GetRequiredService<ITextEmbeddingGenerationService>();
+                    await m_VectorDb!.ImportData(EtwVectorDb.s_EtwProviderManifestCollectionName, data, textEmbSvc, Token);
                     ProgressState.FinalizeProgress($"Imported {data.Count} records.");
                 }
                 else if (Topic == ChatTopic.EventData)
@@ -490,9 +527,10 @@ namespace EtwPilot.ViewModel
                     // NB: Since etw event data is ephemeral, unlike provider manifests,
                     // we delete and recreate the collection on each import.
                     //
-                    await m_VectorDb.Erase(Topic);
+                    await m_VectorDb!.Erase(EtwVectorDb.s_EtwEventCollectionName, Token);
                     ProgressState.UpdateProgressMessage($"Importing data...");
-                    await m_VectorDb.ImportData(Topic, data, Token);
+                    var textEmbSvc = m_Kernel.GetRequiredService<ITextEmbeddingGenerationService>();
+                    await m_VectorDb!.ImportData(EtwVectorDb.s_EtwEventCollectionName, data, textEmbSvc, Token);
                     ProgressState.FinalizeProgress($"Imported {data.Count} records.");
                 }
                 else
@@ -516,7 +554,7 @@ namespace EtwPilot.ViewModel
             ProgressState.CancelCommandButtonVisibility = System.Windows.Visibility.Hidden;
             ProgressState.m_CurrentCommand = null;
             IsViewEnabled = true;
-            await ShowRecordCount();
+            await ShowRecordCount(Token);
         }
 
         private async Task<List<T>?> GetImportDataFromSource<T>(DataSource Source)
@@ -583,22 +621,29 @@ namespace EtwPilot.ViewModel
             }
         }
 
-        private async Task ShowRecordCount()
+        private async Task ShowRecordCount(CancellationToken Token)
         {
-            ulong recordsAvailableForTopic = await m_VectorDb.GetRecordCount(Topic);
-            if (Topic == ChatTopic.Manifests)
+            ulong recordsAvailableForTopic = 0;
+            if (m_VectorDb != null)
             {
-                IsManifestDataAvailable = recordsAvailableForTopic > 0;
-            }
-            else if (Topic == ChatTopic.EventData)
-            {
-                IsEventDataAvailable = recordsAvailableForTopic > 0;
+                if (Topic == ChatTopic.Manifests)
+                {
+                    recordsAvailableForTopic = await m_VectorDb.GetRecordCount(
+                        EtwVectorDb.s_EtwProviderManifestCollectionName, Token);
+                    IsManifestDataAvailable = recordsAvailableForTopic > 0;
+                }
+                else if (Topic == ChatTopic.EventData)
+                {
+                    recordsAvailableForTopic = await m_VectorDb.GetRecordCount(
+                        EtwVectorDb.s_EtwEventCollectionName, Token);
+                    IsEventDataAvailable = recordsAvailableForTopic > 0;
+                }
             }
             CanExecuteChanged();
             ProgressState.EphemeralStatusText = $"{recordsAvailableForTopic} records available.";
         }
 
-        private async Task Command_RestoreVecDbCollection()
+        private async Task Command_RestoreVecDbCollection(CancellationToken Token)
         {
             var dialog = new Microsoft.Win32.OpenFileDialog();
             dialog.CheckFileExists = true;
@@ -618,7 +663,20 @@ namespace EtwPilot.ViewModel
                 IsViewEnabled = false;
                 ProgressState.m_CurrentCommand = RestoreVectorDbCollectionCommand;
                 ProgressState.CancelCommandButtonVisibility = System.Windows.Visibility.Visible;
-                await m_VectorDb.RestoreCollection(Topic, source);
+                if (Topic == ChatTopic.Manifests)
+                {
+                    await m_VectorDb!.RestoreCollection(
+                        EtwVectorDb.s_EtwProviderManifestCollectionName, source, Token);
+                }
+                else if (Topic == ChatTopic.EventData)
+                {
+                    await m_VectorDb!.RestoreCollection(
+                        EtwVectorDb.s_EtwEventCollectionName, source, Token);
+                }
+                else
+                {
+                    throw new Exception("Unknown collection type");
+                }
                 ProgressState.FinalizeProgress($"Collection restored from {source}");
             }
             catch (OperationCanceledException)
@@ -636,10 +694,10 @@ namespace EtwPilot.ViewModel
             ProgressState.CancelCommandButtonVisibility = System.Windows.Visibility.Hidden;
             ProgressState.m_CurrentCommand = null;
             IsViewEnabled = true;
-            await ShowRecordCount();
+            await ShowRecordCount(Token);
         }
 
-        private async Task Command_SaveVecDbCollection()
+        private async Task Command_SaveVecDbCollection(CancellationToken Token)
         {
             var browser = new OpenFolderDialog();
             browser.Title = "Select a location to save the collection";
@@ -654,7 +712,20 @@ namespace EtwPilot.ViewModel
             try
             {
                 IsViewEnabled = false;
-                await m_VectorDb.SaveCollection(Topic, target);
+                if (Topic == ChatTopic.Manifests)
+                {
+                    await m_VectorDb!.SaveCollection(
+                        EtwVectorDb.s_EtwProviderManifestCollectionName, target, Token);
+                }
+                else if (Topic == ChatTopic.EventData)
+                {
+                    await m_VectorDb!.SaveCollection(
+                        EtwVectorDb.s_EtwEventCollectionName, target, Token);
+                }
+                else
+                {
+                    throw new Exception("Unknown collection type");
+                }
                 ProgressState.FinalizeProgress($"Collection saved to {target}");
             }
             catch (Exception ex)
@@ -675,13 +746,13 @@ namespace EtwPilot.ViewModel
 
         private void Reset()
         {
-            Prompt = null;
+            Prompt = string.Empty;
             Initialized = false;
             VecDbCommandsAllowed = false;
             IsManifestDataAvailable = false;
             IsEventDataAvailable = false;
             Topic = ChatTopic.Invalid;
-            m_VectorDb = new EtwVectorDb();
+            m_VectorDb = null;
         }
 
         private void Command_Clear()
@@ -701,45 +772,26 @@ namespace EtwPilot.ViewModel
 
         private async Task Command_Generate(CancellationToken Token)
         {
+            IsViewEnabled = false;
             m_ModelBusy = true;
-            ProgressState.InitializeProgress(2);
+            ProgressState.InitializeProgress(1); // runtime will adjust manually.
             ProgressState.m_CurrentCommand = GenerateCommand;
             ProgressState.CancelCommandButtonVisibility = System.Windows.Visibility.Visible;
 
             try
             {
-                IsViewEnabled = false;
-
-                //
-                // Add the user's question to the chat history.
-                //
-                m_ChatHistory.AddUserMessage(Prompt);
-
-                //
-                // If applicable, construct a system prompt for a multi-step process to get
-                // at a meaningful reply using plugins as needed.
-                //
-                var systemPrompt = string.Empty;
-                if (Topic == ChatTopic.Manifests)
+                if (m_OnnxGenAIRuntime != null)
                 {
-                    systemPrompt = $"If the user question relates to ETW providers or their manifests, "+
-                        "respond with the name or GUID of the provider.";
+                    await m_OnnxGenAIRuntime!.GenerateAsync(Prompt, Token, ProgressState);
                 }
-                else if (Topic == ChatTopic.EventData)
+                else if (m_OllamaRuntime != null)
                 {
-                    systemPrompt = $"If the user question relates to specific ETW events, respond with "+
-                        "as much information about the event as the user supplied in their question, in"+
-                        "the following format (do NOT include values that the user did not supply in their"+
-                        "question:  'This ETW event with ID <ID> (version <version>) generated "+
-                        "by provider <provider name or GUID> relates to the process with ID <process ID> "+
-                        "with start key <ProcessStartKey>, thread ID <threadId> from the user with SID "+
-                        "<UserSid> at timestamp <Timestamp>. The event <Event level>-type info about channel"+
-                        "<Channel>, task <task> and opcode <opcode>> pertaining to keywords <keywords>'";
-                    m_ChatHistory.AddSystemMessage(systemPrompt);
+                    await m_OllamaRuntime!.GenerateAsync(Prompt, Token, ProgressState);
                 }
-
-                ProgressState.UpdateProgressValue();
-                ProgressState.UpdateProgressMessage("Please wait, performing inference...");
+                else if (m_LlamaCppRuntime != null)
+                {
+                    await m_LlamaCppRuntime!.GenerateAsync(Prompt, Token, ProgressState);
+                }
             }
             catch (OperationCanceledException)
             {
@@ -854,7 +906,7 @@ namespace EtwPilot.ViewModel
         {
             if (Topic == ChatTopic.Manifests || Topic == ChatTopic.EventData)
             {
-                return Initialized && m_VectorDb.m_Initialized;
+                return Initialized && m_VectorDb != null && m_VectorDb.m_Initialized;
             }
             return Initialized;
         }
@@ -899,7 +951,7 @@ namespace EtwPilot.ViewModel
             {
                 return false;
             }
-            if (!Initialized)
+            if (!Initialized || m_VectorDb == null)
             {
                 return false;
             }

@@ -4,11 +4,13 @@
              xmlns:converters="clr-namespace:EtwPilot.Utilities.Converters"
              xmlns:vm="clr-namespace:EtwPilot.ViewModel"
              xmlns:utils="clr-namespace:EtwPilot.Utilities"
+             xmlns:validation="clr-namespace:EtwPilot.Utilities.ValidationHelper"
              xmlns:System="clr-namespace:System;assembly=mscorlib"
              xmlns:Diagnostics="clr-namespace:System.Diagnostics;assembly=System.Diagnostics.TraceSource"
              xmlns:etw="clr-namespace:etwlib;assembly=etwlib"
              xmlns:model="clr-namespace:EtwPilot.Model;assembly=EtwPilot"
              xmlns:Fluent="urn:fluent-ribbon"
+             xmlns:i="http://schemas.microsoft.com/xaml/behaviors"
              StartupUri="View/MainWindowView.xaml">
     <Application.Resources>
     <ResourceDictionary>
@@ -66,64 +68,67 @@
         <converters:ChatTopicToBool x:Key="ChatTopicToBool"/>
         <converters:MultiValueBooleanConverterOR x:Key="MultiValueBooleanConverterOR"/>
         <converters:StringNullOrEmptyToVisibilityConverter x:Key="StringNullOrEmptyToVisibilityConverter"/>
-        
-        <!-- template for adorning errors onto input form controls -->
-        <ControlTemplate x:Key="ValidationErrorTemplate">
-            <DockPanel LastChildFill="True">
-            <Border BorderBrush="Red" BorderThickness="1">
-                <AdornedElementPlaceholder x:Name="AdornedElement"/>
+        <converters:NotNullToBooleanConverter x:Key="NotNullToBooleanConverter"/>
+        <converters:HasErrorConverter x:Key="HasErrorConverter"/>
+        <converters:ErrorMessageConverter x:Key="ErrorMessageConverter"/>
+        <BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter"/>
+                
+        <ControlTemplate x:Key="ErrorTemplateRight">
+        <Grid Margin="5">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto" /> <!-- Adorned control -->
+                <ColumnDefinition Width="Auto" /> <!-- Error message -->
+            </Grid.ColumnDefinitions>
+
+            <!-- Adorned element -->
+            <Border BorderBrush="Red" BorderThickness="1" Grid.Column="0">
+                <AdornedElementPlaceholder x:Name="AdornerPlaceholder">
+                    <i:Interaction.Behaviors>
+                        <validation:BindingPathBehavior />
+                    </i:Interaction.Behaviors>
+                </AdornedElementPlaceholder>
             </Border>
-            <Border Background="White" 
-                    BorderBrush="Red" 
-                    Padding="4"
-                    BorderThickness="1,0,1,1" 
-                    HorizontalAlignment="Left">
-                <ItemsControl ItemsSource="{Binding}"
-                                HorizontalAlignment="Left"
-                                DockPanel.Dock="Right">
-                    <ItemsControl.ItemTemplate>
-                        <DataTemplate>
-                        <TextBlock Text="{Binding ErrorContent}" 
-                                    Foreground="Red"
-                                    DockPanel.Dock="Right"/>
-                        </DataTemplate>
-                    </ItemsControl.ItemTemplate>
-                </ItemsControl>
-            </Border>
-            </DockPanel>
+
+            <!-- Error message to the right -->
+            <TextBlock Foreground="Red" Grid.Column="1" MaxWidth="200" TextWrapping="Wrap" TextAlignment="Left" Margin="5,0,0,0">
+                <TextBlock.Text>
+                    <MultiBinding Converter="{StaticResource ErrorMessageConverter}" UpdateSourceTrigger="PropertyChanged">
+                        <Binding Path="AdornedElement.DataContext" ElementName="AdornerPlaceholder" />
+                        <Binding Path="AdornedElement.(validation:BindingHelper.BindingPath)" ElementName="AdornerPlaceholder" />
+                    </MultiBinding>
+                </TextBlock.Text>
+            </TextBlock>
+            </Grid>
         </ControlTemplate>
-        
-        <Style x:Key="ErrorStyle" TargetType="{x:Type Control}">
-            <Style.Triggers>
-                <Trigger Property="Validation.HasError" Value="true">
-                    <Setter Property="BorderBrush" Value="Red"/>
-                    <Setter Property="BorderThickness" Value="1" />
-                    <Setter Property="Foreground" Value="Red" />
-                    <Setter Property="ToolTip" 
-                        Value="{Binding RelativeSource={x:Static RelativeSource.Self},Path=(Validation.Errors)/ErrorContent}" />
-                    <Setter Property="ToolTipService.ShowDuration"
-                        Value="{x:Static Member=System:Int32.MaxValue}"/>
-                    <Setter Property="ToolTipService.HasDropShadow" Value="True"/>
-                    <Setter Property="ToolTipService.InitialShowDelay" Value="0"/>
-                </Trigger>
-            </Style.Triggers>
-        </Style>
-        
-        <!-- Create a special style for things like DataGridCell which must use a TextBlock -->
-        <Style x:Key="ErrorStyleTextBlockOnly" TargetType="{x:Type TextBlock}">
-            <Style.Triggers>
-            <Trigger Property="Validation.HasError" Value="true">
-                <Setter Property="Foreground" Value="Red" />
-                <Setter Property="ToolTip" 
-                    Value="{Binding RelativeSource={x:Static RelativeSource.Self},Path=(Validation.Errors)/ErrorContent}" />
-                <Setter Property="ToolTipService.ShowDuration"
-                    Value="{x:Static Member=System:Int32.MaxValue}"/>
-                <Setter Property="ToolTipService.HasDropShadow" Value="True"/>
-                <Setter Property="ToolTipService.InitialShowDelay" Value="0"/>
-            </Trigger>
-        </Style.Triggers>
-        </Style>        
-        
+
+        <ControlTemplate x:Key="ErrorTemplateBelow">
+            <Grid HorizontalAlignment="Left">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" /> <!-- Adorned control -->
+                    <RowDefinition Height="Auto" /> <!-- Error message -->
+                </Grid.RowDefinitions>
+                
+                <!-- Adorned element -->
+                <Border BorderBrush="Red" BorderThickness="1" Grid.Row="0">
+                    <AdornedElementPlaceholder x:Name="AdornerPlaceholder">
+                        <i:Interaction.Behaviors>
+                            <validation:BindingPathBehavior />
+                        </i:Interaction.Behaviors>
+                    </AdornedElementPlaceholder>
+                </Border>
+
+                <!-- Error message below -->
+                <TextBlock Foreground="Red" Grid.Row="1" MaxWidth="250" TextWrapping="Wrap" TextAlignment="Left" Margin="0,0,0,0" HorizontalAlignment="Left">
+                    <TextBlock.Text>
+                        <MultiBinding Converter="{StaticResource ErrorMessageConverter}" UpdateSourceTrigger="PropertyChanged">
+                            <Binding Path="AdornedElement.DataContext" ElementName="AdornerPlaceholder" />
+                            <Binding Path="AdornedElement.(validation:BindingHelper.BindingPath)" ElementName="AdornerPlaceholder" />
+                        </MultiBinding>
+                    </TextBlock.Text>
+                </TextBlock>
+            </Grid>
+        </ControlTemplate>
+
         <Style x:Key="DataGridColumnHeaderTextBoxStyle" TargetType="{x:Type TextBox}">
             <Setter Property="Background" Value="AliceBlue" />
             <Setter Property="BorderBrush" Value="DarkGray" />

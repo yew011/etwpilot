@@ -227,6 +227,14 @@ namespace EtwPilot.ViewModel
         public SessionFormViewModel() : base()
         {
             ProviderFilterForms = new ConcurrentObservableCollection<ProviderFilterFormViewModel>();
+            ProviderFilterForms.AsObservable.CollectionChanged += (o, args) =>
+            {
+                //
+                // Whenever a provider filter form is added, removed or changed in the collection,
+                // update our subscription to its form errors.
+                //
+                HandleChildSubscriptionForCollectionChangedNotification<ProviderFilterFormViewModel>(args);
+            };
             SystemInfo = new SystemInfo();
 
             Name = _Name = string.Empty;
@@ -327,7 +335,6 @@ namespace EtwPilot.ViewModel
             }
 
             var providerForm = new ProviderFilterFormViewModel(manifest.m_Manifest);
-            providerForm.SetParentFormNotifyErrorsChanged(this); // bubble up to parent
 
             //
             // Create a UI tab for this provider form. If the form already exists, switch to it.

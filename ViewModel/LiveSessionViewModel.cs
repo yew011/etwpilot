@@ -558,7 +558,7 @@ namespace EtwPilot.ViewModel
                 return false;
             }
             Debug.Assert(SelectedProviderIndex < m_ProviderTraceData.Count);
-            return GlobalStateViewModel.Instance.Settings.ModelConfig != null &&
+            return GlobalStateViewModel.Instance.Settings.Valid &&
                 m_ProviderTraceData.ElementAt(SelectedProviderIndex).Value.Data.Count > 0;
         }
 

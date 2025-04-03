@@ -48,7 +48,7 @@ namespace EtwPilot
             });
         }
 
-        private async void Backstage_IsOpenChanged(object sender, System.Windows.DependencyPropertyChangedEventArgs e)
+        private void Backstage_IsOpenChanged(object sender, System.Windows.DependencyPropertyChangedEventArgs e)
         {
             var newvalue = (bool)e.NewValue;
             var oldvalue = (bool)e.OldValue;
@@ -57,7 +57,9 @@ namespace EtwPilot
                 if (!GlobalStateViewModel.Instance.Settings.HasErrors &&
                     GlobalStateViewModel.Instance.Settings.ChangedProperties.Count > 0)
                 {
-                    await GlobalStateViewModel.Instance.ApplySettingsChanges();
+                    Dispatcher.Invoke(new Action(async () =>
+                        await GlobalStateViewModel.Instance.ApplySettingsChanges()
+                        ));
                 }
             }
         }

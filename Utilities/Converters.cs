@@ -17,6 +17,7 @@ specific language governing permissions and limitations
 under the License.
 */
 using System.Diagnostics;
+using System.Globalization;
 using System.Windows;
 using System.Windows.Data;
 using etwlib;
@@ -25,6 +26,88 @@ namespace EtwPilot.Utilities.Converters
 {
     using StopCondition = ViewModel.LiveSessionViewModel.StopCondition;
     using ChatTopic = ViewModel.InsightsViewModel.ChatTopic;
+
+    public class HasErrorConverter : IMultiValueConverter
+    {
+        public object Convert(object[] values, Type targetType, object parameter, CultureInfo culture)
+        {
+            if (values.Length != 2)
+            {
+                Debug.Assert(false);
+                return false;
+            }
+            var vm = values[0] as NotifyPropertyAndErrorInfoBase;
+            var fullPropertyPath = values[1] as string;
+            if (vm == null || string.IsNullOrEmpty(fullPropertyPath))
+            {
+                Debug.Assert(false);
+                return false;
+            }
+            //
+            // Check if the control has errors using the ViewModel indexer
+            //
+            var hasErrors = vm.PropertyHasErrors(fullPropertyPath);
+            return hasErrors;
+        }
+
+        public object[] ConvertBack(object value, Type[] targetTypes, object parameter, CultureInfo culture)
+        {
+            throw new NotImplementedException();
+        }
+    }
+
+    public class ErrorMessageConverter : IMultiValueConverter
+    {
+        public object Convert(object[] values, Type targetType, object parameter, CultureInfo culture)
+        {
+            if (values.Length != 2)
+            {
+                Debug.Assert(false);
+                return string.Empty;
+            }
+            var vm = values[0] as NotifyPropertyAndErrorInfoBase;
+            var fullPropertyPath = values[1] as string;
+            if (vm == null || string.IsNullOrEmpty(fullPropertyPath))
+            {
+                Debug.Assert(false);
+                return string.Empty;
+            }
+            if (!vm.PropertyHasErrors(fullPropertyPath))
+            {
+                Debug.Assert(false);
+                return string.Empty;
+            }
+            var errors = vm.GetErrors(fullPropertyPath).Cast<string>().ToList();
+            var truncated = $"{errors[0]}";
+            if (errors.Count > 1)
+            {
+                truncated += $" (+{errors.Count - 1} more)";
+            }
+            return truncated;
+        }
+
+        public object[] ConvertBack(object value, Type[] targetTypes, object parameter, CultureInfo culture)
+        {
+            throw new NotImplementedException();
+        }
+    }
+
+    public class NotNullToBooleanConverter : IValueConverter
+    {
+        public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
+        {
+            return value != null;
+        }
+
+        public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)
+        {
+            if (value is bool boolValue && boolValue)
+            {
+                return Binding.DoNothing;
+            }
+            return null!;
+        }
+    }
 
     public class IsGreaterThanZero :IValueConverter
     {

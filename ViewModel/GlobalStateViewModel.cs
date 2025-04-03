@@ -33,7 +33,7 @@ namespace EtwPilot.ViewModel
         // The CurrentViewModel is bound to the main ContentControl in MainWindowView.xaml
         // and is the primary means by which views are swapped in the viewing area.
         //
-        private static ViewModelBase _CurrentViewModel;
+        private ViewModelBase _CurrentViewModel;
         public ViewModelBase CurrentViewModel
         {
             get => _CurrentViewModel;
@@ -44,7 +44,7 @@ namespace EtwPilot.ViewModel
             }
         }
 
-        private static SettingsFormViewModel _Settings;
+        private SettingsFormViewModel _Settings;
         public SettingsFormViewModel Settings
         {
             get { return _Settings; }
@@ -55,20 +55,20 @@ namespace EtwPilot.ViewModel
         // No view can be displayed in MainWindowView.xaml's ContenControl until global
         // init is completed, asychronously. Only app-wide critical init is done here.
         //
-        private static bool _PrimaryViewEnabled;
+        private bool _PrimaryViewEnabled;
         public bool PrimaryViewEnabled
         {
-            get { return _PrimaryViewEnabled; }
+            get => _PrimaryViewEnabled;
             set {
                 _PrimaryViewEnabled = value;
                 OnPropertyChanged(nameof(PrimaryViewEnabled));
             }
         }
 
-        private static bool _IsAdmin;
+        private bool _IsAdmin;
         public bool IsAdmin
         {
-            get { return _IsAdmin; }
+            get => _IsAdmin;
             set
             {
                 _IsAdmin = value;
@@ -81,7 +81,7 @@ namespace EtwPilot.ViewModel
         private static GlobalStateViewModel _Instance = new GlobalStateViewModel();
         public static GlobalStateViewModel Instance
         {
-            get { return _Instance; }
+            get => _Instance;
         }
 
         //
@@ -125,11 +125,7 @@ namespace EtwPilot.ViewModel
             g_SessionFormViewModel = new SessionFormViewModel(); // lazy init
             g_InsightsViewModel = new InsightsViewModel();
 
-            //
-            // Global resources
-            //
             m_StackwalkHelper = new StackwalkHelper();
-            PrimaryViewEnabled = false;
 
             using (WindowsIdentity identity = WindowsIdentity.GetCurrent())
             {
@@ -140,6 +136,13 @@ namespace EtwPilot.ViewModel
 
         public async Task ApplySettingsChanges()
         {
+            //
+            // This routine is invoked from MainWindowView code behind when the backstage
+            // menu is closed, presumably after settings are changing. While VMs update
+            // their views and other data sources, we hide views.
+            //
+            PrimaryViewEnabled = false;
+
             Debug.Assert(Settings.ChangedProperties.Count > 0);
 
             //
@@ -147,15 +150,10 @@ namespace EtwPilot.ViewModel
             //
             if (!await Settings.Validate())
             {
+                PrimaryViewEnabled = true;
                 return;
             }
 
-            //
-            // This routine is invoked from MainWindowView code behind when the backstage
-            // menu is closed, presumably after settings are changing. While VMs update
-            // their views and other data sources, we hide views.
-            //
-            PrimaryViewEnabled = false;
             Settings.Save(null);
 
             //
@@ -194,6 +192,7 @@ namespace EtwPilot.ViewModel
             //
             if (!await Settings.Validate())
             {
+                PrimaryViewEnabled = true;
                 return false;
             }
 

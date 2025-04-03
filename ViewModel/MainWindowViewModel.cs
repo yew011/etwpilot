@@ -125,7 +125,7 @@ namespace EtwPilot.ViewModel
         private async Task Command_TabSelectionChanged(SelectionChangedEventArgs? Args)
         {
             string tabName;
-            object tabDataContext = null;
+            object tabDataContext;
 
             if (Args == null)
             {
