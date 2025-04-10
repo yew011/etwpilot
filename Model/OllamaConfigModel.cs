@@ -331,7 +331,7 @@ namespace EtwPilot.Model
                             Application.Current.Dispatcher.Invoke(new Action(() =>
                             {
                                 GlobalStateViewModel.Instance.Settings.OperationInProgressMessage =
-                                $"{status.Percent}% {status.Status}";
+                                $"{status.Percent:F2}% {status.Status}";
                             }));
 
                             total += status.Completed;

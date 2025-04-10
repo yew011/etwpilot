@@ -18,7 +18,9 @@ under the License.
 */
 using EtwPilot.Utilities;
 using System.ComponentModel;
+using System.Diagnostics;
 using System.Security.Principal;
+using System.Windows;
 
 namespace EtwPilot.ViewModel
 {
@@ -62,17 +64,13 @@ namespace EtwPilot.ViewModel
             set { _Settings = value; OnPropertyChanged(nameof(Settings)); }
         }
 
-        //
-        // No view can be displayed in MainWindowView.xaml's ContenControl until global
-        // init is completed, asychronously. Only app-wide critical init is done here.
-        //
-        private bool _PrimaryViewEnabled;
-        public bool PrimaryViewEnabled
+        private Visibility _InteractionBlockerVisibility;
+        public Visibility InteractionBlockerVisibility
         {
-            get => _PrimaryViewEnabled;
+            get => _InteractionBlockerVisibility;
             set {
-                _PrimaryViewEnabled = value;
-                OnPropertyChanged(nameof(PrimaryViewEnabled));
+                _InteractionBlockerVisibility = value;
+                OnPropertyChanged(nameof(InteractionBlockerVisibility));
             }
         }
 
@@ -109,7 +107,6 @@ namespace EtwPilot.ViewModel
 
         #region View Model instances
 
-        public GlobalInitViewModel g_InitViewModel { get; set; }
         public ProviderViewModel g_ProviderViewModel { get; set; }
         public SessionViewModel g_SessionViewModel { get; set; }
         public SessionFormViewModel g_SessionFormViewModel { get; set; }
@@ -141,15 +138,91 @@ namespace EtwPilot.ViewModel
             g_SessionViewModel = new SessionViewModel();
             g_SessionFormViewModel = new SessionFormViewModel(); // lazy init
             g_InsightsViewModel = new InsightsViewModel();
-            g_InitViewModel = new GlobalInitViewModel();
 
             m_StackwalkHelper = new StackwalkHelper();
+            InteractionBlockerVisibility = Visibility.Collapsed;
 
             using (WindowsIdentity identity = WindowsIdentity.GetCurrent())
             {
                 WindowsPrincipal principal = new WindowsPrincipal(identity);
                 IsAdmin = principal.IsInRole(WindowsBuiltInRole.Administrator);
             }
+        }
+
+        public async Task ApplySettingsChanges()
+        {
+            //
+            // This routine is invoked from MainWindowView code behind when the backstage
+            // menu is closed, presumably after settings are changing. While VMs update
+            // their views and other data sources, we hide views.
+            //
+            InteractionBlockerVisibility = Visibility.Visible;
+
+            Debug.Assert(Settings.ChangedProperties.Count > 0);
+
+            //
+            // Validate the completed settings object.
+            //
+            if (!await Settings.Validate())
+            {
+                InteractionBlockerVisibility = Visibility.Collapsed;
+                return;
+            }
+
+            Settings.Save(null);
+
+            //
+            // Update global resources
+            //
+            if (Settings.ChangedProperties.Contains(nameof(SettingsFormViewModel.DbghelpPath)) ||
+                Settings.ChangedProperties.Contains(nameof(SettingsFormViewModel.SymbolPath)))
+            {
+                m_StackwalkHelper = new StackwalkHelper();
+                await GlobalResourceInitialization();
+                InteractionBlockerVisibility = Visibility.Visible;
+            }
+
+            //
+            // Notify all VMs
+            //
+            await g_MainWindowViewModel.SettingsChangedCommand.ExecuteAsync(null);
+            await g_ProviderViewModel.SettingsChangedCommand.ExecuteAsync(null);
+            await g_SessionViewModel.SettingsChangedCommand.ExecuteAsync(null);
+            await g_SessionFormViewModel.SettingsChangedCommand.ExecuteAsync(null);
+            await g_InsightsViewModel.SettingsChangedCommand.ExecuteAsync(null);
+
+            //
+            // Clear the changed properties
+            //
+            Settings.ChangedProperties.Clear();
+            InteractionBlockerVisibility = Visibility.Collapsed;
+        }
+
+        public async Task<bool> GlobalResourceInitialization()
+        {
+            InteractionBlockerVisibility = Visibility.Visible;
+
+            //
+            // Now we can validate the settings object that was loaded in ctor path
+            //
+            if (!await Settings.Validate())
+            {
+                InteractionBlockerVisibility = Visibility.Collapsed;
+                return false;
+            }
+
+            //
+            // Global resources are initialized once when the MainWindowView is shown
+            // and anytime thereafter when applicable settings are changed. This routine
+            // should be relatively fast!
+            //
+            try
+            {
+                await m_StackwalkHelper.Initialize();
+            }
+            catch (Exception) { }
+            InteractionBlockerVisibility = Visibility.Collapsed;
+            return true;
         }
     }
 }

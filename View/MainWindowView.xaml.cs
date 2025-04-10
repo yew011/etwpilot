@@ -58,7 +58,7 @@ namespace EtwPilot
                     GlobalStateViewModel.Instance.Settings.ChangedProperties.Count > 0)
                 {
                     Dispatcher.Invoke(new Action(async () =>
-                        await GlobalStateViewModel.Instance.g_InitViewModel.ApplySettingsChanges()
+                        await GlobalStateViewModel.Instance.ApplySettingsChanges()
                         ));
                 }
             }

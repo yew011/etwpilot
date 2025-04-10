@@ -34,7 +34,6 @@
         
         See https://stackoverflow.com/questions/38468786/mvvm-datatemplate-creates-a-new-view
          -->
-        <view:GlobalInitView x:Key="StaticGlobalInitView"/>
         <view:ProviderView x:Key="StaticProviderView"/>
         <view:SessionView x:Key="StaticSessionView"/>
         <view:SettingsFormView x:Key="StaticSettingsFormView"/>
@@ -42,9 +41,6 @@
         <view:LiveSessionView x:Key="StaticLiveSessionView"/>
         
         <!-- DataTemplates for current content view model -->
-        <DataTemplate DataType="{x:Type vm:GlobalInitViewModel}">
-            <ContentControl Content="{StaticResource StaticGlobalInitView}" />
-        </DataTemplate>
         <DataTemplate DataType="{x:Type vm:ProviderViewModel}">
             <ContentControl Content="{StaticResource StaticProviderView}" />
         </DataTemplate>
@@ -64,7 +60,9 @@
             <ContentControl Content="{StaticResource StaticInsightsView}" />
         </DataTemplate>
     </Fluent:RibbonWindow.Resources>
-    <DockPanel IsEnabled="{Binding PrimaryViewEnabled}">
+    <Grid>
+    <DockPanel>
+        <!-- main content -->
         <Fluent:Ribbon VerticalAlignment="Top"
                        IsDisplayOptionsButtonVisible="False"
                        Name="MainWindowRibbon"
@@ -167,9 +165,7 @@
             </Fluent:Ribbon.Menu>
 
             <!--Tabs-->
-            <Fluent:RibbonTabItem Header="Providers" 
-                                  Name="ProvidersTab" 
-                                  IsEnabled="{Binding g_ProviderViewModel.IsViewEnabled}">
+            <Fluent:RibbonTabItem Header="Providers" Name="ProvidersTab" >
                 <Fluent:RibbonGroupBox Header="Actions"
                                        Width="Auto"
                                        Height="Auto"
@@ -191,9 +187,7 @@
                                    Command="{Binding g_ProviderViewModel.DumpProviderManifestsCommand}"/>
                 </Fluent:RibbonGroupBox>
             </Fluent:RibbonTabItem>
-            <Fluent:RibbonTabItem Header="Sessions" 
-                                  Name="SessionsTab"
-                                  IsEnabled="{Binding g_SessionViewModel.IsViewEnabled}">
+            <Fluent:RibbonTabItem Header="Sessions"  Name="SessionsTab">
                 <Fluent:RibbonGroupBox Header="Actions"
                                        Width="Auto"
                                        Height="Auto"
@@ -226,9 +220,7 @@
                                    Command="{Binding g_SessionFormViewModel.ShowFormPreviewCommand}"/>
                 </Fluent:RibbonGroupBox>
             </Fluent:RibbonTabItem>
-            <Fluent:RibbonTabItem Header="Insights" 
-                                  Name="InsightsTab"
-                                  IsEnabled="{Binding g_InsightsViewModel.IsViewEnabled}">
+            <Fluent:RibbonTabItem Header="Insights" Name="InsightsTab">
                 <Fluent:RibbonGroupBox Header="Actions" 
                                        Width="Auto"
                                        Height="Auto"
@@ -442,5 +434,18 @@
         </StatusBar>
         <ContentControl Name="MainContentControl"
                         Content="{Binding CurrentViewModel,ValidatesOnNotifyDataErrors=False}"/>
+        
     </DockPanel>
+    <!-- end main content -->
+        
+    <!-- Overlay panel -->
+    <Grid x:Name="Overlay" Background="#80000000" Visibility="{Binding InteractionBlockerVisibility}">
+        <Border Background="Transparent" />
+        <TextBlock Text="Please wait..." 
+                    HorizontalAlignment="Center" 
+                    VerticalAlignment="Center" 
+                    FontSize="24" 
+                    Foreground="White"/>
+    </Grid>
+    </Grid>
 </Fluent:RibbonWindow>

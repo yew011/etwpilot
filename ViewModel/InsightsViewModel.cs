@@ -33,6 +33,7 @@ using EtwPilot.Sk.Vector;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.SemanticKernel.Embeddings;
 using EtwPilot.InferenceRuntimes;
+using Microsoft.Extensions.Logging;
 
 //
 // Remove supression after onnx connector is out of alpha
@@ -190,9 +191,8 @@ namespace EtwPilot.ViewModel
         public AsyncRelayCommand ReinitializeCommand { get; set; }
         #endregion
 
-        public ConcurrentObservableCollection<InsightsInferenceResultModel> ResultHistory { get; }
-
-        private ChatHistory m_ChatHistory { get; set; }
+        public ConcurrentObservableCollection<InsightsInferenceResultModel> m_ResultHistory { get; } // displayed in UI
+        private ChatHistory m_ChatHistory { get; set; } // for full conversation history in prompt
         private bool m_ModelBusy;
         private Kernel m_Kernel;
         private EtwVectorDb? m_VectorDb;
@@ -221,7 +221,7 @@ namespace EtwPilot.ViewModel
             ReinitializeCommand = new AsyncRelayCommand(
                 Command_Reinitialize, CanExecuteReinitialize);
             m_ChatHistory = new ChatHistory();
-            ResultHistory = new ConcurrentObservableCollection<InsightsInferenceResultModel>();
+            m_ResultHistory = new ConcurrentObservableCollection<InsightsInferenceResultModel>();
             Prompt = string.Empty;
             Initialized = false;
             VecDbCommandsAllowed = false;
@@ -254,7 +254,6 @@ namespace EtwPilot.ViewModel
                 //
                 return;
             }
-            IsViewEnabled = false;
             ProgressState.InitializeProgress(2);
             try
             {
@@ -264,12 +263,20 @@ namespace EtwPilot.ViewModel
                 {
                     throw new Exception("Chat completion runtime not selected.");
                 }
-                EraseResultHistory();
                 ProgressState.UpdateProgressMessage($"Initializing Semantic Kernel....");
                 await Task.Run(async () =>
                 {
                     var qdrantHostUri = GlobalStateViewModel.Instance.Settings.QdrantHostUri;
                     var builder = Kernel.CreateBuilder();
+
+                    //
+                    // Set a debug logger
+                    //
+                    var loggerFactory = LoggerFactory.Create(b =>
+                    {
+                        b.AddDebug().SetMinimumLevel(LogLevel.Trace);
+                    });
+                    builder.Services.AddSingleton(loggerFactory);
 
                     //
                     // Select chat completion service based on selected runtime.
@@ -315,6 +322,17 @@ namespace EtwPilot.ViewModel
                     //
                     if (!string.IsNullOrEmpty(qdrantHostUri))
                     {
+                        //
+                        // Determine the vector dimension size of the selected embeddings model.
+                        // This is required to setup our vector record representations.
+                        //
+                        m_Kernel = builder.Build();
+                        var embeddingService = m_Kernel.GetRequiredService<ITextEmbeddingGenerationService>();
+                        var text = "This is a test sentence.";
+                        var embeddings = await embeddingService.GenerateEmbeddingsAsync(new[] { text });
+                        var embedding = embeddings.First();  // Get the first embedding
+                        int dimensionSize = embedding.Length;  // Number of elements in the vector
+
                         ProgressState.UpdateProgressMessage(
                             $"Initializing qdrant host {qdrantHostUri} vector db...");
                         //
@@ -327,9 +345,9 @@ namespace EtwPilot.ViewModel
                         //
                         // Setup vector db kernel service
                         //
-                        m_VectorDb = new EtwVectorDb(client, qdrantHostUri);
+                        m_VectorDb = new EtwVectorDb(client, qdrantHostUri, dimensionSize);
                         await m_VectorDb.Initialize();
-                        builder.Services.AddKeyedSingleton<EtwVectorDb>(m_VectorDb);
+                        builder.Services.AddSingleton(m_VectorDb);
                         //
                         // Build the kernel
                         //
@@ -358,11 +376,11 @@ namespace EtwPilot.ViewModel
 
                     if (onnxRuntimeConfig != null)
                     {
-                        m_OnnxGenAIRuntime = new OnnxGenAI(onnxRuntimeConfig, m_Kernel, m_ChatHistory);
+                        m_OnnxGenAIRuntime = new OnnxGenAI(onnxRuntimeConfig, m_Kernel, m_ChatHistory, m_ResultHistory);
                     }
                     else if (ollamaRuntimeConfig != null)
                     {
-                        m_OllamaRuntime = new Ollama(ollamaRuntimeConfig, m_Kernel, m_ChatHistory);
+                        m_OllamaRuntime = new Ollama(ollamaRuntimeConfig, m_Kernel, m_ChatHistory, m_ResultHistory);
                     }
 
                 });
@@ -376,10 +394,6 @@ namespace EtwPilot.ViewModel
                 Trace(TraceLoggerType.Inference, TraceEventType.Error, msg);
                 AddSystemMessageToResult(msg);
                 ProgressState.FinalizeProgress(msg);
-            }
-            finally
-            {
-                IsViewEnabled = true;
             }
         }
 
@@ -460,7 +474,6 @@ namespace EtwPilot.ViewModel
                 var error = "";
                 try
                 {
-                    IsViewEnabled = false;
                     ProgressState.InitializeProgress(2);
                     ProgressState.UpdateProgressMessage($"Importing records....");
                     ProgressState.m_CurrentCommand = ImportVectorDbDataFromLiveSessionCommand;
@@ -484,7 +497,6 @@ namespace EtwPilot.ViewModel
                 }
                 ProgressState.CancelCommandButtonVisibility = System.Windows.Visibility.Hidden;
                 ProgressState.m_CurrentCommand = null;
-                IsViewEnabled = true;
                 await ShowRecordCount(Token);
             }
         }
@@ -495,7 +507,6 @@ namespace EtwPilot.ViewModel
 
             try
             {
-                IsViewEnabled = false;
                 ProgressState.InitializeProgress(2);
                 ProgressState.m_CurrentCommand = ImportVectorDbDataCommand;
                 ProgressState.CancelCommandButtonVisibility = System.Windows.Visibility.Visible;
@@ -553,7 +564,6 @@ namespace EtwPilot.ViewModel
             }
             ProgressState.CancelCommandButtonVisibility = System.Windows.Visibility.Hidden;
             ProgressState.m_CurrentCommand = null;
-            IsViewEnabled = true;
             await ShowRecordCount(Token);
         }
 
@@ -660,7 +670,6 @@ namespace EtwPilot.ViewModel
             ProgressState.InitializeProgress(1);
             try
             {
-                IsViewEnabled = false;
                 ProgressState.m_CurrentCommand = RestoreVectorDbCollectionCommand;
                 ProgressState.CancelCommandButtonVisibility = System.Windows.Visibility.Visible;
                 if (Topic == ChatTopic.Manifests)
@@ -693,7 +702,6 @@ namespace EtwPilot.ViewModel
             }
             ProgressState.CancelCommandButtonVisibility = System.Windows.Visibility.Hidden;
             ProgressState.m_CurrentCommand = null;
-            IsViewEnabled = true;
             await ShowRecordCount(Token);
         }
 
@@ -711,7 +719,6 @@ namespace EtwPilot.ViewModel
             ProgressState.InitializeProgress(2);
             try
             {
-                IsViewEnabled = false;
                 if (Topic == ChatTopic.Manifests)
                 {
                     await m_VectorDb!.SaveCollection(
@@ -732,10 +739,6 @@ namespace EtwPilot.ViewModel
             {
                 ProgressState.FinalizeProgress($"Save failed: {ex.Message}");
             }
-            finally
-            {
-                IsViewEnabled = true;
-            }
         }
 
         private async Task Command_Reinitialize()
@@ -746,6 +749,14 @@ namespace EtwPilot.ViewModel
 
         private void Reset()
         {
+            m_ResultHistory.Clear();
+            m_ChatHistory.Clear();
+            m_ModelBusy = false;
+            m_Kernel = null;
+            m_VectorDb = null;
+            m_OnnxGenAIRuntime = null;
+            m_LlamaCppRuntime = null;
+            m_OllamaRuntime = null;
             Prompt = string.Empty;
             Initialized = false;
             VecDbCommandsAllowed = false;
@@ -753,6 +764,7 @@ namespace EtwPilot.ViewModel
             IsEventDataAvailable = false;
             Topic = ChatTopic.Invalid;
             m_VectorDb = null;
+            CanExecuteChanged();
         }
 
         private void Command_Clear()
@@ -772,7 +784,6 @@ namespace EtwPilot.ViewModel
 
         private async Task Command_Generate(CancellationToken Token)
         {
-            IsViewEnabled = false;
             m_ModelBusy = true;
             ProgressState.InitializeProgress(1); // runtime will adjust manually.
             ProgressState.m_CurrentCommand = GenerateCommand;
@@ -801,7 +812,6 @@ namespace EtwPilot.ViewModel
             {
                 AddSystemMessageToResult($"Inference exception: {ex.Message}");
             }
-            IsViewEnabled = true;
             ProgressState.m_CurrentCommand = null;
             ProgressState.CancelCommandButtonVisibility = System.Windows.Visibility.Hidden;
             ProgressState.FinalizeProgress("");
@@ -872,7 +882,7 @@ namespace EtwPilot.ViewModel
         private void AddSystemMessageToResult(string Message)
         {
             var message = Message.Substring(0, Math.Min(Message.Length, 5000));
-            ResultHistory.Add(new InsightsInferenceResultModel()
+            m_ResultHistory.Add(new InsightsInferenceResultModel()
             {
                 Type = InsightsInferenceResultModel.ContentType.SystemMessage,
                 Content = message
@@ -882,7 +892,7 @@ namespace EtwPilot.ViewModel
         private void AddErrorMessageToResult(string Message)
         {
             var message = Message.Substring(0, Math.Min(Message.Length, 5000));
-            ResultHistory.Add(new InsightsInferenceResultModel()
+            m_ResultHistory.Add(new InsightsInferenceResultModel()
             {
                 Type = InsightsInferenceResultModel.ContentType.ErrorMessage,
                 Content = message
@@ -893,12 +903,12 @@ namespace EtwPilot.ViewModel
         {
             if (ContentType != InsightsInferenceResultModel.ContentType.None)
             {
-                ResultHistory.Where(item => item.Type == ContentType).ToList().
-                    ForEach(item => ResultHistory.Remove(item));
+                m_ResultHistory.Where(item => item.Type == ContentType).ToList().
+                    ForEach(item => m_ResultHistory.Remove(item));
             }
             else
             {
-                ResultHistory.ToList().ForEach(item => ResultHistory.Remove(item));
+                m_ResultHistory.ToList().ForEach(item => m_ResultHistory.Remove(item));
             }
         }
 

@@ -41,7 +41,7 @@ namespace EtwPilot.View
             {
                 return;
             }
-            vm.ScopeFilter.Processes = ScopeFilterProcesses.SelectedItems.Cast<ProcessObject>().Where(
+            vm.ScopeFilter!.Processes = ScopeFilterProcesses.SelectedItems.Cast<ProcessObject>().Where(
                 p => p.Pid != 0 && p.Name != "[None]").ToList();
         }
 
@@ -52,7 +52,7 @@ namespace EtwPilot.View
             {
                 return;
             }
-            vm.ScopeFilter.ExeNames = ScopeFilterExes.SelectedItems.Cast<string>().Where(
+            vm.ScopeFilter!.ExeNames = ScopeFilterExes.SelectedItems.Cast<string>().Where(
                 p => p != "[None]").ToList();
         }
 
@@ -63,7 +63,7 @@ namespace EtwPilot.View
             {
                 return;
             }
-            vm.ScopeFilter.AppIds = ScopeFilterAppIds.SelectedItems.Cast<string>().Where(
+            vm.ScopeFilter!.AppIds = ScopeFilterAppIds.SelectedItems.Cast<string>().Where(
                 p => p != "[None]").ToList();
         }
 
@@ -74,7 +74,7 @@ namespace EtwPilot.View
             {
                 return;
             }
-            vm.ScopeFilter.PackageIds = ScopeFilterPackageIds.SelectedItems.Cast<string>().Where(
+            vm.ScopeFilter!.PackageIds = ScopeFilterPackageIds.SelectedItems.Cast<string>().Where(
                 p => p != "[None]").ToList();
         }
 
@@ -93,7 +93,7 @@ namespace EtwPilot.View
             //
             // Synchronize with VM's list
             //
-            vm.AttributeFilter.Events.Clear();
+            vm.AttributeFilter!.Events.Clear();
             chosen.ForEach(e => vm.AttributeFilter.Events.Add(e));
         }
 
@@ -104,7 +104,7 @@ namespace EtwPilot.View
             {
                 return;
             }
-            vm.AttributeFilter.AnyKeywords.Clear();
+            vm.AttributeFilter!.AnyKeywords.Clear();
             AttributeFilterAnyKeywords.SelectedItems.Cast<
                 ParsedEtwManifestField>().ToList().ForEach(k => vm.AttributeFilter.AnyKeywords.Add(k));
         }
@@ -116,7 +116,7 @@ namespace EtwPilot.View
             {
                 return;
             }
-            vm.AttributeFilter.AllKeywords.Clear();
+            vm.AttributeFilter!.AllKeywords.Clear();
             AttributeFilterAllKeywords.SelectedItems.Cast<
                 ParsedEtwManifestField>().ToList().ForEach(k => vm.AttributeFilter.AllKeywords.Add(k));
         }
@@ -134,7 +134,7 @@ namespace EtwPilot.View
             //
             // Synchronize with VM's list
             //
-            vm.StackwalkFilter.Events.Clear();
+            vm.StackwalkFilter!.Events.Clear();
             var chosen = StackwalkFilterEvents.SelectedItems.Cast<
                 ParsedEtwManifestEvent>().ToList();
             chosen.ForEach(e => vm.StackwalkFilter.Events.Add(e));
@@ -147,7 +147,7 @@ namespace EtwPilot.View
             {
                 return;
             }
-            vm.StackwalkFilter.LevelKeywordFilterAnyKeywords.Clear();
+            vm.StackwalkFilter!.LevelKeywordFilterAnyKeywords.Clear();
             StackwalkLevelKeywordFilterAnyKeywords.SelectedItems.Cast<
                 ParsedEtwManifestField>().ToList().ForEach(k => vm.StackwalkFilter.LevelKeywordFilterAnyKeywords.Add(k));
         }
@@ -159,7 +159,7 @@ namespace EtwPilot.View
             {
                 return;
             }
-            vm.StackwalkFilter.LevelKeywordFilterAllKeywords.Clear();
+            vm.StackwalkFilter!.LevelKeywordFilterAllKeywords.Clear();
             StackwalkLevelKeywordFilterAllKeywords.SelectedItems.Cast<
                 ParsedEtwManifestField>().ToList().ForEach(k => vm.StackwalkFilter.LevelKeywordFilterAllKeywords.Add(k));
         }

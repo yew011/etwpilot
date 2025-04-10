@@ -406,7 +406,7 @@ namespace EtwPilot.ViewModel
                 //
                 // Scope filter
                 //
-                if (form.ScopeFilter.Processes.Count > 0) // process
+                if (form.ScopeFilter!.Processes.Count > 0) // process
                 {
                     var pids = form.ScopeFilter.Processes.Select(p => p.Pid).ToList();
                     enabledProvider.SetProcessFilter(pids);
@@ -429,7 +429,7 @@ namespace EtwPilot.ViewModel
                 //
                 // Attribute filter
                 //
-                if (form.AttributeFilter.Events.Count > 0)
+                if (form.AttributeFilter!.Events.Count > 0)
                 {
                     var eventIds = form.AttributeFilter.Events.Select(e => e.Id).ToList();
                     var eventIdIntegers = eventIds.Select(int.Parse).ToList();
@@ -456,7 +456,7 @@ namespace EtwPilot.ViewModel
                 //
                 // Stackwalk filter
                 //
-                if (form.StackwalkFilter.Events.Count > 0)
+                if (form.StackwalkFilter!.Events.Count > 0)
                 {
                     var eventIds = form.StackwalkFilter.Events.Select(e => e.Id).ToList();
                     var eventIdIntegers = eventIds.Select(int.Parse).ToList();
@@ -486,7 +486,7 @@ namespace EtwPilot.ViewModel
                 var payloads = new Dictionary<string, PayloadFilter>();
                 foreach (var predicate in form.PayloadFilterPredicates)
                 {
-                    var key = $"{predicate.Event.Id}:{predicate.Event.Version}";
+                    var key = $"{predicate.Event!.Id}:{predicate.Event.Version}";
                     PayloadFilter payloadFilter = null;
                     if (payloads.ContainsKey(key))
                     {

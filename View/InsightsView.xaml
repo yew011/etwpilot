@@ -12,8 +12,7 @@
              d:DesignHeight="450" d:DesignWidth="800"
              Name="InsightsControl"
              DataContext="{Binding Source={x:Static vm:GlobalStateViewModel.Instance},ValidatesOnNotifyDataErrors=False}">
-    <DockPanel
-        IsEnabled="{Binding g_InsightsViewModel.IsViewEnabled}">
+    <DockPanel>
         <DockPanel DockPanel.Dock="Bottom" Height="100" Margin="2">
             <DockPanel DockPanel.Dock="Right">
                 <DockPanel>
@@ -28,7 +27,7 @@
                             IsDefault="True"/>
                 </DockPanel>
             </DockPanel>
-            <TextBox Text="{Binding g_InsightsViewModel.Prompt,Mode=OneWayToSource,UpdateSourceTrigger=PropertyChanged,ValidatesOnNotifyDataErrors=False}"
+            <TextBox Text="{Binding g_InsightsViewModel.Prompt,Mode=TwoWay,UpdateSourceTrigger=PropertyChanged,ValidatesOnNotifyDataErrors=True}"
                      Name="PromptTextbox"/>
         </DockPanel>
         <Border BorderBrush="Gainsboro" BorderThickness="1" Margin="2">
@@ -85,7 +84,7 @@
                         </DataTemplate>
                     </ItemsControl.ItemTemplate>
                     <ItemsControl.DataContext>
-                        <CollectionViewSource Source="{Binding g_InsightsViewModel.ResultHistory.AsObservable,ValidatesOnNotifyDataErrors=False}">
+                        <CollectionViewSource Source="{Binding g_InsightsViewModel.m_ResultHistory.AsObservable,ValidatesOnNotifyDataErrors=False}">
                             <CollectionViewSource.SortDescriptions>
                                 <scm:SortDescription PropertyName="Timestamp" Direction="Ascending" />
                             </CollectionViewSource.SortDescriptions>

@@ -31,7 +31,7 @@
                                  SelectedIndex="0"
                                  SelectionMode="Extended"
                                  SelectionChanged="ScopeFilterProcesses_SelectionChanged"
-                                 Validation.ErrorTemplate="{StaticResource CustomErrorTemplate}"
+                                 Validation.ErrorTemplate="{StaticResource ErrorTemplateRight}"
                                  MaxHeight="125">
                             <ListBox.ItemTemplate>                                
                                 <DataTemplate>
@@ -54,7 +54,7 @@
                                  SelectedIndex="0"
                                  SelectionMode="Extended"
                                  SelectionChanged="ScopeFilterExes_SelectionChanged"
-                                 Validation.ErrorTemplate="{StaticResource CustomErrorTemplate}"
+                                 Validation.ErrorTemplate="{StaticResource ErrorTemplateRight}"
                                  MaxHeight="125"/>
                     </StackPanel>
                     <StackPanel Orientation="Horizontal" Margin="5" VerticalAlignment="Top">
@@ -63,7 +63,7 @@
                                  Name="ScopeFilterAppIds"
                                  SelectedIndex="0"
                                  SelectionMode="Extended"
-                                 Validation.ErrorTemplate="{StaticResource CustomErrorTemplate}"
+                                 Validation.ErrorTemplate="{StaticResource ErrorTemplateRight}"
                                  SelectionChanged="ScopeFilterAppIds_SelectionChanged"
                                  MaxHeight="125"/>
                     </StackPanel>
@@ -73,7 +73,7 @@
                                   Name="ScopeFilterPackageIds"
                                   SelectedIndex="0"
                                   SelectionMode="Extended"
-                                 Validation.ErrorTemplate="{StaticResource CustomErrorTemplate}"
+                                 Validation.ErrorTemplate="{StaticResource ErrorTemplateRight}"
                                   SelectionChanged="ScopeFilterPackageIds_SelectionChanged"
                                   MaxHeight="125"/>
                     </StackPanel>
@@ -90,22 +90,21 @@
                                  MaxWidth="600"
                                  MaxHeight="250"
                                  SelectionChanged="AttributeFilterEvents_SelectionChanged"
-                                 Validation.ErrorTemplate="{StaticResource CustomErrorTemplate}"/>
+                                 Validation.ErrorTemplate="{StaticResource ErrorTemplateRight}"/>
                         <RadioButton GroupName="EnableDisableGroup"
                                      Name="EnableButton"
                                      Content="Enable"
-                                     Validation.ErrorTemplate="{StaticResource CustomErrorTemplate}"
-                                     IsChecked="{Binding AttributeFilter.IsEnable,Mode=TwoWay,Converter={StaticResource NullableBoolConverter},ConverterParameter='true',ValidatesOnNotifyDataErrors=True}"/>
+                                     IsChecked="{Binding AttributeFilter.IsEnable,Mode=TwoWay,Converter={StaticResource NullableBoolConverter},ConverterParameter='true'}"/>
                         <Separator Opacity="0" Width="10"/>
                         <RadioButton GroupName="EnableDisableGroup" 
                                      Name="DisableButton"
                                      Content="Disable"
-                                     IsChecked="{Binding AttributeFilter.IsEnable,Mode=TwoWay,Converter={StaticResource NullableBoolConverter},ConverterParameter='false',ValidatesOnNotifyDataErrors=True}"/>
+                                     IsChecked="{Binding AttributeFilter.IsEnable,Mode=TwoWay,Converter={StaticResource NullableBoolConverter},ConverterParameter='false'}"/>
                     </StackPanel>
                     <StackPanel Orientation="Horizontal" Margin="5">
                         <Label Width="150">Level:</Label>
                         <ComboBox Width="150" Name="AttributeFilterLevel"
-                                  Validation.ErrorTemplate="{StaticResource CustomErrorTemplate}"
+                                  Validation.ErrorTemplate="{StaticResource ErrorTemplateRight}"
                                   ItemsSource="{Binding Source={StaticResource SourceLevelsEnum}}"
                                   SelectedItem="{Binding AttributeFilter.Level,Mode=TwoWay,ValidatesOnNotifyDataErrors=True}"
                                   IsSynchronizedWithCurrentItem="false"/>
@@ -119,7 +118,7 @@
                                  Width="Auto"
                                  MaxWidth="600"
                                  MaxHeight="250"
-                                 Validation.ErrorTemplate="{StaticResource CustomErrorTemplate}"/>
+                                 Validation.ErrorTemplate="{StaticResource ErrorTemplateRight}"/>
                     </StackPanel>
                     <StackPanel Orientation="Horizontal" Margin="5">
                         <Label Width="150">All keywords:</Label>
@@ -130,7 +129,7 @@
                                  Width="Auto"
                                  MaxWidth="600"
                                  MaxHeight="250"
-                                 Validation.ErrorTemplate="{StaticResource CustomErrorTemplate}"/>
+                                 Validation.ErrorTemplate="{StaticResource ErrorTemplateRight}"/>
                     </StackPanel>
                 </StackPanel>
             </TabItem>
@@ -145,15 +144,14 @@
                                  MaxWidth="600"
                                  MaxHeight="250"
                                  SelectionChanged="StackwalkFilterEvents_SelectionChanged"
-                                 Validation.ErrorTemplate="{StaticResource CustomErrorTemplate}"/>
+                                 Validation.ErrorTemplate="{StaticResource ErrorTemplateBelow}"/>
                         <RadioButton GroupName="EnableDisableGroup1"
                                      Content="Enable"
-                                     Validation.ErrorTemplate="{StaticResource CustomErrorTemplate}"
-                                     IsChecked="{Binding StackwalkFilter.IsEnable,Mode=TwoWay,Converter={StaticResource NullableBoolConverter},ConverterParameter='true',ValidatesOnNotifyDataErrors=True}"/>
+                                     IsChecked="{Binding StackwalkFilter.IsEnable,Mode=TwoWay,Converter={StaticResource NullableBoolConverter},ConverterParameter='true'}"/>
                         <Separator Opacity="0" Width="10"/>
                         <RadioButton GroupName="EnableDisableGroup1" 
                                      Content="Disable"
-                                     IsChecked="{Binding StackwalkFilter.IsEnable,Mode=TwoWay,Converter={StaticResource NullableBoolConverter},ConverterParameter='false',ValidatesOnNotifyDataErrors=True}"/>
+                                     IsChecked="{Binding StackwalkFilter.IsEnable,Mode=TwoWay,Converter={StaticResource NullableBoolConverter},ConverterParameter='false'}"/>
                     </StackPanel>
                     <StackPanel Orientation="Vertical">
                         <GroupBox Header="Level/Keyword Filter">
@@ -163,13 +161,12 @@
                                     <ComboBox Width="150" Name="StackwalkLevelKeywordFilterLevel"
                                               ItemsSource="{Binding Source={StaticResource SourceLevelsEnum}}"
                                               IsSynchronizedWithCurrentItem="false"
-                                              Validation.ErrorTemplate="{StaticResource CustomErrorTemplate}"
+                                              Validation.ErrorTemplate="{StaticResource ErrorTemplateBelow}"
                                               SelectedItem="{Binding StackwalkFilter.LevelKeywordFilterLevel,Mode=TwoWay,ValidatesOnNotifyDataErrors=True}"/>
                                     <Separator Opacity="0" Width="75"/>
                                     <StackPanel Width="125" Orientation="Horizontal">
                                         <RadioButton GroupName="EnableDisableGroup2"
                                                      Content="Enable"
-                                                     Validation.ErrorTemplate="{StaticResource CustomErrorTemplate}"
                                                      IsChecked="{Binding StackwalkFilter.LevelKeywordFilterIsEnable,Mode=TwoWay,Converter={StaticResource NullableBoolConverter},ConverterParameter='true'}"/>
                                         <Separator Opacity="0" Width="10"/>
                                         <RadioButton GroupName="EnableDisableGroup2" 
@@ -179,14 +176,14 @@
                                 </StackPanel>
                                 <StackPanel Orientation="Horizontal" Margin="5">
                                     <Label Width="150">Any keywords:</Label>
-                                    <ListBox ItemsSource="{Binding Manifest.Keywords}"
+                                    <ListBox ItemsSource="{Binding Manifest.Keywords,ValidatesOnNotifyDataErrors=True}"
                                              Name="StackwalkLevelKeywordFilterAnyKeywords"
                                              SelectionMode="Extended"
                                              Width="Auto"
                                              MaxWidth="600"
                                              MaxHeight="250"
                                              SelectionChanged="StackwalkLevelKeywordFilterAnyKeywords_SelectionChanged"
-                                             Validation.ErrorTemplate="{StaticResource CustomErrorTemplate}"/>
+                                             Validation.ErrorTemplate="{StaticResource ErrorTemplateRight}"/>
                                 </StackPanel>
                                 <StackPanel Orientation="Horizontal" Margin="5">
                                     <Label Width="150">All keywords:</Label>
@@ -197,7 +194,7 @@
                                              MaxWidth="600"
                                              MaxHeight="250"
                                              SelectionChanged="StackwalkLevelKeywordFilterAllKeywords_SelectionChanged"
-                                             Validation.ErrorTemplate="{StaticResource CustomErrorTemplate}"/>
+                                             Validation.ErrorTemplate="{StaticResource ErrorTemplateRight}"/>
                                 </StackPanel>
                             </StackPanel>
                         </GroupBox>
@@ -213,6 +210,7 @@
                                  SelectionMode="Single"
                                  MaxWidth="500"
                                  MaxHeight="250"
+                                 Validation.ErrorTemplate="{StaticResource ErrorTemplateRight}"
                                  SelectionChanged="PayloadFilterEvents_SelectionChanged">
                             <ListBox.Style>
                                 <Style TargetType="ListBox">
@@ -231,7 +229,7 @@
                         <DataGrid Name="PayloadFilterPredicates"
                                   IsReadOnly="true"
                                   AutoGenerateColumns="false"
-                                  ItemsSource="{Binding PayloadFilterPredicates,ValidatesOnNotifyDataErrors=True}"
+                                  ItemsSource="{Binding PayloadFilterPredicates}"
                                   SelectionMode="Extended"
                                   MouseDoubleClick="PayloadFilterPredicates_MouseDoubleClick"
                                   SelectionChanged="PayloadFilterPredicates_SelectionChanged"
@@ -260,7 +258,7 @@
                         <ComboBox Name="PredicateFieldName" 
                                   Width="150" 
                                   IsSynchronizedWithCurrentItem="false"
-                                  Validation.ErrorTemplate="{StaticResource CustomErrorTemplate}"
+                                  Validation.ErrorTemplate="{StaticResource ErrorTemplateBelow}"
                                   SelectedItem="{Binding SelectedPredicate.Field,Mode=TwoWay,UpdateSourceTrigger=PropertyChanged,ValidatesOnNotifyDataErrors=True}"/>
                         <Separator Opacity="0" Width="5"/>
                         <Button Name="AddPredicateButton" 
@@ -292,7 +290,7 @@
                         <ComboBox Width="150" Name="PredicateOperator"
                                   ItemsSource="{Binding Source={StaticResource PayloadFilterPredicateOperatorsEnum}}"
                                   IsSynchronizedWithCurrentItem="false"
-                                  Validation.ErrorTemplate="{StaticResource CustomErrorTemplate}"
+                                  Validation.ErrorTemplate="{StaticResource ErrorTemplateBelow}"
                                   SelectedItem="{Binding SelectedPredicate.Operator,Mode=TwoWay,UpdateSourceTrigger=PropertyChanged,ValidatesOnNotifyDataErrors=True}"/>
                         <Separator Opacity="0" Width="5"/>
                         <CheckBox Name="MatchAnyPredicateCheckbox" Padding="2"
@@ -303,8 +301,8 @@
                     <StackPanel Orientation="Horizontal">
                         <Label Width="100">Value:</Label>
                         <TextBox Name="PredicateValue" Width="150"
-                                 Validation.ErrorTemplate="{StaticResource CustomErrorTemplate}"
-                                 Text="{Binding SelectedPredicate.FieldValue,Mode=TwoWay,UpdateSourceTrigger=PropertyChanged}"/>
+                                 Validation.ErrorTemplate="{StaticResource ErrorTemplateRight}"
+                                 Text="{Binding SelectedPredicate.FieldValue,Mode=TwoWay,UpdateSourceTrigger=PropertyChanged,ValidatesOnNotifyDataErrors=True}"/>
                     </StackPanel>
                 </StackPanel>
             </TabItem>

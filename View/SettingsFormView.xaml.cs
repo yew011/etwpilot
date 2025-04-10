@@ -23,7 +23,6 @@ using System.Diagnostics;
 using System.Windows;
 using System.IO;
 using EtwPilot.Model;
-using EtwPilot.InferenceRuntimes;
 
 namespace EtwPilot.View
 {

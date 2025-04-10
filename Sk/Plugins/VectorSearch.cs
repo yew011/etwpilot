@@ -23,6 +23,8 @@ using EtwPilot.Sk.Vector;
 using Microsoft.SemanticKernel.Embeddings;
 using System.Text;
 using System.ComponentModel.DataAnnotations;
+using EtwPilot.ViewModel;
+using System;
 
 #pragma warning disable SKEXP0001
 
@@ -49,6 +51,14 @@ namespace EtwPilot.Sk.Plugins
             CancellationToken Token
             )
         {
+            ProgressState? progress = null;
+
+            if (m_Kernel.Data.TryGetValue("ProgressState", out object? _progress))
+            {
+                progress = _progress as ProgressState;
+            }
+            progress?.UpdateProgressMessage($"The model has started a vector search of provider manifest data.");
+
             var vectorDb = m_Kernel.GetRequiredService<EtwVectorDb>();
             var searchOptions = new VectorSearchOptions<EtwProviderManifestRecord>
             {
@@ -85,6 +95,13 @@ namespace EtwPilot.Sk.Plugins
             CancellationToken Token
             )
         {
+            ProgressState? progress = null;
+            if (m_Kernel.Data.TryGetValue("ProgressState", out object? _progress))
+            {
+                progress = _progress as ProgressState;
+            }
+            progress?.UpdateProgressMessage($"The model has started a vector search of event data.");
+
             var vectorDb = m_Kernel.GetRequiredService<EtwVectorDb>();
             var searchOptions = new VectorSearchOptions<EtwEventRecord>
             {

@@ -21,6 +21,10 @@ using EtwPilot.ViewModel;
 using Microsoft.SemanticKernel.ChatCompletion;
 using Microsoft.SemanticKernel;
 using EtwPilot.Model;
+using Meziantou.Framework.WPF.Collections;
+using Microsoft.SemanticKernel.Embeddings;
+
+#pragma warning disable SKEXP0001 // ITextEmbeddingGenerationService
 
 namespace EtwPilot.InferenceRuntimes
 {
@@ -28,7 +32,10 @@ namespace EtwPilot.InferenceRuntimes
     {
         private readonly OllamaConfigModel m_Config;
 
-        public Ollama(OllamaConfigModel Config, Kernel kernel, ChatHistory History) : base(kernel, History)
+        public Ollama(OllamaConfigModel Config,
+            Kernel kernel,
+            ChatHistory History,
+            ConcurrentObservableCollection<InsightsInferenceResultModel> ResultHistory) : base(kernel, History, ResultHistory)
         {
             m_Config = Config;
             m_PromptExecutionSettings = Config.PromptExecutionSettings!;
@@ -38,18 +45,74 @@ namespace EtwPilot.InferenceRuntimes
         {
             Progress.UpdateProgressMessage("Performing inference...");
 
-            m_ChatHistory.AddUserMessage(UserPrompt);
+            if (m_ChatHistory.Count == 0)
+            {
+                //
+                // At the start of a conversation, add some tool input to the model to help it
+                // answer questions about events, start ETW traces, etc.
+                //
+                AddInitialToolPrompt();
+            }
 
+            //
+            // Add user prompt to full chat history
+            //
+            m_ChatHistory.AddUserMessage(UserPrompt);
             m_PromptExecutionSettings.FunctionChoiceBehavior = FunctionChoiceBehavior.Auto(
                 options: new FunctionChoiceBehaviorOptions()
                 {
-                    AllowConcurrentInvocation = true,
-                    AllowParallelCalls = true,
+                    AllowConcurrentInvocation = false,
+                    AllowParallelCalls = false,
                 }); // set to None() for debug mode
 
             Progress.UpdateProgressValue();
+
+            //
+            // Set the progressState as a kernel data object so plugins can retrieve it
+            // to show progress in the UI, in the case of function calling.
+            //
+            if (!m_Kernel.Data.TryGetValue("ProgressState", out _))
+            {
+                m_Kernel.Data.Add("ProgressState", Progress);
+            }
+            else
+            {
+                m_Kernel.Data["ProgressState"] = Progress;
+            }
+
+            //
+            // NB: Ollama has limitations in streaming model response - see
+            //  https://github.com/microsoft/semantic-kernel/issues/10292
+            //
             var fullResponse = await GetInferenceResult(Token);
+            if (string.IsNullOrEmpty(fullResponse))
+            {
+                return;
+            }
+
+            //
+            // Add the user question to the UI
+            //
+            m_ResultHistory.Add(new InsightsInferenceResultModel()
+            {
+                Type = InsightsInferenceResultModel.ContentType.UserInput,
+                Content = UserPrompt
+            });
+
+            //
+            // Add model response
+            //
+            var inferenceResult = new InsightsInferenceResultModel()
+            {
+                Type = InsightsInferenceResultModel.ContentType.ModelOutput,
+                Content = fullResponse
+            };
+            m_ResultHistory.Add(inferenceResult);
+
             Progress.UpdateProgressValue();
+            //
+            // Add the full model response to the chat history
+            //
             m_ChatHistory.AddAssistantMessage(fullResponse);
         }
     }

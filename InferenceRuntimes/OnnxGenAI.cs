@@ -22,6 +22,7 @@ using Microsoft.SemanticKernel;
 using Microsoft.SemanticKernel.ChatCompletion;
 using Newtonsoft.Json.Linq;
 using Newtonsoft.Json;
+using Meziantou.Framework.WPF.Collections;
 
 namespace EtwPilot.InferenceRuntimes
 {
@@ -29,7 +30,10 @@ namespace EtwPilot.InferenceRuntimes
     {
         private readonly OnnxGenAIConfigModel m_Config;
 
-        public OnnxGenAI(OnnxGenAIConfigModel Config, Kernel kernel, ChatHistory History) : base(kernel, History)
+        public OnnxGenAI(OnnxGenAIConfigModel Config,
+            Kernel kernel,
+            ChatHistory History,
+            ConcurrentObservableCollection<InsightsInferenceResultModel> ResultHistory) : base(kernel, History, ResultHistory)
         {
             m_Config = Config;
         }
@@ -59,19 +63,19 @@ namespace EtwPilot.InferenceRuntimes
             Progress.ProgressMax = 4;
             Progress.UpdateProgressMessage("Performing inference...");
 
-            //
-            // Add the user question to the chat history
-            //
-            m_ChatHistory.AddUserMessage(UserPrompt);
-
             if (m_ChatHistory.Count == 0)
             {
                 //
                 // At the start of a conversation, add some tool input to the model to help it
                 // answer questions about events, start ETW traces, etc.
                 //
-                AddInitialToolPrompt();
+                AddInitialToolPrompt(IncludeFunctionDefinitions: true);
             }
+
+            //
+            // Add the user question to the chat history
+            //
+            m_ChatHistory.AddUserMessage(UserPrompt);
 
             var charsProcessed = 0;
             var isJsonResponse = false;
@@ -82,7 +86,7 @@ namespace EtwPilot.InferenceRuntimes
             // will be a JSON object meant for us to parse as part of function calling.
             // Otherwise, the model response goes straight into the UI _and_ the chat history.
             //
-            var fullResponse = await GetInferenceResult(Token, (content) => 
+            var fullResponse = await GetInferenceResultStreaming(Token, (content) => 
             {
                 if (content.Content is { Length: > 0 })
                 {
@@ -160,53 +164,6 @@ namespace EtwPilot.InferenceRuntimes
                 Progress.UpdateProgressValue();
                 m_ChatHistory.AddAssistantMessage(fullResponse);
             }
-        }
-
-        private void AddInitialToolPrompt()
-        {
-            var prompt = $"Your job is to answer questions about ETW events and providers. You must respond to " +
-                $"user questions in one of three ways:{Environment.NewLine}" +
-                $"   1) If you have already been given additional context about the event(s) or provider(s) in question, " +
-                $"use that context to answer the question directly. If the context is insufficient to accurately answer " +
-                $"the user's question, select a plugin and function below to get more context.{Environment.NewLine}" +
-                $"   2) If you do not have context about the event(s) or provider(s), select an appropriate plugin and function " +
-                $"below.{Environment.NewLine}" +
-                $"   3) If the question does not appear to relate to either ETW events or providers, ask the user to clarify." +
-                $"{Environment.NewLine}" +
-                $"If you select option 1 or 2, in your response, include values for parameters to the function you chose, " +
-                $"gleaned from information provided by the user in their question. Consult the information below to determine " +
-                $"what parameters are available for each function, and if a user does not provide a required parameter, ask " +
-                $"the user to provide it. If you have all of the information you need to form all required parameters, respond " +
-                $"with your selections in JSON format and do not include any additional text in your response.{Environment.NewLine}" +
-                $"For example, if the user asks for details about event ID 3 produced by the provider named " +
-                $"Microsoft-Antimalware-Engine and you do not have sufficient context about event ID 3, you would respond with: " +
-                $"{{'plugin':'etwTraceSession','function': 'StartTrace','arguments':{{'StopOnTimeSec':5, 'Provider':" +
-                $"['Microsoft-Antimalware-Engine']}}}}{Environment.NewLine}" +
-                $"Here are the plugins/functions if you need them:{Environment.NewLine}";
-            foreach (var plugin in m_Kernel.Plugins)
-            {
-                prompt += $"Functions for the plugin '{plugin.Name}' with description {plugin.Description}{Environment.NewLine}:";
-                foreach (var function in plugin.GetFunctionsMetadata())
-                {
-                    prompt += $"  - {function.Name}: {function.Description}{Environment.NewLine}";
-                    prompt += $"  Parameters:{Environment.NewLine}";
-                    if (function.Parameters.Count == 0)
-                    {
-                        prompt += $"  (None){Environment.NewLine}";
-                        continue;
-                    }
-                    foreach (var param in function.Parameters)
-                    {
-                        prompt += $"    - {param.Name}, required: {param.IsRequired}, type: {param.ParameterType}, description: " +
-                            $"{param.Description}{Environment.NewLine}";
-                    }
-                }
-            }
-            m_ChatHistory.Add(new()
-            {
-                Role = AuthorRole.Tool,
-                Content = prompt,
-            });
         }
 
         private async Task<string> BuildRenderedPromptForFunction(JObject Response)

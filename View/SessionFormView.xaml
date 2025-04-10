@@ -30,20 +30,20 @@
                     <Label Width="150">Name:</Label>
                     <TextBox Name="SessionName"
                             Width="350" 
-                            Validation.ErrorTemplate="{StaticResource CustomErrorTemplate}"
-                            Text="{Binding Name, Mode=TwoWay,UpdateSourceTrigger=LostFocus}"/>
+                            Validation.ErrorTemplate="{StaticResource ErrorTemplateRight}"
+                            Text="{Binding Name, Mode=TwoWay,ValidatesOnNotifyDataErrors=True}"/>
                 </StackPanel>
                 <StackPanel Orientation="Horizontal" Margin="5">
                     <Label Width="150">Enabled Providers:</Label>
                     <ComboBox ItemsSource="{Binding Source={x:Static vm:GlobalStateViewModel.Instance},Path=g_ProviderViewModel.ProvidersWithManifest}"
                               Name="SelectedProvider"
-                              Validation.ErrorTemplate="{StaticResource CustomErrorTemplate}"
+                              Validation.ErrorTemplate="{StaticResource ErrorTemplateBelow}"
                               SelectedIndex="0"/>
                     <Separator Opacity="0" Width="5"/>
                     <Button Name="AddProviderFilterButton"
                             Width="75"
                             Command="{Binding AddProviderToFormCommand}"
-                            CommandParameter="{Binding ElementName=SelectedProvider,Path=SelectedItem}"
+                            CommandParameter="{Binding ElementName=SelectedProvider,Path=SelectedItem,ValidatesOnNotifyDataErrors=False}"
                             Tag="{Binding NumProviderFilterForms,UpdateSourceTrigger=PropertyChanged}">Add
                     </Button>
                 </StackPanel>
@@ -58,7 +58,8 @@
                     <Label Width="150">Save log:</Label>
                     <TextBox Name="SaveTraceLogLocationTextbox" 
                          Width="350"
-                         Text="{Binding LogLocation, Mode=TwoWay,UpdateSourceTrigger=LostFocus}"
+                         Validation.ErrorTemplate="{StaticResource ErrorTemplateBelow}"
+                         Text="{Binding LogLocation, Mode=TwoWay,ValidatesOnNotifyDataErrors=True}"
                              >
                         <TextBox.Style>
                             <Style TargetType="TextBox">
@@ -103,9 +104,9 @@ Mode=TwoWay,Converter={StaticResource StopConditionToBool}, ConverterParameter=T
                     </StackPanel>
                     <TextBox Name="StopConditionTextbox"
                              Width="30" 
-                             Validation.ErrorTemplate="{StaticResource CustomErrorTemplate}"
+                             Validation.ErrorTemplate="{StaticResource ErrorTemplateRight}"
                              Text="{Binding StopConditionValue,
-                            Mode=TwoWay, Converter={StaticResource IntegerToString}}"/>
+                            Mode=TwoWay, Converter={StaticResource IntegerToString},ValidatesOnNotifyDataErrors=True}"/>
                 </StackPanel>
             </StackPanel>
         </GroupBox>

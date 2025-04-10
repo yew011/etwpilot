@@ -24,6 +24,7 @@ using System.Net.Http;
 using System.Net;
 using Microsoft.SemanticKernel.Embeddings;
 using etwlib;
+using EtwPilot.ViewModel;
 
 //
 // Remove supression after SK vector store is out of alpha
@@ -35,60 +36,21 @@ namespace EtwPilot.Sk.Vector
 {
     internal class EtwVectorDb : QdrantVectorStore
     {
-        #region collection definitions
-        //
-        // BGE (BERT) micro v2 (https://huggingface.co/TaylorAI/bge-micro-v2)
-        //
-        private static readonly int s_Dimensions = 384;
-        private static readonly VectorStoreRecordDefinition s_EtwEventCollectionRecordDefinition =
-            new VectorStoreRecordDefinition
-            {
-                Properties = new List<VectorStoreRecordProperty>
-                    {
-                        new VectorStoreRecordKeyProperty("Id", typeof(Guid)),
-                        new VectorStoreRecordDataProperty("EventJson", typeof(string)),
-                        new VectorStoreRecordDataProperty("Description", typeof(string)) { IsFilterable = true, IsFullTextSearchable = true },
-                        new VectorStoreRecordVectorProperty("DescriptionEmbedding", typeof(ReadOnlyMemory<float>)) {
-                            Dimensions = s_Dimensions,
-                            IndexKind = IndexKind.Hnsw,
-                            DistanceFunction = DistanceFunction.CosineSimilarity
-                        },
-                    }
-            };
-        private static readonly VectorStoreRecordDefinition s_EtwProviderManifestRecordDefinition =
-            new VectorStoreRecordDefinition
-            {
-                Properties = new List<VectorStoreRecordProperty>
-                    {
-                        new VectorStoreRecordKeyProperty("Id", typeof(Guid)),
-                        new VectorStoreRecordDataProperty("Name", typeof(string)) { IsFilterable = true, IsFullTextSearchable=true },
-                        new VectorStoreRecordDataProperty("Source", typeof(string)),
-                        new VectorStoreRecordDataProperty("EventIds", typeof(List<int>)),
-                        new VectorStoreRecordDataProperty("Channels", typeof(List<string>)),
-                        new VectorStoreRecordDataProperty("Tasks", typeof(List<string>)),
-                        new VectorStoreRecordDataProperty("Keywords", typeof(List<string>)),
-                        new VectorStoreRecordDataProperty("Strings", typeof(List<string>)),
-                        new VectorStoreRecordDataProperty("TemplateFields", typeof(List<string>)),
-                        new VectorStoreRecordDataProperty("Description", typeof(string)) { IsFilterable = true, IsFullTextSearchable = true },
-                        new VectorStoreRecordVectorProperty("DescriptionEmbedding", typeof(ReadOnlyMemory<float>)) {
-                            Dimensions = s_Dimensions,
-                            IndexKind = IndexKind.Hnsw,
-                            DistanceFunction = DistanceFunction.CosineSimilarity
-                        },
-                    }
-            };
+        private int m_Dimensions;
         public static readonly string s_EtwProviderManifestCollectionName = "manifests";
         public static readonly string s_EtwEventCollectionName = "events";
-        #endregion
 
         private readonly string m_ClientUri; // needed for HttpClient requests
         private readonly QdrantClient m_Client;
         public bool m_Initialized { get; set; }
 
-        public EtwVectorDb(QdrantClient Client, string clientUri) : base(Client, new() { HasNamedVectors = true })
+        public EtwVectorDb(QdrantClient Client,
+            string clientUri,
+            int dimensions) : base(Client, new() { HasNamedVectors = true })
         {
             m_Client = Client;
             m_ClientUri = clientUri;
+            m_Dimensions = dimensions;
         }
 
         public async Task Initialize()
@@ -132,7 +94,27 @@ namespace EtwPilot.Sk.Vector
                     {
                         HasNamedVectors = true,
                         PointStructCustomMapper = new EtwProviderManifestRecordMapper(),
-                        VectorStoreRecordDefinition = s_EtwProviderManifestRecordDefinition
+                        VectorStoreRecordDefinition = new VectorStoreRecordDefinition
+                        {
+                            Properties = new List<VectorStoreRecordProperty>
+                            {
+                                new VectorStoreRecordKeyProperty("Id", typeof(Guid)),
+                                new VectorStoreRecordDataProperty("Name", typeof(string)) { IsFilterable = true, IsFullTextSearchable=true },
+                                new VectorStoreRecordDataProperty("Source", typeof(string)),
+                                new VectorStoreRecordDataProperty("EventIds", typeof(List<int>)),
+                                new VectorStoreRecordDataProperty("Channels", typeof(List<string>)),
+                                new VectorStoreRecordDataProperty("Tasks", typeof(List<string>)),
+                                new VectorStoreRecordDataProperty("Keywords", typeof(List<string>)),
+                                new VectorStoreRecordDataProperty("Strings", typeof(List<string>)),
+                                new VectorStoreRecordDataProperty("TemplateFields", typeof(List<string>)),
+                                new VectorStoreRecordDataProperty("Description", typeof(string)) { IsFilterable = true, IsFullTextSearchable = true },
+                                new VectorStoreRecordVectorProperty("DescriptionEmbedding", typeof(ReadOnlyMemory<float>)) {
+                                    Dimensions = m_Dimensions,
+                                    IndexKind = IndexKind.Hnsw,
+                                    DistanceFunction = DistanceFunction.CosineSimilarity
+                                },
+                            }
+                        }
                     }) as IVectorStoreRecordCollection<TKey, TRecord>;
                 return customCollection!;
             }
@@ -145,7 +127,20 @@ namespace EtwPilot.Sk.Vector
                     {
                         HasNamedVectors = true,
                         PointStructCustomMapper = new EtwEventRecordMapper(),
-                        VectorStoreRecordDefinition = s_EtwEventCollectionRecordDefinition
+                        VectorStoreRecordDefinition = new VectorStoreRecordDefinition
+                        {
+                            Properties = new List<VectorStoreRecordProperty>
+                            {
+                                new VectorStoreRecordKeyProperty("Id", typeof(Guid)),
+                                new VectorStoreRecordDataProperty("EventJson", typeof(string)),
+                                new VectorStoreRecordDataProperty("Description", typeof(string)) { IsFilterable = true, IsFullTextSearchable = true },
+                                new VectorStoreRecordVectorProperty("DescriptionEmbedding", typeof(ReadOnlyMemory<float>)) {
+                                    Dimensions = m_Dimensions,
+                                    IndexKind = IndexKind.Hnsw,
+                                    DistanceFunction = DistanceFunction.CosineSimilarity
+                                },
+                            }
+                        }
                     }) as IVectorStoreRecordCollection<TKey, TRecord>;
                 return customCollection!;
             }
@@ -305,47 +300,75 @@ namespace EtwPilot.Sk.Vector
             string CollectionName,
             dynamic Data,
             ITextEmbeddingGenerationService EmbeddingService,
-            CancellationToken Token
+            CancellationToken Token,
+            ProgressState? Progress = null
             )
         {
-            if (CollectionName == s_EtwEventCollectionName)
+            var oldProgressValue = Progress?.ProgressValue;
+            var oldProgressMax = Progress?.ProgressMax;
+            if (Progress != null)
             {
-                var collection = GetCollection<ulong, EtwEventRecord>(CollectionName);
-                if (!await collection.CollectionExistsAsync())
+                Progress.ProgressMax = Data.Count;
+                Progress.ProgressValue = 0;
+            }
+            var recordNumber = 1;
+
+            try
+            {
+                if (CollectionName == s_EtwEventCollectionName)
                 {
-                    throw new InvalidOperationException($"Collection {CollectionName} does not exist");
-                }
-                foreach (var item in Data)
-                {
-                    if (Token.IsCancellationRequested)
+                    var collection = GetCollection<ulong, EtwEventRecord>(CollectionName);
+                    if (!await collection.CollectionExistsAsync())
                     {
-                        throw new OperationCanceledException();
+                        throw new InvalidOperationException($"Collection {CollectionName} does not exist");
                     }
-                    var evt = item as ParsedEtwEvent;
-                    var record = await EtwEventRecord.CreateFromParsedEtwEvent(evt!, EmbeddingService);
-                    await collection.UpsertAsync(record, cancellationToken: Token);
+                    foreach (var item in Data)
+                    {
+                        if (Token.IsCancellationRequested)
+                        {
+                            throw new OperationCanceledException();
+                        }
+                        Progress?.UpdateProgressMessage($"Importing vector data (record {recordNumber++} of {Data.Count})...");
+                        var evt = item as ParsedEtwEvent;
+                        var record = await EtwEventRecord.CreateFromParsedEtwEvent(evt!, EmbeddingService);
+                        await collection.UpsertAsync(record, cancellationToken: Token);
+                        Progress?.UpdateProgressValue();
+                    }
+                }
+                else if (CollectionName == s_EtwProviderManifestCollectionName)
+                {
+                    var collection = GetCollection<ulong, EtwProviderManifestRecord>(CollectionName);
+                    if (!await collection.CollectionExistsAsync())
+                    {
+                        throw new InvalidOperationException($"Collection {CollectionName} does not exist");
+                    }
+                    foreach (var item in Data)
+                    {
+                        if (Token.IsCancellationRequested)
+                        {
+                            throw new OperationCanceledException();
+                        }
+                        Progress?.UpdateProgressMessage($"Importing vector data (record {recordNumber++} of {Data.Count})...");
+                        var manifest = item as ParsedEtwManifest;
+                        var record = await EtwProviderManifestRecord.CreateFromParsedEtwManifest(
+                            manifest!, EmbeddingService);
+                        await collection.UpsertAsync(record, cancellationToken: Token);
+                        Progress?.UpdateProgressValue();
+                    }
+                }
+                else
+                {
+                    throw new InvalidOperationException($"Unknown collection {CollectionName}");
                 }
             }
-            else if (CollectionName == s_EtwProviderManifestCollectionName)
+            finally
             {
-                var collection = GetCollection<ulong, EtwProviderManifestRecord>(CollectionName);
-                if (!await collection.CollectionExistsAsync())
+                if (Progress != null)
                 {
-                    throw new InvalidOperationException($"Collection {CollectionName} does not exist");
-                }
-                foreach (var item in Data)
-                {
-                    if (Token.IsCancellationRequested)
-                    {
-                        throw new OperationCanceledException();
-                    }
-                    var manifest = item as ParsedEtwManifest;
-                    var record = await EtwProviderManifestRecord.CreateFromParsedEtwManifest(
-                        manifest!, EmbeddingService);
-                    await collection.UpsertAsync(record, cancellationToken: Token);
+                    Progress.ProgressMax = oldProgressMax!.Value;
+                    Progress.ProgressValue = oldProgressValue!.Value;
                 }
             }
-            throw new InvalidOperationException($"Unknown collection {CollectionName}");
         }
     }
 }

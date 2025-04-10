@@ -23,6 +23,7 @@
   <PropertyGroup>
     <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
     <ApplicationManifest>app.manifest</ApplicationManifest>
+    <UserSecretsId>8bf02925-1874-4606-b045-6ddd0eec815f</UserSecretsId>
   </PropertyGroup>
 
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
@@ -107,15 +108,15 @@
     <PackageReference Include="Microsoft.ML.OnnxRuntimeGenAI.DirectML" Condition=" '$(Configuration)' == 'Debug_DirectML' OR '$(Configuration)' == 'Release_DirectML' " />
     <PackageReference Include="Microsoft.ML.OnnxRuntimeGenAI.Managed" Version="0.7.0" />
     <PackageReference Include="Microsoft.ML.OnnxRuntimeGenAI.QNN" Version="0.6.0" Condition=" '$(Configuration)' == 'Debug_QNN' OR '$(Configuration)' == 'Release_QNN' " />      
-    <PackageReference Include="Microsoft.SemanticKernel" Version="1.44.0" />
-    <PackageReference Include="Microsoft.SemanticKernel.Abstractions" Version="1.44.0" />
+    <PackageReference Include="Microsoft.SemanticKernel" Version="1.45.0" />
+    <PackageReference Include="Microsoft.SemanticKernel.Abstractions" Version="1.45.0" />
     <PackageReference Include="Microsoft.SemanticKernel.Connectors.Onnx" Version="1.43.0-alpha" />
     <PackageReference Include="Microsoft.SemanticKernel.Connectors.Ollama" Version="1.43.0-alpha" />
     <PackageReference Include="Microsoft.SemanticKernel.Connectors.Qdrant" Version="1.43.0-preview" />
-    <PackageReference Include="Microsoft.SemanticKernel.Core" Version="1.44.0" />
+    <PackageReference Include="Microsoft.SemanticKernel.Core" Version="1.45.0" />
     <PackageReference Include="Microsoft.Xaml.Behaviors.Wpf" Version="1.1.135" />
     <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
-    <PackageReference Include="OllamaSharp" Version="5.1.9" />
+    <PackageReference Include="OllamaSharp" Version="5.1.10" />
 	
 	
   </ItemGroup>

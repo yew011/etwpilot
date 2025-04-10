@@ -99,10 +99,7 @@ namespace EtwPilot.ViewModel
 
         private async Task Command_WindowLoaded(RoutedEventArgs? Args)
         {
-            //
-            // Set our initial view to GlobalInitViewModel to show the "please wait" plea
-            //
-            await GlobalStateViewModel.Instance.g_InitViewModel.ViewModelActivated();
+            GlobalStateViewModel.Instance.InteractionBlockerVisibility = Visibility.Visible;
 
             //
             // Initialize traces and set trace levels
@@ -119,7 +116,9 @@ namespace EtwPilot.ViewModel
             // Kick off application-wide initialization. All other views will be hidden until
             // this completes.
             //
-            await GlobalStateViewModel.Instance.g_InitViewModel.GlobalResourceInitialization();
+            await GlobalStateViewModel.Instance.GlobalResourceInitialization();
+
+            GlobalStateViewModel.Instance.InteractionBlockerVisibility = Visibility.Collapsed;
 
             //
             // This is the default tab displayed, so load it with content.
@@ -165,7 +164,7 @@ namespace EtwPilot.ViewModel
                 return;
             }
 
-            GlobalStateViewModel.Instance.PrimaryViewEnabled = false;
+            GlobalStateViewModel.Instance.InteractionBlockerVisibility = Visibility.Visible;
             ProviderManifestVisible = Visibility.Hidden;
             LiveSessionsVisible = Visibility.Hidden;
 
@@ -210,7 +209,7 @@ namespace EtwPilot.ViewModel
                 LiveSessionsVisible = Visibility.Visible;
             }
 
-            GlobalStateViewModel.Instance.PrimaryViewEnabled = true;
+            GlobalStateViewModel.Instance.InteractionBlockerVisibility = Visibility.Collapsed;
         }
 
         private void Command_ShowDebugLogs()

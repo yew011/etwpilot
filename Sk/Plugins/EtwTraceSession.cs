@@ -28,6 +28,7 @@ using System.Runtime.InteropServices;
 using Meziantou.Framework.WPF.Collections;
 using EtwPilot.Sk.Vector;
 using Microsoft.SemanticKernel.Embeddings;
+using EtwPilot.ViewModel;
 
 #pragma warning disable SKEXP0001 // ITextEmbeddingGenerationService
 
@@ -87,6 +88,7 @@ namespace EtwPilot.Sk.Plugins
         }
 
         private readonly Kernel m_Kernel;
+        private static readonly int s_MaxImportRecords = 5;
 
         public EtwTraceSession(Kernel kernel)
         {
@@ -99,28 +101,104 @@ namespace EtwPilot.Sk.Plugins
 
         [KernelFunction("StartTrace")]
         [Description("Starts an ETW trace session to find ETW events of interest.")]
-        public async Task StartTrace(
+        public async Task<string> StartTrace(
             [Description("The name or GUID of the ETW provider")]
             [Required()]string Provider,
+            [Description("Length of time to run the trace (between 1 and 60 seconds)")]
+            [Required()]int TraceTimeInSeconds,
             CancellationToken Token)
         {
+            if (string.IsNullOrEmpty(Provider))
+            {
+                return "Provider is a required parameter";
+            }
+            else if (TraceTimeInSeconds <= 0 || TraceTimeInSeconds > 60)
+            {
+                return "TraceTimeInSeconds must be between 0 and 60";
+            }
+
             EventsConsumed = 0;
             BytesConsumed = 0;
             Data.Clear();
             StartTime = DateTime.Now;
 
+            ProgressState? progress = null;
+
+            if (m_Kernel.Data.TryGetValue("ProgressState", out object? _progress))
+            {
+                progress = _progress as ProgressState;
+            }
+
+            progress?.UpdateProgressMessage($"The model has started a trace of provider {Provider} ({TraceTimeInSeconds}s)");
+
             //
-            // To-do: When onnx supports function calling, let Sk serialization handle
-            // brokering the TraceSessionParameters argument directly from the model.
+            // To-do: When allow model to pass TraceSessionParameters arguments
             //
             var parameters = new TraceSessionParameters();
-            parameters.StopOnTimeSec = 10;
+            parameters.StopOnTimeSec = TraceTimeInSeconds;
             parameters.ProviderNamesOrGuids.Add(Provider);
 
             await Task.Run(() => ConsumeTraceEvents(parameters, Token));
-            var textEmbSvc = m_Kernel.GetRequiredService<ITextEmbeddingGenerationService>();
-            var vectorDb = m_Kernel.GetRequiredService<EtwVectorDb>();
-            await vectorDb.ImportData(EtwVectorDb.s_EtwEventCollectionName, Data.ToList(), textEmbSvc, Token);
+
+            progress?.UpdateProgressMessage($"Trace has finished.");
+
+            if (Data.Count > 0)
+            {
+                //
+                // Import the events into vector db for vector search/RAG
+                //
+                var textEmbSvc = m_Kernel.GetRequiredService<ITextEmbeddingGenerationService>();
+                var vectorDb = m_Kernel.GetRequiredService<EtwVectorDb>();
+                var numImported = Math.Min(s_MaxImportRecords, Data.Count);
+                try
+                {
+                    await vectorDb.ImportData(EtwVectorDb.s_EtwEventCollectionName, 
+                        Data.Take(numImported).ToList(),
+                        textEmbSvc,
+                        Token,
+                        progress);
+                }
+                catch (Exception ex)
+                {
+                    Trace(TraceLoggerType.SkPlugin,
+                          TraceEventType.Error,
+                          $"Vector data import failed: {ex.Message}");
+                    //
+                    // Todo: will diagnostic info help the model somehow?
+                    //
+                    return $$"""
+                    {
+                        "status": "failed",
+                        "message": "Unable to import the ETW data into the vector database.",
+                        "next_step": "Do nothing."
+                    }
+                    """;
+                }
+
+                //
+                // Tell the model to use vector search now. It seems like sometimes the model can ignore
+                // this directive, so along with a nudge in the system prompt, we'll include a structured
+                // response here.
+                //
+                return $$"""
+                {
+                    "status": "success",
+                    "message": "An ETW search for provider {{Provider}} has completed with {{numImported}} results.",
+                    "next_step": "Search the vector database for events from provider {{Provider}} using an appropriate function."
+                }
+                """;
+            }
+
+            //
+            // Let model decide what to do next
+            //
+            return $$"""
+                    {
+                        "status": "failed",
+                        "message": "An ETW search for provider {{Provider}} produced no event data",
+                        "next_step": "Choose another appropriate plugin or ask the user what to do"
+                    }
+                    """;            
         }
 
         private void ConsumeTraceEvents(TraceSessionParameters Parameters, CancellationToken Token)

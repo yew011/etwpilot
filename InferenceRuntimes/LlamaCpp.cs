@@ -20,6 +20,8 @@ using Microsoft.SemanticKernel.ChatCompletion;
 using Microsoft.SemanticKernel;
 using EtwPilot.ViewModel;
 using System.Reflection;
+using EtwPilot.Model;
+using Meziantou.Framework.WPF.Collections;
 
 namespace EtwPilot.InferenceRuntimes
 {
@@ -27,7 +29,9 @@ namespace EtwPilot.InferenceRuntimes
     {
         private readonly string m_Grammars;
 
-        public LlamaCpp(Kernel kernel, ChatHistory History) : base(kernel, History)
+        public LlamaCpp(Kernel kernel,
+            ChatHistory History,
+            ConcurrentObservableCollection<InsightsInferenceResultModel> ResultHistory) : base(kernel, History, ResultHistory)
         {
             var grammars = new GrammarGenerator(kernel);
             m_Grammars = grammars.GenerateGrammars();

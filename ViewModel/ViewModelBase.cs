@@ -43,25 +43,6 @@ namespace EtwPilot.ViewModel
 
         #endregion
 
-        #region observable properties
-
-        private bool _IsViewEnabled;
-        [JsonIgnore]
-        public bool IsViewEnabled
-        {
-            get => _IsViewEnabled;
-            set
-            {
-                if (_IsViewEnabled != value)
-                {
-                    _IsViewEnabled = value;
-                    OnPropertyChanged("IsViewEnabled");
-                }
-            }
-        }
-
-        #endregion
-
         public ViewModelBase() : base()
         {
             ExportDataCommand = new AsyncRelayCommand<ExportFormat>(
@@ -69,7 +50,6 @@ namespace EtwPilot.ViewModel
             SettingsChangedCommand = new AsyncRelayCommand(
                 Command_SettingsChanged, () => { return true; });
             ProgressState = new ProgressState();
-            IsViewEnabled = true;
         }
 
 #pragma warning disable CS1998 // Async method lacks 'await' operators and will run synchronously
