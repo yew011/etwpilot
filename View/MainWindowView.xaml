@@ -228,6 +228,9 @@
                     <Fluent:Button Header="Reinitialize"
                                    Icon="{DynamicResource refresh}"
                                    Command="{Binding g_InsightsViewModel.ReinitializeCommand,ValidatesOnNotifyDataErrors=False}"/>
+                    <Fluent:Button Header="Restart Chat"
+                                   Icon="{DynamicResource refresh-convo}"
+                                   Command="{Binding g_InsightsViewModel.RefreshConvoCommand,ValidatesOnNotifyDataErrors=False}"/>
                 </Fluent:RibbonGroupBox>
                 <Fluent:RibbonGroupBox Header="Topic" 
                                        Width="Auto"

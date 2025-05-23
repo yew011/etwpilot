@@ -139,6 +139,16 @@ namespace EtwPilot.ViewModel
             g_SessionFormViewModel = new SessionFormViewModel(); // lazy init
             g_InsightsViewModel = new InsightsViewModel();
 
+            //
+            // Hack: Set CurrentViewModel to the currently-uninitialized provider view,
+            // because MainWindowView.xaml has some bindings on CurrentViewModel that will
+            // not resolve if CurrentViewModel remains null while the window loads. This
+            // results in some UI elements being shown erroneously, like the cancel current
+            // command button. This viewmodel will be initialized when the global init
+            // completes.
+            //
+            CurrentViewModel = g_ProviderViewModel;
+
             m_StackwalkHelper = new StackwalkHelper();
             InteractionBlockerVisibility = Visibility.Collapsed;
 

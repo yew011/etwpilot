@@ -86,13 +86,14 @@ namespace EtwPilot.InferenceRuntimes
                 $"these rules:{Environment.NewLine}" +
                 $"1) If you already have sufficient context about the event(s) or provider(s) in question from a prior " +
                 $"tool invocation, use that context to answer the question directly. Use the appropriate tool(s) again if "+
-                $"the prior context is insufficient.{Environment.NewLine}" +
+                $"the prior context is insufficient, but stop if a tool returns error messages.{Environment.NewLine}" +
                 $"2) If you do not have context about the event(s) or provider(s), select an appropriate plugin and function " +
                 $"(tool) from the list provided to you in the conversation history.{Environment.NewLine}" +
                 $"3) If the question does not appear to relate to either ETW events or providers, ask the user to clarify." +
                 $"{Environment.NewLine}" +
                 $"4) If a tool result includes a 'next_step', select an appropriate function from the available tools to "+
-                $"fulfill it, passing relevant arguments based on the context."+
+                $"fulfill it, passing relevant arguments based on the conversation history. If you do not have a value for "+
+                $"a required parameter, do not invent one. Ask the user for the value."+
                 $"5) If unsure, pick a function that matches the intent of the 'next_step' or ask for clarification."+
                 $"{Environment.NewLine}" +
                 $"6) Arguments to tool functions must come from the conversation history, do not make up values. If you do "+

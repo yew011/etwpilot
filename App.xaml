@@ -57,6 +57,7 @@
         <BitmapImage x:Key="newdb"  UriSource="images/newdb.png"/>
         <BitmapImage x:Key="datadb"  UriSource="images/datadb.png"/>
         <BitmapImage x:Key="provdb"  UriSource="images/provdb.png"/>
+        <BitmapImage x:Key="refresh-convo"  UriSource="images/refresh-convo.png"/>
         <Image x:Key="red_x_close" x:Shared="false" Source="images/red_x.png" Width="15" Height="15"/>
         <converters:IsGreaterThanZero x:Key="IsGreaterThanZero"/>
         <converters:DecimalToHex x:Key="DecimalToHex"/>

@@ -22,9 +22,6 @@ using Microsoft.SemanticKernel.ChatCompletion;
 using Microsoft.SemanticKernel;
 using EtwPilot.Model;
 using Meziantou.Framework.WPF.Collections;
-using Microsoft.SemanticKernel.Embeddings;
-
-#pragma warning disable SKEXP0001 // ITextEmbeddingGenerationService
 
 namespace EtwPilot.InferenceRuntimes
 {

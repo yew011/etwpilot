@@ -19,6 +19,7 @@ under the License.
 using EtwPilot.Utilities;
 using Microsoft.SemanticKernel;
 using System.ComponentModel;
+using Newtonsoft.Json;
 
 namespace EtwPilot.Sk.Plugins
 {
@@ -33,25 +34,35 @@ namespace EtwPilot.Sk.Plugins
 
         [KernelFunction("GetProcessByName")]
         [Description("Get details of a process running on the system")]
-        public async Task<ProcessObject?> GetProcessByName(string Name)
+        public async Task<string?> GetProcessByName(string Name)
         {
             if (m_Info.ActiveProcessList.Count == 0)
             {
                 await m_Info.Refresh();
             }
-            return m_Info.ActiveProcessList.FirstOrDefault(
+            var obj = m_Info.ActiveProcessList.FirstOrDefault(
                 p => p.Name.ToLower().Contains(Name.ToLower()));
+            if (obj == default)
+            {
+                return $"No details available for process named {Name}";
+            }
+            return JsonConvert.SerializeObject(obj);
         }
 
         [KernelFunction("GetProcessById")]
         [Description("Get details of a process running on the system")]
-        public async Task<ProcessObject?> GetProcessById(int ProcessId)
+        public async Task<string?> GetProcessById(int ProcessId)
         {
             if (m_Info.ActiveProcessList.Count == 0)
             {
                 await m_Info.Refresh();
             }
-            return m_Info.ActiveProcessList.FirstOrDefault(p => p.Pid == ProcessId);
+            var obj = m_Info.ActiveProcessList.FirstOrDefault(p => p.Pid == ProcessId);
+            if (obj == default)
+            {
+                return $"No details available for process with ID {ProcessId}";
+            }
+            return JsonConvert.SerializeObject(obj);
         }
     }
 }

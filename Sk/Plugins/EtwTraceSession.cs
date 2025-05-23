@@ -30,8 +30,6 @@ using EtwPilot.Sk.Vector;
 using Microsoft.SemanticKernel.Embeddings;
 using EtwPilot.ViewModel;
 
-#pragma warning disable SKEXP0001 // ITextEmbeddingGenerationService
-
 namespace EtwPilot.Sk.Plugins
 {
     using static EtwPilot.Utilities.TraceLogger;
@@ -138,23 +136,36 @@ namespace EtwPilot.Sk.Plugins
             parameters.StopOnTimeSec = TraceTimeInSeconds;
             parameters.ProviderNamesOrGuids.Add(Provider);
 
-            await Task.Run(() => ConsumeTraceEvents(parameters, Token));
-
-            progress?.UpdateProgressMessage($"Trace has finished.");
+            try
+            {
+                await Task.Run(() => ConsumeTraceEvents(parameters, Token));
+            }
+            catch (Exception ex)
+            {
+                return $$"""
+                    {
+                        "status": "failed",
+                        "message": "{{ex.Message}}.",
+                        "next_step": "Retry the operation if you can resolve the error, otherwise ask the user."
+                    }
+                    """;
+            }
+            finally
+            {
+                progress?.UpdateProgressMessage($"Trace has finished.");
+            }
 
             if (Data.Count > 0)
             {
                 //
                 // Import the events into vector db for vector search/RAG
                 //
-                var textEmbSvc = m_Kernel.GetRequiredService<ITextEmbeddingGenerationService>();
                 var vectorDb = m_Kernel.GetRequiredService<EtwVectorDb>();
                 var numImported = Math.Min(s_MaxImportRecords, Data.Count);
                 try
                 {
-                    await vectorDb.ImportData(EtwVectorDb.s_EtwEventCollectionName, 
+                    await vectorDb.ImportData(vectorDb.s_EtwEventCollectionName, 
                         Data.Take(numImported).ToList(),
-                        textEmbSvc,
                         Token,
                         progress);
                 }
@@ -183,8 +194,8 @@ namespace EtwPilot.Sk.Plugins
                 return $$"""
                 {
                     "status": "success",
-                    "message": "An ETW search for provider {{Provider}} has completed with {{numImported}} results.",
-                    "next_step": "Search the vector database for events from provider {{Provider}} using an appropriate function."
+                    "message": "The ETW trace for provider {{Provider}} has completed with {{numImported}} results.",
+                    "next_step": "Invoke the tool that allows you to search for ETW events."
                 }
                 """;
             }
@@ -195,7 +206,7 @@ namespace EtwPilot.Sk.Plugins
             return $$"""
                     {
                         "status": "failed",
-                        "message": "An ETW search for provider {{Provider}} produced no event data",
+                        "message": "An ETW trace for provider {{Provider}} produced no event data",
                         "next_step": "Choose another appropriate plugin or ask the user what to do"
                     }
                     """;            

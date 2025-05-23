@@ -22,135 +22,96 @@ using Microsoft.Extensions.VectorData;
 using System.IO;
 using System.Net.Http;
 using System.Net;
-using Microsoft.SemanticKernel.Embeddings;
 using etwlib;
 using EtwPilot.ViewModel;
-
-//
-// Remove supression after SK vector store is out of alpha
-//
-#pragma warning disable SKEXP0001
-#pragma warning disable SKEXP0020
+using Microsoft.SemanticKernel;
 
 namespace EtwPilot.Sk.Vector
 {
-    internal class EtwVectorDb : QdrantVectorStore
+    internal class EtwVectorDb
     {
         private int m_Dimensions;
-        public static readonly string s_EtwProviderManifestCollectionName = "manifests";
-        public static readonly string s_EtwEventCollectionName = "events";
+        public readonly string s_EtwProviderManifestCollectionName;
+        public readonly string s_EtwEventCollectionName;
+
+        private QdrantVectorStore m_QdrantStore;
+        private readonly Kernel m_Kernel;
 
         private readonly string m_ClientUri; // needed for HttpClient requests
         private readonly QdrantClient m_Client;
         public bool m_Initialized { get; set; }
 
-        public EtwVectorDb(QdrantClient Client,
-            string clientUri,
-            int dimensions) : base(Client, new() { HasNamedVectors = true })
+        public EtwVectorDb(QdrantClient Client, string clientUri, int dimensions, Kernel _Kernel)
         {
+            m_QdrantStore = new QdrantVectorStore(Client, false, new() { HasNamedVectors = true });
             m_Client = Client;
             m_ClientUri = clientUri;
             m_Dimensions = dimensions;
+            m_Kernel = _Kernel;
+
+            //
+            // Collections are named by their vector dimensions, so that the embeddings model
+            // chosen by the user will match a collection with those dimensions.
+            //
+            s_EtwProviderManifestCollectionName = $"manifests_{dimensions}";
+            s_EtwEventCollectionName = $"events_{dimensions}";
         }
 
         public async Task Initialize()
         {
             //
-            // Create collections if needed
+            // Create collections if needed.
             //
-            var collections = ListCollectionNamesAsync().ToBlockingEnumerable().ToList();
+            var collections = m_QdrantStore.ListCollectionNamesAsync().ToBlockingEnumerable().ToList();
             if (collections == null || !collections.Contains(s_EtwProviderManifestCollectionName))
             {
-                var collection = GetCollection<ulong, EtwProviderManifestRecord>(s_EtwProviderManifestCollectionName);
-                await collection.CreateCollectionIfNotExistsAsync();
+                var collection = GetCollection<Guid, EtwProviderManifestRecord>(s_EtwProviderManifestCollectionName);
+                await collection.EnsureCollectionExistsAsync();
             }
             if (collections == null || !collections.Contains(s_EtwEventCollectionName))
             {
-                var collection = GetCollection<ulong, EtwEventRecord>(s_EtwEventCollectionName);
-                await collection.CreateCollectionIfNotExistsAsync();
+                var collection = GetCollection<Guid, EtwEventRecord>(s_EtwEventCollectionName);
+                await collection.EnsureCollectionExistsAsync();
             }
             m_Initialized = true;
         }
 
-        #region IVectorStore
-        public override IVectorStoreRecordCollection<TKey, TRecord> GetCollection<TKey, TRecord>(
-            string name,
-            VectorStoreRecordDefinition? vectorStoreRecordDefinition = null
-            )
+        public QdrantCollection<TKey, TRecord> GetCollection<TKey, TRecord>(string name)
+            where TKey : notnull
+            where TRecord : class
         {
-            //
-            // This routine is invoked whenever we need to retrieve an IVectorStoreRecordCollection
-            // interface in order to invoke collection-related operations like UpsertAsync. Note that
-            // the QdrantVectorStoreRecordCollection class is a wrapper class for Qdrant related
-            // functionality, it does not actually map to an existing collection on the qdrant node,
-            // necessarily (unless CreateAsync is invoked).
-            //
             if (s_EtwProviderManifestCollectionName == name && typeof(TRecord) == typeof(EtwProviderManifestRecord))
             {
-                var customCollection = new QdrantVectorStoreRecordCollection<EtwProviderManifestRecord>(
+                var collection = new QdrantCollection<Guid, EtwProviderManifestRecord>(
                     m_Client,
                     name,
+                    false,
                     new()
                     {
                         HasNamedVectors = true,
-                        PointStructCustomMapper = new EtwProviderManifestRecordMapper(),
-                        VectorStoreRecordDefinition = new VectorStoreRecordDefinition
-                        {
-                            Properties = new List<VectorStoreRecordProperty>
-                            {
-                                new VectorStoreRecordKeyProperty("Id", typeof(Guid)),
-                                new VectorStoreRecordDataProperty("Name", typeof(string)) { IsFilterable = true, IsFullTextSearchable=true },
-                                new VectorStoreRecordDataProperty("Source", typeof(string)),
-                                new VectorStoreRecordDataProperty("EventIds", typeof(List<int>)),
-                                new VectorStoreRecordDataProperty("Channels", typeof(List<string>)),
-                                new VectorStoreRecordDataProperty("Tasks", typeof(List<string>)),
-                                new VectorStoreRecordDataProperty("Keywords", typeof(List<string>)),
-                                new VectorStoreRecordDataProperty("Strings", typeof(List<string>)),
-                                new VectorStoreRecordDataProperty("TemplateFields", typeof(List<string>)),
-                                new VectorStoreRecordDataProperty("Description", typeof(string)) { IsFilterable = true, IsFullTextSearchable = true },
-                                new VectorStoreRecordVectorProperty("DescriptionEmbedding", typeof(ReadOnlyMemory<float>)) {
-                                    Dimensions = m_Dimensions,
-                                    IndexKind = IndexKind.Hnsw,
-                                    DistanceFunction = DistanceFunction.CosineSimilarity
-                                },
-                            }
-                        }
-                    }) as IVectorStoreRecordCollection<TKey, TRecord>;
-                return customCollection!;
+                        Definition = EtwProviderManifestRecord.GetRecordDefinition(m_Dimensions, m_Kernel),
+                    }) as QdrantCollection<TKey, TRecord>;
+                return collection!;
             }
             else if (s_EtwEventCollectionName == name && typeof(TRecord) == typeof(EtwEventRecord))
             {
-                var customCollection = new QdrantVectorStoreRecordCollection<EtwEventRecord>(
+                var collection = new QdrantCollection<Guid, EtwEventRecord>(
                     m_Client,
                     name,
+                    false,
                     new()
                     {
                         HasNamedVectors = true,
-                        PointStructCustomMapper = new EtwEventRecordMapper(),
-                        VectorStoreRecordDefinition = new VectorStoreRecordDefinition
-                        {
-                            Properties = new List<VectorStoreRecordProperty>
-                            {
-                                new VectorStoreRecordKeyProperty("Id", typeof(Guid)),
-                                new VectorStoreRecordDataProperty("EventJson", typeof(string)),
-                                new VectorStoreRecordDataProperty("Description", typeof(string)) { IsFilterable = true, IsFullTextSearchable = true },
-                                new VectorStoreRecordVectorProperty("DescriptionEmbedding", typeof(ReadOnlyMemory<float>)) {
-                                    Dimensions = m_Dimensions,
-                                    IndexKind = IndexKind.Hnsw,
-                                    DistanceFunction = DistanceFunction.CosineSimilarity
-                                },
-                            }
-                        }
-                    }) as IVectorStoreRecordCollection<TKey, TRecord>;
-                return customCollection!;
+                        Definition = EtwEventRecord.GetRecordDefinition(m_Dimensions, m_Kernel),
+                    }) as QdrantCollection<TKey, TRecord>;
+                return collection!;
             }
             throw new NotImplementedException();
         }
-        #endregion
 
         public async Task SaveCollection(string CollectionName, string OutputPath, CancellationToken Token)
         {
-            var collection = GetCollection<ulong, EtwEventRecord>(CollectionName);
+            var collection = GetCollection<Guid, EtwEventRecord>(CollectionName);
             if (!await collection.CollectionExistsAsync())
             {
                 throw new InvalidOperationException($"Collection {CollectionName} does not exist");
@@ -219,7 +180,7 @@ namespace EtwPilot.Sk.Vector
         {
             if (CollectionName == s_EtwEventCollectionName)
             {
-                var collection = GetCollection<ulong, EtwEventRecord>(CollectionName);
+                var collection = GetCollection<Guid, EtwEventRecord>(CollectionName);
                 if (!await collection.CollectionExistsAsync())
                 {
                     return 0;
@@ -227,7 +188,7 @@ namespace EtwPilot.Sk.Vector
             }
             else if (CollectionName == s_EtwProviderManifestCollectionName)
             {
-                var collection = GetCollection<ulong, EtwProviderManifestRecord>(CollectionName);
+                var collection = GetCollection<Guid, EtwProviderManifestRecord>(CollectionName);
                 if (!await collection.CollectionExistsAsync())
                 {
                     return 0;
@@ -240,35 +201,67 @@ namespace EtwPilot.Sk.Vector
             return await m_Client.CountAsync(CollectionName);
         }
 
-        public async Task<VectorSearchResults<T>?> Search<T>(
+        public async Task<List<T>?> Search<T>(
             string CollectionName,
             string Query,
-            ITextEmbeddingGenerationService EmbeddingService,
+            int Top,
+            int ScoreThreshold,  // 0 - 100
             VectorSearchOptions<T> Options,
             CancellationToken Token
             )
         {
+            var top = Top;
+            if (top < 0)
+            {
+                top = 100000; // something large...
+            }
             if (CollectionName == s_EtwEventCollectionName)
             {
-                var collection = GetCollection<ulong, EtwEventRecord>(CollectionName);
+                var collection = GetCollection<Guid, EtwEventRecord>(CollectionName);
                 if (!await collection.CollectionExistsAsync())
                 {
                     throw new InvalidOperationException($"Collection {CollectionName} does not exist");
                 }
                 var options = Options as VectorSearchOptions<EtwEventRecord>;
-                var searchVector = await EmbeddingService.GenerateEmbeddingAsync(Query);
-                return await collection.VectorizedSearchAsync(searchVector, options, Token) as VectorSearchResults<T>;
+                var results = collection.SearchAsync(Query, Top, options, Token);
+                var records = new List<EtwEventRecord>();
+                await foreach (var result in results)
+                {
+                    if (!result.Score.HasValue)
+                    {
+                        continue;
+                    }
+                    var score = Math.Round(result.Score.Value * 100);
+                    if (score >= ScoreThreshold)
+                    {
+                        records.Add(result.Record);
+                    }
+                }
+                return records as List<T>;
             }
             else if (CollectionName == s_EtwProviderManifestCollectionName)
             {
-                var collection = GetCollection<ulong, EtwProviderManifestRecord>(CollectionName);
+                var collection = GetCollection<Guid, EtwProviderManifestRecord>(CollectionName);
                 if (!await collection.CollectionExistsAsync())
                 {
                     throw new InvalidOperationException($"Collection {CollectionName} does not exist");
                 }
                 var options = Options as VectorSearchOptions<EtwProviderManifestRecord>;
-                var searchVector = await EmbeddingService.GenerateEmbeddingAsync(Query);
-                return await collection.VectorizedSearchAsync(searchVector, options, Token) as VectorSearchResults<T>;
+                var results = collection.SearchAsync(Query, Top, options, Token);
+                var records = new List<EtwProviderManifestRecord>();
+                await foreach (var result in results)
+                {
+                    if (!result.Score.HasValue)
+                    {
+                        continue;
+                    }
+                    var score = Math.Round(result.Score.Value * 100);
+                    if (score >= ScoreThreshold)
+                    {
+                        records.Add(result.Record);
+                    }
+                }
+                return records as List<T>;
             }
             throw new InvalidOperationException($"Unknown collection {CollectionName}");
         }
@@ -277,21 +270,21 @@ namespace EtwPilot.Sk.Vector
         {
             if (CollectionName == s_EtwEventCollectionName)
             {
-                var collection = GetCollection<ulong, EtwEventRecord>(CollectionName);
+                var collection = GetCollection<Guid, EtwEventRecord>(CollectionName);
                 if (!await collection.CollectionExistsAsync())
                 {
                     return;
                 }
-                await collection.DeleteCollectionAsync();
+                await collection.EnsureCollectionDeletedAsync();
             }
             else if (CollectionName == s_EtwProviderManifestCollectionName)
             {
-                var collection = GetCollection<ulong, EtwProviderManifestRecord>(CollectionName);
+                var collection = GetCollection<Guid, EtwProviderManifestRecord>(CollectionName);
                 if (!await collection.CollectionExistsAsync())
                 {
                     return;
                 }
-                await collection.DeleteCollectionAsync();
+                await collection.EnsureCollectionDeletedAsync();
             }
             throw new InvalidOperationException($"Unknown collection {CollectionName}");
         }
@@ -299,7 +292,6 @@ namespace EtwPilot.Sk.Vector
         public async Task ImportData(
             string CollectionName,
             dynamic Data,
-            ITextEmbeddingGenerationService EmbeddingService,
             CancellationToken Token,
             ProgressState? Progress = null
             )
@@ -317,7 +309,7 @@ namespace EtwPilot.Sk.Vector
             {
                 if (CollectionName == s_EtwEventCollectionName)
                 {
-                    var collection = GetCollection<ulong, EtwEventRecord>(CollectionName);
+                    var collection = GetCollection<Guid, EtwEventRecord>(CollectionName);
                     if (!await collection.CollectionExistsAsync())
                     {
                         throw new InvalidOperationException($"Collection {CollectionName} does not exist");
@@ -330,14 +322,15 @@ namespace EtwPilot.Sk.Vector
                         }
                         Progress?.UpdateProgressMessage($"Importing vector data (record {recordNumber++} of {Data.Count})...");
                         var evt = item as ParsedEtwEvent;
-                        var record = await EtwEventRecord.CreateFromParsedEtwEvent(evt!, EmbeddingService);
+                        var record = new EtwEventRecord();
+                        record.LoadFromParsedEtwEvent(evt!);
                         await collection.UpsertAsync(record, cancellationToken: Token);
                         Progress?.UpdateProgressValue();
                     }
                 }
                 else if (CollectionName == s_EtwProviderManifestCollectionName)
                 {
-                    var collection = GetCollection<ulong, EtwProviderManifestRecord>(CollectionName);
+                    var collection = GetCollection<Guid, EtwProviderManifestRecord>(CollectionName);
                     if (!await collection.CollectionExistsAsync())
                     {
                         throw new InvalidOperationException($"Collection {CollectionName} does not exist");
@@ -350,8 +343,8 @@ namespace EtwPilot.Sk.Vector
                         }
                         Progress?.UpdateProgressMessage($"Importing vector data (record {recordNumber++} of {Data.Count})...");
                         var manifest = item as ParsedEtwManifest;
-                        var record = await EtwProviderManifestRecord.CreateFromParsedEtwManifest(
-                            manifest!, EmbeddingService);
+                        var record = new EtwProviderManifestRecord();
+                        record.LoadFromParsedEtwManifest(manifest!);
                         await collection.UpsertAsync(record, cancellationToken: Token);
                         Progress?.UpdateProgressValue();
                     }

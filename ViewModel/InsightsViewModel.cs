@@ -31,17 +31,14 @@ using Microsoft.SemanticKernel.ChatCompletion;
 using EtwPilot.Sk.Plugins;
 using EtwPilot.Sk.Vector;
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.SemanticKernel.Embeddings;
 using EtwPilot.InferenceRuntimes;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.AI;
 
 //
 // Remove supression after onnx connector is out of alpha
 //
 #pragma warning disable SKEXP0070
-#pragma warning disable SKEXP0050
-#pragma warning disable SKEXP0001
-#pragma warning disable SKEXP0020
 
 namespace EtwPilot.ViewModel
 {
@@ -189,6 +186,7 @@ namespace EtwPilot.ViewModel
         public AsyncRelayCommand GenerateCommand { get; set; }
         public AsyncRelayCommand<ChatTopic> SetChatTopicCommand { get; set; }
         public AsyncRelayCommand ReinitializeCommand { get; set; }
+        public AsyncRelayCommand RefreshConvoCommand { get; set; }
         #endregion
 
         public ConcurrentObservableCollection<InsightsInferenceResultModel> m_ResultHistory { get; } // displayed in UI
@@ -220,6 +218,8 @@ namespace EtwPilot.ViewModel
                 Command_SetChatTopic, CanExecuteSetChatTopic);
             ReinitializeCommand = new AsyncRelayCommand(
                 Command_Reinitialize, CanExecuteReinitialize);
+            RefreshConvoCommand = new AsyncRelayCommand(
+                Command_RefreshConvo, CanExecuteRefreshConvo);
             m_ChatHistory = new ChatHistory();
             m_ResultHistory = new ConcurrentObservableCollection<InsightsInferenceResultModel>();
             Prompt = string.Empty;
@@ -296,7 +296,7 @@ namespace EtwPilot.ViewModel
                             throw new Exception("Model ID is missing from prompt execution settings");
                         }
                         builder.AddOnnxRuntimeGenAIChatCompletion(modelId, modelPath!);
-                        builder.AddBertOnnxTextEmbeddingGeneration(embeddingsModelPath, embeddingsVocabFile);
+                        builder.AddBertOnnxEmbeddingGenerator(embeddingsModelPath, embeddingsVocabFile);
                     }
                     else if (ollamaRuntimeConfig != null)
                     {
@@ -311,7 +311,7 @@ namespace EtwPilot.ViewModel
                         //
                         var modelId = ollamaRuntimeConfig.ModelName!;                        
                         builder.AddOllamaChatCompletion(modelId, new Uri(ollamaRuntimeConfig.EndpointUri!));
-                        builder.AddOllamaTextEmbeddingGeneration(ollamaRuntimeConfig.TextEmbeddingModelName!,
+                        builder.AddOllamaEmbeddingGenerator(ollamaRuntimeConfig.TextEmbeddingModelName!,
                             new Uri(ollamaRuntimeConfig.EndpointUri!));
                     }
 
@@ -327,11 +327,11 @@ namespace EtwPilot.ViewModel
                         // This is required to setup our vector record representations.
                         //
                         m_Kernel = builder.Build();
-                        var embeddingService = m_Kernel.GetRequiredService<ITextEmbeddingGenerationService>();
+                        var embeddingGenerator = m_Kernel.GetRequiredService<IEmbeddingGenerator<string, Embedding<float>>>();
                         var text = "This is a test sentence.";
-                        var embeddings = await embeddingService.GenerateEmbeddingsAsync(new[] { text });
+                        var embeddings = await embeddingGenerator.GenerateAsync(new[] { text });
                         var embedding = embeddings.First();  // Get the first embedding
-                        int dimensionSize = embedding.Length;  // Number of elements in the vector
+                        int dimensions = embedding.Dimensions;  // Number of elements in the vector
 
                         ProgressState.UpdateProgressMessage(
                             $"Initializing qdrant host {qdrantHostUri} vector db...");
@@ -345,7 +345,7 @@ namespace EtwPilot.ViewModel
                         //
                         // Setup vector db kernel service
                         //
-                        m_VectorDb = new EtwVectorDb(client, qdrantHostUri, dimensionSize);
+                        m_VectorDb = new EtwVectorDb(client, qdrantHostUri, dimensions, m_Kernel);
                         await m_VectorDb.Initialize();
                         builder.Services.AddSingleton(m_VectorDb);
                         //
@@ -367,6 +367,7 @@ namespace EtwPilot.ViewModel
                     m_Kernel.Plugins.AddFromObject(new VectorSearch(m_Kernel), "etwVectorSearch");
                     m_Kernel.Plugins.AddFromObject(new EtwTraceSession(m_Kernel), "etwTraceSession");
                     m_Kernel.Plugins.AddFromObject(new ProcessInfo(), "processInfo");
+                    m_Kernel.Plugins.AddFromObject(new EtwProviderManifests(m_Kernel), "etwManifests");
                     //
                     // Initialize an inference runtime
                     //
@@ -478,8 +479,7 @@ namespace EtwPilot.ViewModel
                     ProgressState.UpdateProgressMessage($"Importing records....");
                     ProgressState.m_CurrentCommand = ImportVectorDbDataFromLiveSessionCommand;
                     ProgressState.CancelCommandButtonVisibility = System.Windows.Visibility.Visible;
-                    var textEmbSvc = m_Kernel.GetRequiredService<ITextEmbeddingGenerationService>();
-                    await m_VectorDb!.ImportData(EtwVectorDb.s_EtwEventCollectionName, Data, textEmbSvc, Token);
+                    await m_VectorDb!.ImportData(m_VectorDb.s_EtwEventCollectionName, Data, Token);
                     ProgressState.FinalizeProgress($"Imported {Data.Count} records.");
                 }
                 catch (OperationCanceledException)
@@ -521,8 +521,7 @@ namespace EtwPilot.ViewModel
                     }
                     ProgressState.UpdateProgressValue();
                     ProgressState.UpdateProgressMessage($"Importing data...");
-                    var textEmbSvc = m_Kernel.GetRequiredService<ITextEmbeddingGenerationService>();
-                    await m_VectorDb!.ImportData(EtwVectorDb.s_EtwProviderManifestCollectionName, data, textEmbSvc, Token);
+                    await m_VectorDb!.ImportData(m_VectorDb.s_EtwProviderManifestCollectionName, data, Token);
                     ProgressState.FinalizeProgress($"Imported {data.Count} records.");
                 }
                 else if (Topic == ChatTopic.EventData)
@@ -538,10 +537,9 @@ namespace EtwPilot.ViewModel
                     // NB: Since etw event data is ephemeral, unlike provider manifests,
                     // we delete and recreate the collection on each import.
                     //
-                    await m_VectorDb!.Erase(EtwVectorDb.s_EtwEventCollectionName, Token);
+                    await m_VectorDb!.Erase(m_VectorDb.s_EtwEventCollectionName, Token);
                     ProgressState.UpdateProgressMessage($"Importing data...");
-                    var textEmbSvc = m_Kernel.GetRequiredService<ITextEmbeddingGenerationService>();
-                    await m_VectorDb!.ImportData(EtwVectorDb.s_EtwEventCollectionName, data, textEmbSvc, Token);
+                    await m_VectorDb!.ImportData(m_VectorDb.s_EtwEventCollectionName, data, Token);
                     ProgressState.FinalizeProgress($"Imported {data.Count} records.");
                 }
                 else
@@ -639,13 +637,13 @@ namespace EtwPilot.ViewModel
                 if (Topic == ChatTopic.Manifests)
                 {
                     recordsAvailableForTopic = await m_VectorDb.GetRecordCount(
-                        EtwVectorDb.s_EtwProviderManifestCollectionName, Token);
+                        m_VectorDb.s_EtwProviderManifestCollectionName, Token);
                     IsManifestDataAvailable = recordsAvailableForTopic > 0;
                 }
                 else if (Topic == ChatTopic.EventData)
                 {
                     recordsAvailableForTopic = await m_VectorDb.GetRecordCount(
-                        EtwVectorDb.s_EtwEventCollectionName, Token);
+                        m_VectorDb.s_EtwEventCollectionName, Token);
                     IsEventDataAvailable = recordsAvailableForTopic > 0;
                 }
             }
@@ -675,12 +673,12 @@ namespace EtwPilot.ViewModel
                 if (Topic == ChatTopic.Manifests)
                 {
                     await m_VectorDb!.RestoreCollection(
-                        EtwVectorDb.s_EtwProviderManifestCollectionName, source, Token);
+                        m_VectorDb.s_EtwProviderManifestCollectionName, source, Token);
                 }
                 else if (Topic == ChatTopic.EventData)
                 {
                     await m_VectorDb!.RestoreCollection(
-                        EtwVectorDb.s_EtwEventCollectionName, source, Token);
+                        m_VectorDb.s_EtwEventCollectionName, source, Token);
                 }
                 else
                 {
@@ -722,12 +720,12 @@ namespace EtwPilot.ViewModel
                 if (Topic == ChatTopic.Manifests)
                 {
                     await m_VectorDb!.SaveCollection(
-                        EtwVectorDb.s_EtwProviderManifestCollectionName, target, Token);
+                        m_VectorDb.s_EtwProviderManifestCollectionName, target, Token);
                 }
                 else if (Topic == ChatTopic.EventData)
                 {
                     await m_VectorDb!.SaveCollection(
-                        EtwVectorDb.s_EtwEventCollectionName, target, Token);
+                        m_VectorDb.s_EtwEventCollectionName, target, Token);
                 }
                 else
                 {
@@ -745,6 +743,13 @@ namespace EtwPilot.ViewModel
         {
             Reset();
             await Initialize();
+        }
+
+        private async Task Command_RefreshConvo()
+        {
+            m_ResultHistory.Clear();
+            m_ChatHistory.Clear();
+            CanExecuteChanged();
         }
 
         private void Reset()
@@ -934,7 +939,7 @@ namespace EtwPilot.ViewModel
                 //
                 return false;
             }
-            return true;
+            return !PropertyHasErrors(nameof(Prompt));
             /*
             if (PropertyHasErrors(nameof(Prompt)))
             {
@@ -991,6 +996,15 @@ namespace EtwPilot.ViewModel
             return !m_ModelBusy;
         }
 
+        private bool CanExecuteRefreshConvo()
+        {
+            if (GlobalStateViewModel.Instance.Settings.HasErrors)
+            {
+                return false;
+            }
+            return !m_ModelBusy && m_ChatHistory.Count > 0;
+        }
+
         private void CanExecuteChanged()
         {
             GenerateCommand.NotifyCanExecuteChanged();
@@ -998,6 +1012,7 @@ namespace EtwPilot.ViewModel
             RestoreVectorDbCollectionCommand.NotifyCanExecuteChanged();
             SaveVectorDbCollectionCommand.NotifyCanExecuteChanged();
             SetChatTopicCommand.NotifyCanExecuteChanged();
+            RefreshConvoCommand.NotifyCanExecuteChanged();
         }
     }
 }

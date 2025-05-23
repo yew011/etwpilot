@@ -28,7 +28,8 @@
                 </DockPanel>
             </DockPanel>
             <TextBox Text="{Binding g_InsightsViewModel.Prompt,Mode=TwoWay,UpdateSourceTrigger=PropertyChanged,ValidatesOnNotifyDataErrors=True}"
-                     Name="PromptTextbox"/>
+                     Name="PromptTextbox"
+                     TextWrapping="Wrap"/>
         </DockPanel>
         <Border BorderBrush="Gainsboro" BorderThickness="1" Margin="2">
             <ScrollViewer CanContentScroll="False" 
