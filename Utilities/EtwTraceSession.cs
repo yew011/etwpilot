@@ -16,21 +16,16 @@ KIND, either express or implied.  See the License for the
 specific language governing permissions and limitations
 under the License.
 */
-using Microsoft.SemanticKernel;
-using System.ComponentModel;
-using System.ComponentModel.DataAnnotations;
 using etwlib;
 using static etwlib.NativeTraceConsumer;
 using static etwlib.NativeTraceControl;
 using System.Diagnostics;
-using EtwPilot.Utilities;
 using System.Runtime.InteropServices;
 using Meziantou.Framework.WPF.Collections;
 using EtwPilot.Sk.Vector;
-using Microsoft.SemanticKernel.Embeddings;
 using EtwPilot.ViewModel;
 
-namespace EtwPilot.Sk.Plugins
+namespace EtwPilot.Utilities
 {
     using static EtwPilot.Utilities.TraceLogger;
 
@@ -85,34 +80,29 @@ namespace EtwPilot.Sk.Plugins
             }
         }
 
-        private readonly Kernel m_Kernel;
-        private static readonly int s_MaxImportRecords = 5;
+        private static readonly int s_MaxImportRecords = 5000;
 
-        public EtwTraceSession(Kernel kernel)
+        public EtwTraceSession()
         {
             _Stopwatch = new Stopwatch();
             Data = new ConcurrentObservableCollection<ParsedEtwEvent>();
             EventsConsumed = 0;
             BytesConsumed = 0;
-            m_Kernel = kernel;
         }
 
-        [KernelFunction("StartTrace")]
-        [Description("Starts an ETW trace session to find ETW events of interest.")]
-        public async Task<string> StartTrace(
-            [Description("The name or GUID of the ETW provider")]
-            [Required()]string Provider,
-            [Description("Length of time to run the trace (between 1 and 60 seconds)")]
-            [Required()]int TraceTimeInSeconds,
-            CancellationToken Token)
+        public async Task<int> RunEtwTraceAsync(
+            List<string> ProviderNamesOrIds,
+            int TraceTimeInSeconds,
+            CancellationToken Token
+            )
         {
-            if (string.IsNullOrEmpty(Provider))
+            if (ProviderNamesOrIds == null || ProviderNamesOrIds.Count == 0)
             {
-                return "Provider is a required parameter";
+                throw new Exception("ProviderNamesOrIds is a required parameter");
             }
             else if (TraceTimeInSeconds <= 0 || TraceTimeInSeconds > 60)
             {
-                return "TraceTimeInSeconds must be between 0 and 60";
+                throw new Exception("TraceTimeInSeconds must be between 0 and 60");
             }
 
             EventsConsumed = 0;
@@ -120,96 +110,30 @@ namespace EtwPilot.Sk.Plugins
             Data.Clear();
             StartTime = DateTime.Now;
 
-            ProgressState? progress = null;
+            var progress = GlobalStateViewModel.Instance.g_InsightsViewModel.ProgressState;
+            progress.UpdateProgressMessage($"The model has started a trace of provider(s) "+
+                $"{string.Join(",", ProviderNamesOrIds)} ({TraceTimeInSeconds}s)");
 
-            if (m_Kernel.Data.TryGetValue("ProgressState", out object? _progress))
-            {
-                progress = _progress as ProgressState;
-            }
-
-            progress?.UpdateProgressMessage($"The model has started a trace of provider {Provider} ({TraceTimeInSeconds}s)");
-
-            //
-            // To-do: When allow model to pass TraceSessionParameters arguments
-            //
             var parameters = new TraceSessionParameters();
             parameters.StopOnTimeSec = TraceTimeInSeconds;
-            parameters.ProviderNamesOrGuids.Add(Provider);
+            parameters.ProviderNamesOrGuids = ProviderNamesOrIds;
 
-            try
-            {
-                await Task.Run(() => ConsumeTraceEvents(parameters, Token));
-            }
-            catch (Exception ex)
-            {
-                return $$"""
-                    {
-                        "status": "failed",
-                        "message": "{{ex.Message}}.",
-                        "next_step": "Retry the operation if you can resolve the error, otherwise ask the user."
-                    }
-                    """;
-            }
-            finally
-            {
-                progress?.UpdateProgressMessage($"Trace has finished.");
-            }
+            await Task.Run(() => ConsumeTraceEvents(parameters, Token));
+            progress.UpdateProgressMessage($"Trace has finished.");
 
             if (Data.Count > 0)
             {
-                //
-                // Import the events into vector db for vector search/RAG
-                //
-                var vectorDb = m_Kernel.GetRequiredService<EtwVectorDb>();
-                var numImported = Math.Min(s_MaxImportRecords, Data.Count);
-                try
-                {
-                    await vectorDb.ImportData(vectorDb.s_EtwEventCollectionName, 
-                        Data.Take(numImported).ToList(),
-                        Token,
-                        progress);
-                }
-                catch (Exception ex)
-                {
-                    Trace(TraceLoggerType.SkPlugin,
-                          TraceEventType.Error,
-                          $"Vector data import failed: {ex.Message}");
-                    //
-                    // Todo: will diagnostic info help the model somehow?
-                    //
-                    return $$"""
-                    {
-                        "status": "failed",
-                        "message": "Unable to import the ETW data into the vector database.",
-                        "next_step": "Do nothing."
-                    }
-                    """;
-                }
-
-                //
-                // Tell the model to use vector search now. It seems like sometimes the model can ignore
-                // this directive, so along with a nudge in the system prompt, we'll include a structured
-                // response here.
-                //
-                return $$"""
-                {
-                    "status": "success",
-                    "message": "The ETW trace for provider {{Provider}} has completed with {{numImported}} results.",
-                    "next_step": "Invoke the tool that allows you to search for ETW events."
-                }
-                """;
+                return 0;
             }
-
             //
-            // Let model decide what to do next
+            // Import the events into vector db for vector search/RAG
             //
-            return $$"""
-                    {
-                        "status": "failed",
-                        "message": "An ETW trace for provider {{Provider}} produced no event data",
-                        "next_step": "Choose another appropriate plugin or ask the user what to do"
-                    }
-                    """;            
+            var kernel = GlobalStateViewModel.Instance.g_InsightsViewModel.m_Kernel;
+            var vectorDb = kernel.GetRequiredService<EtwVectorDbService>();
+            var numImported = Math.Min(s_MaxImportRecords, Data.Count);
+            await vectorDb.ImportDataAsync<ParsedEtwEvent, EtwEventRecord>(
+                Data.Take(numImported).ToList(), Token, progress);
+            return numImported;
         }
 
         private void ConsumeTraceEvents(TraceSessionParameters Parameters, CancellationToken Token)
@@ -358,7 +282,7 @@ namespace EtwPilot.Sk.Plugins
                 }
                 providers.Add(new EnabledProvider(provider.Id,
                         provider.Name!,
-                        (byte)NativeTraceControl.EventTraceLevel.Information,
+                        (byte)EventTraceLevel.Information,
                         0,
                         ulong.MaxValue));
             }

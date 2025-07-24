@@ -16,49 +16,64 @@ KIND, either express or implied.  See the License for the
 specific language governing permissions and limitations
 under the License.
 */
+using EtwPilot.ViewModel;
+using Microsoft.Extensions.AI;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.VectorData;
+using Microsoft.SemanticKernel;
 using Microsoft.SemanticKernel.Connectors.Qdrant;
 using Qdrant.Client;
-using Microsoft.Extensions.VectorData;
 using System.IO;
-using System.Net.Http;
 using System.Net;
-using etwlib;
-using EtwPilot.ViewModel;
-using Microsoft.SemanticKernel;
+using System.Net.Http;
 
 namespace EtwPilot.Sk.Vector
 {
-    internal class EtwVectorDb
+    internal class EtwVectorDbService
     {
         private int m_Dimensions;
-        public readonly string s_EtwProviderManifestCollectionName;
-        public readonly string s_EtwEventCollectionName;
-
-        private QdrantVectorStore m_QdrantStore;
-        private readonly Kernel m_Kernel;
-
+        private string s_EtwProviderManifestCollectionName;
+        private string s_EtwEventCollectionName;
+        private QdrantVectorStore m_QdrantStore;        
         private readonly string m_ClientUri; // needed for HttpClient requests
-        private readonly QdrantClient m_Client;
+        private QdrantClient m_Client;
         public bool m_Initialized { get; set; }
+        private IEmbeddingGenerator<string, Embedding<float>> m_EmbeddingGenerator;
 
-        public EtwVectorDb(QdrantClient Client, string clientUri, int dimensions, Kernel _Kernel)
+        private readonly static int s_GrpcTimeoutSec = 60 * 5; // 5 min
+
+        public EtwVectorDbService(string clientUri)
         {
-            m_QdrantStore = new QdrantVectorStore(Client, false, new() { HasNamedVectors = true });
-            m_Client = Client;
             m_ClientUri = clientUri;
-            m_Dimensions = dimensions;
-            m_Kernel = _Kernel;
+        }
 
+        public async Task InitializeAsync(IKernelBuilder Builder)
+        {
+            var progress = GlobalStateViewModel.Instance.g_InsightsViewModel.ProgressState;
+            //
+            // Create client and test connection to the Qdrant server.
+            //
+            progress.UpdateProgressMessage($"Initializing qdrant host {m_ClientUri} vector db...");
+            m_Client = new QdrantClient(m_ClientUri, grpcTimeout: TimeSpan.FromSeconds(s_GrpcTimeoutSec));
+            var health = await m_Client.HealthAsync();
+            progress.UpdateProgressMessage($"{health.Title} version {health.Version} commit {health.Commit}");
+            m_QdrantStore = new QdrantVectorStore(m_Client, false, new() { HasNamedVectors = true });
+            //
+            // Determine the vector dimension size of the selected embeddings model.
+            // This is required to setup our vector record representations.
+            //
+            var tmpKernel = Builder.Build();
+            m_EmbeddingGenerator = tmpKernel.GetRequiredService<IEmbeddingGenerator<string, Embedding<float>>>();
+            var text = "This is a test sentence.";
+            var embeddings = await m_EmbeddingGenerator.GenerateAsync(new[] { text });
+            var embedding = embeddings.First();  // Get the first embedding
+            m_Dimensions = embedding.Dimensions;  // Number of elements in the vector
             //
             // Collections are named by their vector dimensions, so that the embeddings model
             // chosen by the user will match a collection with those dimensions.
             //
-            s_EtwProviderManifestCollectionName = $"manifests_{dimensions}";
-            s_EtwEventCollectionName = $"events_{dimensions}";
-        }
-
-        public async Task Initialize()
-        {
+            s_EtwProviderManifestCollectionName = $"manifests_{m_Dimensions}";
+            s_EtwEventCollectionName = $"events_{m_Dimensions}";
             //
             // Create collections if needed.
             //
@@ -74,6 +89,7 @@ namespace EtwPilot.Sk.Vector
                 await collection.EnsureCollectionExistsAsync();
             }
             m_Initialized = true;
+            Builder.Services.AddSingleton(this);
         }
 
         public QdrantCollection<TKey, TRecord> GetCollection<TKey, TRecord>(string name)
@@ -89,7 +105,7 @@ namespace EtwPilot.Sk.Vector
                     new()
                     {
                         HasNamedVectors = true,
-                        Definition = EtwProviderManifestRecord.GetRecordDefinition(m_Dimensions, m_Kernel),
+                        Definition = EtwProviderManifestRecord.GetRecordDefinition(m_Dimensions, m_EmbeddingGenerator),
                     }) as QdrantCollection<TKey, TRecord>;
                 return collection!;
             }
@@ -102,26 +118,37 @@ namespace EtwPilot.Sk.Vector
                     new()
                     {
                         HasNamedVectors = true,
-                        Definition = EtwEventRecord.GetRecordDefinition(m_Dimensions, m_Kernel),
+                        Definition = EtwEventRecord.GetRecordDefinition(m_Dimensions, m_EmbeddingGenerator),
                     }) as QdrantCollection<TKey, TRecord>;
                 return collection!;
             }
             throw new NotImplementedException();
         }
 
-        public async Task SaveCollection(string CollectionName, string OutputPath, CancellationToken Token)
+        public string GetCollectionName<T>() where T : class
         {
-            var collection = GetCollection<Guid, EtwEventRecord>(CollectionName);
-            if (!await collection.CollectionExistsAsync())
+            return typeof(T) switch
             {
-                throw new InvalidOperationException($"Collection {CollectionName} does not exist");
+                Type t when t == typeof(EtwEventRecord) => s_EtwEventCollectionName,
+                Type t when t == typeof(EtwProviderManifestRecord) => s_EtwProviderManifestCollectionName,
+                _ => throw new InvalidOperationException($"No collection name defined for type {typeof(T).Name}")
+            };
+        }
+
+        public async Task SaveCollectionAsync<T>(string OutputPath, CancellationToken Token) where T: class
+        {
+            var collectionName = GetCollectionName<T>();
+            var collection = GetCollection<Guid, T>(collectionName);
+            if (!await collection.CollectionExistsAsync(Token))
+            {
+                throw new InvalidOperationException($"Collection {collectionName} does not exist");
             }
 
             //
             // Generate the snapshot on the qdrant node's local storage
             //
             var snapshotName = "";
-            var result = await m_Client.CreateSnapshotAsync(CollectionName);
+            var result = await m_Client.CreateSnapshotAsync(collectionName);
             if (string.IsNullOrEmpty(result.Name))
             {
                 throw new Exception("The returned snapshot name is empty");
@@ -137,10 +164,10 @@ namespace EtwPilot.Sk.Vector
             using (var httpClient = new HttpClient())
             {
                 httpClient.BaseAddress = new Uri(@$"http://{m_ClientUri}:6333");
-                var uri = $"collections/{CollectionName}/snapshots/" +
+                var uri = $"collections/{collectionName}/snapshots/" +
                         $"{snapshotName}";
                 var request = new HttpRequestMessage(HttpMethod.Get, uri);
-                var response = await httpClient.SendAsync(request, HttpCompletionOption.ResponseContentRead).ConfigureAwait(false);
+                var response = await httpClient.SendAsync(request, HttpCompletionOption.ResponseHeadersRead).ConfigureAwait(false);
                 if (response.StatusCode != HttpStatusCode.OK)
                 {
                     throw new Exception($"HTTP status code is {response.StatusCode}");
@@ -152,8 +179,10 @@ namespace EtwPilot.Sk.Vector
             }
         }
 
-        public async Task RestoreCollection(string CollectionName, string InputPath, CancellationToken Token)
+        public async Task RestoreCollectionAsync<T>(string InputPath, CancellationToken Token) where T: class
         {
+            var collectionName = GetCollectionName<T>();
+            var collection = GetCollection<Guid, T>(collectionName);            
             //
             // TODO: Hopefully either SK (via http api) or qdrant-dotnet (via grpc) will
             // add the ability to actually upload the snapshots for restore.. ?!
@@ -161,7 +190,7 @@ namespace EtwPilot.Sk.Vector
             using (var httpClient = new HttpClient())
             {
                 httpClient.BaseAddress = new Uri($@"http://{m_ClientUri}:6333");
-                var uri = $"collections/{CollectionName}/snapshots/" +
+                var uri = $"collections/{collectionName}/snapshots/" +
                     $"upload?priority=snapshot"; // priority overrides local data
                 var snapshotData = File.ReadAllBytes(InputPath);
                 var content = new MultipartFormDataContent()
@@ -176,125 +205,173 @@ namespace EtwPilot.Sk.Vector
             }
         }
 
-        public async Task<ulong> GetRecordCount(string CollectionName, CancellationToken Token)
+        public async Task<ulong> GetRecordCountAsync<T>(
+            CancellationToken Token
+            ) where T: class
         {
-            if (CollectionName == s_EtwEventCollectionName)
+            var collectionName = GetCollectionName<T>();
+            var collection = GetCollection<Guid, T>(collectionName);
+            if (!await collection.CollectionExistsAsync(Token))
             {
-                var collection = GetCollection<Guid, EtwEventRecord>(CollectionName);
-                if (!await collection.CollectionExistsAsync())
-                {
-                    return 0;
-                }
+                throw new InvalidOperationException($"Collection {collectionName} does not exist");
             }
-            else if (CollectionName == s_EtwProviderManifestCollectionName)
-            {
-                var collection = GetCollection<Guid, EtwProviderManifestRecord>(CollectionName);
-                if (!await collection.CollectionExistsAsync())
-                {
-                    return 0;
-                }
-            }
-            else
-            {
-                throw new InvalidOperationException($"Unknown collection {CollectionName}");
-            }
-            return await m_Client.CountAsync(CollectionName);
+
+            //
+            // Oddly, SK's QdrantCollection does not have a CountAsync method, so we'll use the
+            // qdrant client directly.
+            //
+            return await m_Client.CountAsync(collectionName);
         }
 
-        public async Task<List<T>?> Search<T>(
-            string CollectionName,
+        public async Task<List<T>?> GetAsync<T>(
+            CancellationToken Token,
+            int Top = -1
+            ) where T: class
+        {
+            var collectionName = GetCollectionName<T>();
+            var collection = GetCollection<Guid, T>(collectionName);
+            if (!await collection.CollectionExistsAsync(Token))
+            {
+                throw new InvalidOperationException($"Collection {collectionName} does not exist");
+            }
+
+            int top = Top;
+            if (top <= 0)
+            {
+                var max = await GetRecordCountAsync<T>(Token);
+                if (max == 0)
+                {
+                    return null;
+                }
+                top = (int)max;
+            }
+            int batchSize = 1000;
+            if (top < batchSize)
+            {
+                batchSize = top;
+            }
+
+            //
+            // Qdrant is not well suited for keyword searches, it's built for vector searches.
+            // SK's qdrant connector has a Search and HybridSearch, both of which require a vector
+            // or a search value that is translated to a vector via embeddings.
+            // So if we just want to "Get" some records we can:
+            //   1. Call Collection.GetAsync with a filter that always returns true.
+            //      SK has extremely poor support for converting a linq expression to a qdrant
+            //      filter - in fact, I can't even get it to work. GetAsync requires a filter.
+            //   2. Call ScrollAsync using Qdrant client directly and page through the results.
+            //      We have no convenient way to map returned qdrant point data to our internal
+            //      record types - SK does this for us with record mappers, but they're all private.
+            //   3. Call Collection.SearchAsync with a "neutral vector" that essentially is a no-op.
+            // #3 is the only viable option at this time.
+            //
+            var neutralVector = new float[m_Dimensions];
+            var searchOptions = new VectorSearchOptions<T>
+            {
+                Skip = 0,  // Starting offset
+            };
+
+            bool hasMoreRecords = true;
+            var records = new List<T>();
+            var retrieved = 0;
+            while (hasMoreRecords)
+            {
+                var results = collection.SearchAsync(
+                    searchValue: new ReadOnlyMemory<float>(neutralVector),
+                    top: top,
+                    options: searchOptions
+                );
+                retrieved = 0;
+                await foreach (var record in results)
+                {
+                    records.Add(record.Record);
+                    retrieved++;
+                }
+                searchOptions.Skip += retrieved;
+                hasMoreRecords = retrieved == top;
+            }
+            return records;
+        }
+
+        public async Task<List<T>?> SearchAsync<T>(
             string Query,
             int Top,
             int ScoreThreshold,  // 0 - 100
             VectorSearchOptions<T> Options,
             CancellationToken Token
-            )
+            ) where T : class
         {
-            var top = Top;
-            if (top < 0)
+            var collectionName = GetCollectionName<T>();
+            var collection = GetCollection<Guid, T>(collectionName);
+            if (!await collection.CollectionExistsAsync())
             {
-                top = 100000; // something large...
+                throw new InvalidOperationException($"Collection {collectionName} does not exist");
             }
-            if (CollectionName == s_EtwEventCollectionName)
+            var results = collection.SearchAsync(Query, Top, Options, Token);
+            var records = new List<T>();
+            await foreach (var result in results)
             {
-                var collection = GetCollection<Guid, EtwEventRecord>(CollectionName);
-                if (!await collection.CollectionExistsAsync())
+                if (!result.Score.HasValue)
                 {
-                    throw new InvalidOperationException($"Collection {CollectionName} does not exist");
+                    continue;
                 }
-                var options = Options as VectorSearchOptions<EtwEventRecord>;
-                var results = collection.SearchAsync(Query, Top, options, Token);
-                var records = new List<EtwEventRecord>();
-                await foreach (var result in results)
+                var score = Math.Round(result.Score.Value * 100);
+                if (score >= ScoreThreshold)
                 {
-                    if (!result.Score.HasValue)
-                    {
-                        continue;
-                    }
-                    var score = Math.Round(result.Score.Value * 100);
-                    if (score >= ScoreThreshold)
-                    {
-                        records.Add(result.Record);
-                    }
+                    records.Add(result.Record);
                 }
-                return records as List<T>;
             }
-            else if (CollectionName == s_EtwProviderManifestCollectionName)
-            {
-                var collection = GetCollection<Guid, EtwProviderManifestRecord>(CollectionName);
-                if (!await collection.CollectionExistsAsync())
-                {
-                    throw new InvalidOperationException($"Collection {CollectionName} does not exist");
-                }
-                var options = Options as VectorSearchOptions<EtwProviderManifestRecord>;
-                var results = collection.SearchAsync(Query, Top, options, Token);
-                var records = new List<EtwProviderManifestRecord>();
-                await foreach (var result in results)
-                {
-                    if (!result.Score.HasValue)
-                    {
-                        continue;
-                    }
-                    var score = Math.Round(result.Score.Value * 100);
-                    if (score >= ScoreThreshold)
-                    {
-                        records.Add(result.Record);
-                    }
-                }
-                return records as List<T>;
-            }
-            throw new InvalidOperationException($"Unknown collection {CollectionName}");
+            return records;
         }
 
-        public async Task Erase(string CollectionName, CancellationToken Token)
+        public async Task<List<T>?> HybridSearchAsync<T>(
+            string VectorSearchValue,
+            List<string> Keywords,
+            int Top,
+            int ScoreThreshold,  // 0 - 100
+            HybridSearchOptions<T> Options,
+            CancellationToken Token
+            ) where T : class
         {
-            if (CollectionName == s_EtwEventCollectionName)
+            var collectionName = GetCollectionName<T>();
+            var collection = GetCollection<Guid, T>(collectionName);
+            if (!await collection.CollectionExistsAsync())
             {
-                var collection = GetCollection<Guid, EtwEventRecord>(CollectionName);
-                if (!await collection.CollectionExistsAsync())
-                {
-                    return;
-                }
-                await collection.EnsureCollectionDeletedAsync();
+                throw new InvalidOperationException($"Collection {collectionName} does not exist");
             }
-            else if (CollectionName == s_EtwProviderManifestCollectionName)
+            var results = collection.HybridSearchAsync(VectorSearchValue, Keywords, Top, Options, Token);
+            var records = new List<T>();
+            await foreach (var result in results)
             {
-                var collection = GetCollection<Guid, EtwProviderManifestRecord>(CollectionName);
-                if (!await collection.CollectionExistsAsync())
+                if (!result.Score.HasValue)
                 {
-                    return;
+                    continue;
                 }
-                await collection.EnsureCollectionDeletedAsync();
+                var score = Math.Round(result.Score.Value * 100);
+                if (score >= ScoreThreshold)
+                {
+                    records.Add(result.Record);
+                }
             }
-            throw new InvalidOperationException($"Unknown collection {CollectionName}");
+            return records;
         }
 
-        public async Task ImportData(
-            string CollectionName,
-            dynamic Data,
+        public async Task EraseAsync<T>(CancellationToken Token) where T: class
+        {
+            var collectionName = GetCollectionName<T>();
+            var collection = GetCollection<Guid, T>(collectionName);
+            if (!await collection.CollectionExistsAsync())
+            {
+                return;
+            }
+            await collection.EnsureCollectionDeletedAsync();
+        }
+
+        public async Task ImportDataAsync<T, U>(
+            List<T> Data,   // eg, T = ParsedEtwEvent, U = EtwEventRecord
             CancellationToken Token,
             ProgressState? Progress = null
-            )
+            ) where T : class where U : class, IEtwRecord<T>
         {
             var oldProgressValue = Progress?.ProgressValue;
             var oldProgressMax = Progress?.ProgressMax;
@@ -305,53 +382,26 @@ namespace EtwPilot.Sk.Vector
             }
             var recordNumber = 1;
 
+            var collectionName = GetCollectionName<U>();
+            var collection = GetCollection<Guid, U>(collectionName);
+            if (!await collection.CollectionExistsAsync())
+            {
+                throw new InvalidOperationException($"Collection {collectionName} does not exist");
+            }
+
             try
             {
-                if (CollectionName == s_EtwEventCollectionName)
+                foreach (var item in Data)
                 {
-                    var collection = GetCollection<Guid, EtwEventRecord>(CollectionName);
-                    if (!await collection.CollectionExistsAsync())
+                    if (Token.IsCancellationRequested)
                     {
-                        throw new InvalidOperationException($"Collection {CollectionName} does not exist");
+                        throw new OperationCanceledException();
                     }
-                    foreach (var item in Data)
-                    {
-                        if (Token.IsCancellationRequested)
-                        {
-                            throw new OperationCanceledException();
-                        }
-                        Progress?.UpdateProgressMessage($"Importing vector data (record {recordNumber++} of {Data.Count})...");
-                        var evt = item as ParsedEtwEvent;
-                        var record = new EtwEventRecord();
-                        record.LoadFromParsedEtwEvent(evt!);
-                        await collection.UpsertAsync(record, cancellationToken: Token);
-                        Progress?.UpdateProgressValue();
-                    }
-                }
-                else if (CollectionName == s_EtwProviderManifestCollectionName)
-                {
-                    var collection = GetCollection<Guid, EtwProviderManifestRecord>(CollectionName);
-                    if (!await collection.CollectionExistsAsync())
-                    {
-                        throw new InvalidOperationException($"Collection {CollectionName} does not exist");
-                    }
-                    foreach (var item in Data)
-                    {
-                        if (Token.IsCancellationRequested)
-                        {
-                            throw new OperationCanceledException();
-                        }
-                        Progress?.UpdateProgressMessage($"Importing vector data (record {recordNumber++} of {Data.Count})...");
-                        var manifest = item as ParsedEtwManifest;
-                        var record = new EtwProviderManifestRecord();
-                        record.LoadFromParsedEtwManifest(manifest!);
-                        await collection.UpsertAsync(record, cancellationToken: Token);
-                        Progress?.UpdateProgressValue();
-                    }
-                }
-                else
-                {
-                    throw new InvalidOperationException($"Unknown collection {CollectionName}");
+                    Progress?.UpdateProgressMessage($"Importing vector data (record {recordNumber++} of {Data.Count})...");
+                    var record = U.Create<U>();
+                    record.Build(item);
+                    await collection.UpsertAsync(record, cancellationToken: Token);
+                    Progress?.UpdateProgressValue();
                 }
             }
             finally

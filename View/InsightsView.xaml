@@ -31,7 +31,7 @@
                      Name="PromptTextbox"
                      TextWrapping="Wrap"/>
         </DockPanel>
-        <Border BorderBrush="Gainsboro" BorderThickness="1" Margin="2">
+        <Border BorderBrush="Gainsboro" BorderThickness="0" Margin="0">
             <ScrollViewer CanContentScroll="False" 
                           Utilities:AutoScrollBehavior.AutoScroll="True" 
                           HorizontalScrollBarVisibility="Disabled" >
@@ -40,10 +40,10 @@
                               ScrollViewer.VerticalScrollBarVisibility="Disabled">
                     <ItemsControl.ItemTemplate>
                         <DataTemplate>
-                            <Border BorderBrush="Gainsboro" BorderThickness="1" Margin="2">
+                            <Border BorderThickness="0" Margin="0">
                                 <DockPanel>
                                     <DockPanel DockPanel.Dock="Left" Margin="10">
-                                        <Border BorderBrush="Gainsboro" BorderThickness="1" Margin="2" VerticalAlignment="Top">
+                                        <Border BorderThickness="0" Margin="0" VerticalAlignment="Top">
                                             <Image Width="60" Height="60" RenderOptions.BitmapScalingMode="Fant">
                                                 <Image.Style>
                                                     <Style TargetType="{x:Type Image}">
@@ -78,7 +78,7 @@
                                         <TextBlock Text="{Binding Timestamp}" HorizontalAlignment="Right" Margin="0,0,4,2" />
                                     </DockPanel>
                                     <DockPanel Margin="5">
-                                        <TextBox Text="{Binding Content}" TextWrapping="Wrap" Style="{x:Null}" BorderThickness="0" IsReadOnly="True" />
+                                        <TextBox Text="{Binding Content}" TextWrapping="Wrap" Style="{x:Null}" BorderThickness="0" IsReadOnly="True" Background="Transparent" VerticalAlignment="Center"/>
                                     </DockPanel>
                                 </DockPanel>
                             </Border>

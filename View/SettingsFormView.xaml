@@ -93,23 +93,8 @@
                                             Click="BrowseOnnxModelPathButton_Click">Browse...</Button>
                                 </StackPanel>
                                 <StackPanel Orientation="Horizontal" Margin="5">
-                                    <StackPanel Orientation="Vertical">
-                                        <Label Width="150">Runtime config file:</Label>
-                                        <TextBlock Margin="5,0,0,0">
-                                            <Hyperlink NavigateUri="https://onnxruntime.ai/docs/genai/reference/config.html" RequestNavigate="Hyperlink_RequestNavigate">Documentation
-                                        </Hyperlink>
-                                        </TextBlock>
-                                    </StackPanel>
-                                    <TextBox Name="OnnxRuntimeConfigFileTextbox"
-                                             Width="350"
-                                             VerticalAlignment="Top"
-                                             Validation.ErrorTemplate="{StaticResource ErrorTemplateBelow}"
-                                             Text="{Binding OnnxGenAIConfig.RuntimeConfigFile, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged,ValidatesOnNotifyDataErrors=True}" />
-                                    <Button Name="BrowseOnnxRuntimeConfigFileButton"
-                                            Click="BrowseOnnxRuntimeConfigFileButton_Click"
-                                            VerticalAlignment="Top"
-                                            >Browse...</Button>
-                                </StackPanel>
+                                    <StackPanel Orientation="Vertical"/>
+                                            </StackPanel>
                                 <StackPanel Orientation="Horizontal" Margin="5">
                                     <StackPanel Orientation="Vertical">
                                         <Label Width="150">BERT model path:</Label>
@@ -184,31 +169,8 @@
                                          IsEnabled="{Binding OllamaConfig.IsEndpointValid}"
                                          Validation.ErrorTemplate="{StaticResource ErrorTemplateRight}"/>
                                 </StackPanel>
-                                <StackPanel Orientation="Horizontal" Margin="5,10,5,10">
-                                    <Label Width="150">Runtime config file:</Label>
-                                    <TextBox Name="OllamaRuntimeConfigFileTextbox"
-                                             Width="350"
-                                             IsEnabled="{Binding OllamaConfig.IsEndpointValid}"
-                                             Validation.ErrorTemplate="{StaticResource ErrorTemplateBelow}"
-                                             Text="{Binding OllamaConfig.RuntimeConfigFile, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged,ValidatesOnNotifyDataErrors=True}" />
-                                    <Button Name="BrowseOllamaRuntimeConfigFileButton"
-                                            Click="BrowseOllamaRuntimeConfigFileButton_Click"
-                                            IsEnabled="{Binding OllamaConfig.IsEndpointValid}"
-                                            Margin="5,0,0,0"
-                                            >Browse...</Button>
-                                    <Button Name="CreateOllamaRuntimeConfigFileButton"
-                                        Click="CreateOllamaRuntimeConfigFileButton_Click"
-                                        IsEnabled="{Binding OllamaConfig.IsEndpointValid}"
-                                        Margin="5,0,0,0"
-                                        >Create...</Button>
-                                </StackPanel>
-                                <StackPanel Orientation="Horizontal" Margin="5,0,0,0">
-                                    <TextBlock Margin="5">
-                                    <Hyperlink NavigateUri="https://github.com/ollama/ollama/blob/main/docs/modelfile.md#valid-parameters-and-values" RequestNavigate="Hyperlink_RequestNavigate">Documentation
-                                    </Hyperlink>
-                                    </TextBlock>
-                                </StackPanel>
-                            </StackPanel>
+                                            <StackPanel Orientation="Horizontal" Margin="5,0,0,0"/>
+                                        </StackPanel>
                             </Expander>
                             <StackPanel Margin="0">
                                 <Label Name="InsightTabStatusMessage"
@@ -230,6 +192,47 @@
                                      Validation.ErrorTemplate="{StaticResource ErrorTemplateRight}"
                                      Text="{Binding QdrantHostUri, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged,ValidatesOnNotifyDataErrors=True}" />
                             </StackPanel>
+                            </AdornerDecorator>
+                        </TabItem>
+                        <TabItem Header="Prompt settings">
+                            <AdornerDecorator>
+                                <StackPanel Orientation="Vertical" Margin="10">
+                                    <StackPanel Orientation="Horizontal" Margin="5">
+                                        <TextBlock TextWrapping="Wrap" Text="Context Window Size (Max Tokens):" 
+                                                   Width="180"
+                                                   Margin="5,0,0,0"
+                                                   HorizontalAlignment="Right"/>
+                                        <TextBox Width="45"
+                                                 Margin="-5,0,0,0"
+                                                 VerticalAlignment="Top"
+                                                 Text="{Binding PromptExecutionSettingsDto.MaxTokens, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged, ValidatesOnNotifyDataErrors=True}" />
+                                    </StackPanel>
+                                    <StackPanel Orientation="Horizontal" Margin="5">
+                                        <Label Width="180">Max Output Tokens:</Label>
+                                        <TextBox Width="45"
+                                                 VerticalAlignment="Top"
+                                                 Text="{Binding PromptExecutionSettingsDto.NumPredict, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged, ValidatesOnNotifyDataErrors=True}"/>
+                                    </StackPanel>
+                                    <StackPanel Orientation="Horizontal" Margin="5">
+                                        <Label Width="180">Temperature:</Label>
+                                        <TextBox Width="45"
+                                                 VerticalAlignment="Top"
+                                                 Text="{Binding PromptExecutionSettingsDto.Temperature, Mode=TwoWay, UpdateSourceTrigger=LostFocus, ValidatesOnNotifyDataErrors=True}" />
+                                    </StackPanel>
+                                    <StackPanel Orientation="Horizontal" Margin="5">
+                                        <Label Width="180">Top_P:</Label>
+                                        <TextBox Width="45"
+                                                 VerticalAlignment="Top"
+                                                 Text="{Binding PromptExecutionSettingsDto.TopP, Mode=TwoWay, UpdateSourceTrigger=LostFocus, ValidatesOnNotifyDataErrors=True}" />
+                                    </StackPanel>
+                                    <StackPanel Orientation="Horizontal" Margin="5">
+                                        <CheckBox Name="ShowModelReasoningCheckbox" 
+                                                  Margin="5"
+                                                  Padding="5"
+                                                  IsChecked="{Binding PromptExecutionSettingsDto.ShowReasoning, Mode=TwoWay,ValidatesOnNotifyDataErrors=True}"/>
+                                        <Label VerticalAlignment="Top">Show model reasoning output in responses</Label>
+                                    </StackPanel>
+                                </StackPanel>
                             </AdornerDecorator>
                         </TabItem>
                     </TabControl>

@@ -46,6 +46,7 @@ namespace EtwPilot.Utilities
             new TraceSource("SymbolResolver", SourceLevels.Verbose),
             new TraceSource("AsyncFormatter", SourceLevels.Verbose),
             new TraceSource("SkPlugin", SourceLevels.Verbose),
+            new TraceSource("Agents", SourceLevels.Verbose),
         };
 
         public enum TraceLoggerType
@@ -62,6 +63,7 @@ namespace EtwPilot.Utilities
             SymbolResolver,
             AsyncFormatter,
             SkPlugin,
+            Agents,
             Max
         }
 

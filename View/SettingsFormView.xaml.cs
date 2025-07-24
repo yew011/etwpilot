@@ -21,8 +21,6 @@ using EtwPilot.ViewModel;
 using Microsoft.Win32;
 using System.Diagnostics;
 using System.Windows;
-using System.IO;
-using EtwPilot.Model;
 
 namespace EtwPilot.View
 {
@@ -92,23 +90,6 @@ namespace EtwPilot.View
             OnnxModelPathTextbox.Text = browser.FolderName;
         }
 
-        private void BrowseOnnxRuntimeConfigFileButton_Click(object sender, RoutedEventArgs e)
-        {
-            var browser = new OpenFileDialog();
-            browser.Title = "Select a JSON config file";
-            browser.Filter = "JSON files (*.json)|*.json";
-            if (!string.IsNullOrEmpty(OnnxModelPathTextbox.Text))
-            {
-                browser.RootDirectory = OnnxModelPathTextbox.Text;
-            }
-            var result = browser.ShowDialog();
-            if (!result.HasValue || !result.Value)
-            {
-                return;
-            }
-            OnnxRuntimeConfigFileTextbox.Text = browser.FileName;
-        }
-
         private void BrowseBertModelPathButton_Click(object sender, RoutedEventArgs e)
         {
             var browser = new OpenFolderDialog();
@@ -174,65 +155,6 @@ namespace EtwPilot.View
                 return;
             }
             ollama.CancelNewModelDownload();
-        }
-
-        private void BrowseOllamaRuntimeConfigFileButton_Click(object sender, RoutedEventArgs e)
-        {
-            var vm = DataContext as SettingsFormViewModel;
-            if (vm == null || vm.OllamaConfig == null)
-            {
-                Debug.Assert(false);
-                return;
-            }
-
-            var modelFolder = vm.OllamaConfig.GetModelFileLocation();
-            var browser = new OpenFileDialog();
-            browser.Title = "Select a config file";
-            browser.Filter = "JSON files (*.json)|*.json";
-            if (!string.IsNullOrEmpty(modelFolder) && Directory.Exists(modelFolder))
-            {
-                browser.InitialDirectory = modelFolder;
-            }
-            var result = browser.ShowDialog();
-            if (!result.HasValue || !result.Value)
-            {
-                return;
-            }
-            OllamaRuntimeConfigFileTextbox.Text = browser.FileName;
-        }
-
-        private void CreateOllamaRuntimeConfigFileButton_Click(object sender, RoutedEventArgs e)
-        {
-            var vm = DataContext as SettingsFormViewModel;
-            if (vm == null)
-            {
-                Debug.Assert(false);
-                return;
-            }
-            var ollama = vm.OllamaConfig;
-            if (ollama == null)
-            {
-                Debug.Assert(false);
-                return;
-            }
-            var saveFileDialog = new SaveFileDialog
-            {
-                Title = "Choose a location to save model runtime config file",
-                Filter = "JSON files (*.json)|*.json",
-                DefaultExt = "json",
-            };
-            var modelFolder = OllamaRuntimeConfigFileTextbox.Tag as string;
-            if (!string.IsNullOrEmpty(modelFolder) && Directory.Exists(modelFolder))
-            {
-                saveFileDialog.InitialDirectory = modelFolder;
-            }
-            if (saveFileDialog.ShowDialog() == true)
-            {
-                string filePath = saveFileDialog.FileName;
-                File.WriteAllText(filePath, OllamaConfigModel.s_DefaultRuntimeConfigJson);
-                ollama.RuntimeConfigFile = filePath;
-                Process.Start(new ProcessStartInfo(filePath) { UseShellExecute = true });
-            }
         }
 
         private void runtimeOllamaRadioButton_Checked(object sender, RoutedEventArgs e)

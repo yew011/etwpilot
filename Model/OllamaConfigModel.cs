@@ -44,43 +44,6 @@ namespace EtwPilot.Model
 
     public class OllamaConfigModel : NotifyPropertyAndErrorInfoBase
     {
-        #region default runtime config options
-        //
-        // See https://github.com/ollama/ollama/blob/main/docs/api.md
-        //
-        public static readonly string s_DefaultRuntimeConfigJson = @"
-        {
-            ""num_keep"": 5,
-            ""seed"": 42,
-            ""num_predict"": 100,
-            ""top_k"": 20,
-            ""top_p"": 0.9,
-            ""min_p"": 0.0,
-            ""typical_p"": 0.7,
-            ""repeat_last_n"": 33,
-            ""temperature"": 0.8,
-            ""repeat_penalty"": 1.2,
-            ""presence_penalty"": 1.5,
-            ""frequency_penalty"": 1.0,
-            ""mirostat"": 1,
-            ""mirostat_tau"": 0.8,
-            ""mirostat_eta"": 0.6,
-            ""penalize_newline"": true,
-            ""stop"": [""\n"", ""user:""],
-            ""numa"": false,
-            ""num_ctx"": 1024,
-            ""num_batch"": 2,
-            ""num_gpu"": 1,
-            ""main_gpu"": 0,
-            ""low_vram"": false,
-            ""vocab_only"": false,
-            ""use_mmap"": true,
-            ""use_mlock"": false,
-            ""num_thread"": 8
-        }";
-
-        #endregion
-
         #region observable properties
 
         private string? _EndpointUri;
@@ -136,18 +99,6 @@ namespace EtwPilot.Model
             }
         }
 
-        private string? _RuntimeConfigFile;
-        public string? RuntimeConfigFile
-        {
-            get => _RuntimeConfigFile;
-            set
-            {
-                _RuntimeConfigFile = value;
-                ValidateRuntimeConfigFile();
-                OnPropertyChanged(nameof(RuntimeConfigFile));
-            }
-        }
-
         [JsonIgnore] // UI Only
         private Visibility _CancelModelDownloadButtonVisibility;
         public Visibility CancelModelDownloadButtonVisibility
@@ -162,7 +113,6 @@ namespace EtwPilot.Model
 
         #endregion
 
-        [JsonIgnore] // recomputed on each load
         public OllamaPromptExecutionSettings? PromptExecutionSettings { get; set; }
 
         [JsonIgnore] // only used by UI
@@ -189,7 +139,6 @@ namespace EtwPilot.Model
             IsEndpointValid = false;
             ModelName = null;
             TextEmbeddingModelName = null;
-            RuntimeConfigFile = null;
 
             //
             // Add a PropertyChanged listener for Endpoint URI, because it must be validated
@@ -235,7 +184,6 @@ namespace EtwPilot.Model
                 //
                 ValidateModelName();
                 ValidateTextEmbeddingModelName();
-                ValidateRuntimeConfigFile();
                 ValidationCompleteEvent.Set();
             };
         }
@@ -448,7 +396,6 @@ namespace EtwPilot.Model
             if (string.IsNullOrEmpty(ModelName) || !ModelNames.Contains(ModelName) || !ModelInfo.ContainsKey(ModelName))
             {
                 AddError(nameof(ModelName), "Model name is invalid");
-                RuntimeConfigFile = null;
                 return;
             }
 
@@ -456,7 +403,6 @@ namespace EtwPilot.Model
                 ModelInfo[ModelName].ShowModelResponse.Modelfile)))
             {
                 AddError(nameof(ModelName), "Model file not found");
-                RuntimeConfigFile = null;
                 return;
             }
         }
@@ -475,31 +421,6 @@ namespace EtwPilot.Model
             {
                 AddError(nameof(TextEmbeddingModelName), "Text embedding model file not found");
                 return;
-            }
-        }
-
-        private void ValidateRuntimeConfigFile()
-        {
-            ClearErrors(nameof(RuntimeConfigFile));
-            if (string.IsNullOrEmpty(RuntimeConfigFile) || !File.Exists(RuntimeConfigFile))
-            {
-                AddError(nameof(RuntimeConfigFile), "Runtime config file is invalid");
-                PromptExecutionSettings = null;
-            }
-            else
-            {
-                try
-                {
-                    var json = File.ReadAllText(RuntimeConfigFile);
-                    PromptExecutionSettings = JsonConvert.DeserializeObject<OllamaPromptExecutionSettings>(json);
-                }
-                catch (Exception ex)
-                {
-                    AddError(nameof(RuntimeConfigFile), "Failed to deserialize runtime config file");
-                    Trace(TraceLoggerType.Settings,
-                          TraceEventType.Error,
-                          $"Exception occurred when deserializing {RuntimeConfigFile} into OllamaPromptExecutionSettings: {ex.Message}");
-                }
             }
         }
 
@@ -553,7 +474,6 @@ namespace EtwPilot.Model
             ModelNames.Clear();
             ModelName = null;
             TextEmbeddingModelName = null;
-            RuntimeConfigFile = null;
             IsEndpointValid = false;
             GlobalStateViewModel.Instance.Settings.OperationInProgressMessage = "";
             GlobalStateViewModel.Instance.Settings.OperationInProgressVisibility = Visibility.Hidden;

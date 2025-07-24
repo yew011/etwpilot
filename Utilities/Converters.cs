@@ -25,7 +25,6 @@ using etwlib;
 namespace EtwPilot.Utilities.Converters
 {
     using StopCondition = ViewModel.LiveSessionViewModel.StopCondition;
-    using ChatTopic = ViewModel.InsightsViewModel.ChatTopic;
 
     public class HasErrorConverter : IMultiValueConverter
     {
@@ -189,47 +188,6 @@ namespace EtwPilot.Utilities.Converters
             if (!Enum.TryParse(typeof(StopCondition), str, true, out var parsedValue))
             {
                 return StopCondition.None;
-            }
-            return parsedValue;
-        }
-    }
-
-    public class ChatTopicToBool : IValueConverter
-    {
-        public object Convert(object value, Type targetType, object parameter, System.Globalization.CultureInfo culture)
-        {
-            if (value == null || parameter == null)
-            {
-                return false;
-            }
-            var str = parameter as string;
-            if (str == null)
-            {
-                return ChatTopic.Invalid;
-            }
-            if (!Enum.TryParse(typeof(ChatTopic), str, true, out var parsedValue))
-            {
-                return ChatTopic.Invalid;
-            }
-            var val = (ChatTopic)value;
-            return val.Equals(parsedValue);
-        }
-
-        public object ConvertBack(object value, Type targetType, object parameter, System.Globalization.CultureInfo culture)
-        {
-            var val = (bool)value;
-            if (!val)
-            {
-                return Binding.DoNothing;
-            }
-            var str = parameter as string;
-            if (str == null)
-            {
-                return ChatTopic.Invalid;
-            }
-            if (!Enum.TryParse(typeof(ChatTopic), str, true, out var parsedValue))
-            {
-                return ChatTopic.Invalid;
             }
             return parsedValue;
         }

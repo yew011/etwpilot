@@ -16,22 +16,13 @@ KIND, either express or implied.  See the License for the
 specific language governing permissions and limitations
 under the License.
 */
-using System.Diagnostics;
 using System.IO;
 using Microsoft.SemanticKernel.Connectors.Onnx;
 using EtwPilot.Utilities;
 using Newtonsoft.Json;
-using EtwPilot.ViewModel;
-
-//
-// Remove supression after onnx connector is out of alpha
-//
-#pragma warning disable SKEXP0070
 
 namespace EtwPilot.Model
 {
-    using static EtwPilot.Utilities.TraceLogger;
-
     public class OnnxGenAIConfigModel : NotifyPropertyAndErrorInfoBase
     {
         #region observable properties
@@ -59,11 +50,6 @@ namespace EtwPilot.Model
                     {
                         OnPropertyChanged("ModelPath");
                     }
-                }
-                else
-                {
-                    OnPropertyChanged("ModelPath");
-                    RuntimeConfigFile = null;
                 }
             }
         }
@@ -94,43 +80,6 @@ namespace EtwPilot.Model
                 else
                 {
                     OnPropertyChanged("BertModelPath");
-                }
-            }
-        }
-
-        private string? _RuntimeConfigFile;
-        public string? RuntimeConfigFile {
-            get => _RuntimeConfigFile;
-            set
-            {
-                _RuntimeConfigFile = value;
-                if (!string.IsNullOrEmpty(value))
-                {
-                    ClearErrors(nameof(RuntimeConfigFile));
-                    if (!ValidateRuntimeConfigFile())
-                    {
-                        AddError(nameof(RuntimeConfigFile), "Runtime config file is invalid");
-                    }
-                    else
-                    {
-                        try
-                        {
-                            PromptExecutionSettings = JsonConvert.DeserializeObject<OnnxRuntimeGenAIPromptExecutionSettings>(value);
-                            OnPropertyChanged("RuntimeConfigFile");
-                        }
-                        catch (Exception ex)
-                        {
-                            AddError(nameof(RuntimeConfigFile), "Failed to deserialize runtime config file");
-                            Trace(TraceLoggerType.Settings,
-                                  TraceEventType.Error,
-                                  $"Exception occurred when deserializing {RuntimeConfigFile} into OnnxRuntimeGenAIPromptExecutionSettings: {ex.Message}");
-                        }
-                    }
-                }
-                else
-                {
-                    OnPropertyChanged("RuntimeConfigFile");
-                    PromptExecutionSettings = null;
                 }
             }
         }
@@ -174,11 +123,6 @@ namespace EtwPilot.Model
                 return false;
             }
             return true;
-        }
-
-        private bool ValidateRuntimeConfigFile()
-        {
-            return (!string.IsNullOrEmpty(RuntimeConfigFile) && File.Exists(RuntimeConfigFile));
         }
 
         private bool ValidateBertPath()

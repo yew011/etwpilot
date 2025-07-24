@@ -15,6 +15,8 @@
                     Icon="{DynamicResource logo}"
                     DataContext="{Binding Source={x:Static vm:GlobalStateViewModel.Instance}}"
                     Height="900" Width="1500"
+                    d:DesignHeight="1280"
+                    d:DesignWidth="1920"
                     Loaded="MainRibbonWindow_Loaded">
     <!-- Use the interactions feature to redirect some UI events to commands -->
     <behaviours:Interaction.Triggers>
@@ -59,6 +61,22 @@
         <DataTemplate DataType="{x:Type vm:InsightsViewModel}">
             <ContentControl Content="{StaticResource StaticInsightsView}" />
         </DataTemplate>
+        <!-- Style for Group Header in Drop-down buttons -->
+        <Style x:Key="DropDownListGroupHeaderStyle" TargetType="{x:Type Fluent:MenuItem}">
+            <Setter Property="IsEnabled" Value="False"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="{x:Type Fluent:MenuItem}">
+                        <Border Background="#F5F5F5" Padding="5" Margin="0,5,0,2">
+                            <TextBlock Text="{TemplateBinding Header}" 
+                                      FontWeight="Bold" 
+                                      FontSize="14" 
+                                      Foreground="#333333"/>
+                        </Border>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
     </Fluent:RibbonWindow.Resources>
     <Grid>
     <DockPanel>
@@ -232,66 +250,72 @@
                                    Icon="{DynamicResource refresh-convo}"
                                    Command="{Binding g_InsightsViewModel.RefreshConvoCommand,ValidatesOnNotifyDataErrors=False}"/>
                 </Fluent:RibbonGroupBox>
-                <Fluent:RibbonGroupBox Header="Topic" 
-                                       Width="Auto"
-                                       Height="Auto"
-                                       VerticalAlignment="Top">
-                    <Fluent:ToggleButton Header="General"
-                        Name="GeneralToggleButton"
-                        Icon="{DynamicResource user-avatar}"
-                        GroupName="TopicGroup"
-                        IsChecked="{Binding g_InsightsViewModel.Topic,Converter={StaticResource ChatTopicToBool}, ConverterParameter=General,ValidatesOnNotifyDataErrors=False}"
-                        Command="{Binding g_InsightsViewModel.SetChatTopicCommand,ValidatesOnNotifyDataErrors=False}"
-                        CommandParameter="{x:Static vm:InsightsViewModel+ChatTopic.General}"/>
-                    <Fluent:ToggleButton Header="Manifests"
-                        Name="ManifestsToggleButton"
-                        Icon="{DynamicResource provdb}"
-                        GroupName="TopicGroup"
-                        IsChecked="{Binding g_InsightsViewModel.Topic,Converter={StaticResource ChatTopicToBool}, ConverterParameter=Manifests,ValidatesOnNotifyDataErrors=False}"
-                        Command="{Binding g_InsightsViewModel.SetChatTopicCommand,ValidatesOnNotifyDataErrors=False}"
-                        CommandParameter="{x:Static vm:InsightsViewModel+ChatTopic.Manifests}"/>
-                    <Fluent:ToggleButton Header="Data"
-                        Name="DataToggleButton"
-                        Icon="{DynamicResource datadb}"
-                        GroupName="TopicGroup"
-                        IsChecked="{Binding g_InsightsViewModel.Topic,Converter={StaticResource ChatTopicToBool}, ConverterParameter=EventData,ValidatesOnNotifyDataErrors=False}"
-                        Command="{Binding g_InsightsViewModel.SetChatTopicCommand,ValidatesOnNotifyDataErrors=False}"
-                        CommandParameter="{x:Static vm:InsightsViewModel+ChatTopic.EventData}"/>
-                </Fluent:RibbonGroupBox>
                 <Fluent:RibbonGroupBox Header="Model Input" 
                                        Width="Auto"
                                        Height="Auto"
                                        VerticalAlignment="Top">
-                    <Fluent:DropDownButton Header="Import"
-                        Width="Auto"
-                        Icon="{DynamicResource plus}"
-                        IsEnabled="{Binding g_InsightsViewModel.VecDbCommandsAllowed,ValidatesOnNotifyDataErrors=False}">
-                        <Fluent:Button
+                    <Fluent:DropDownButton Header="Import" Width="Auto" Icon="{DynamicResource plus}">
+                        <Fluent:MenuItem Header="Provider Manifests" Style="{StaticResource DropDownListGroupHeaderStyle}" />
+                        <Fluent:MenuItem
                             Header="From XML file..."
                             Width="Auto"
-                            Command="{Binding g_InsightsViewModel.ImportVectorDbDataCommand,ValidatesOnNotifyDataErrors=False}"
+                            Margin="0"
+                            HorizontalAlignment="Left"
+                            Command="{Binding g_InsightsViewModel.ImportManifestsVectorDbDataCommand,ValidatesOnNotifyDataErrors=False}"
                             CommandParameter="{x:Static vm:InsightsViewModel+DataSource.XMLFile}"/>
-                        <Fluent:Button
+                        <Fluent:MenuItem
                             Header="From JSON file..."
                             Width="Auto"
-                            Command="{Binding g_InsightsViewModel.ImportVectorDbDataCommand,ValidatesOnNotifyDataErrors=False}"
+                            Command="{Binding g_InsightsViewModel.ImportManifestsVectorDbDataCommand,ValidatesOnNotifyDataErrors=False}"
                             CommandParameter="{x:Static vm:InsightsViewModel+DataSource.JSONFile}"/>
-                        <Fluent:Button
+                        <Fluent:MenuItem
                             Header="Live..."
                             Width="Auto"
-                            Command="{Binding g_InsightsViewModel.ImportVectorDbDataCommand,ValidatesOnNotifyDataErrors=False}"
+                            Command="{Binding g_InsightsViewModel.ImportManifestsVectorDbDataCommand,ValidatesOnNotifyDataErrors=False}"
                             CommandParameter="{x:Static vm:InsightsViewModel+DataSource.Live}"/>
+                        <Fluent:MenuItem
+                            Header="From collection snapshot..."
+                            Width="Auto"
+                            Command="{Binding g_InsightsViewModel.ImportManifestsVectorDbDataCommand,ValidatesOnNotifyDataErrors=False}"
+                            CommandParameter="{x:Static vm:InsightsViewModel+DataSource.CollectionSnapshot}"/>
+                        <Fluent:MenuItem Header="ETW events" Style="{StaticResource DropDownListGroupHeaderStyle}" />
+                        <Fluent:MenuItem
+                            Header="From XML file..."
+                            Width="Auto"
+                            Margin="0"
+                            HorizontalAlignment="Left"
+                            Command="{Binding g_InsightsViewModel.ImportEtwEventsVectorDbDataCommand,ValidatesOnNotifyDataErrors=False}"
+                            CommandParameter="{x:Static vm:InsightsViewModel+DataSource.XMLFile}"/>
+                        <Fluent:MenuItem
+                            Header="From JSON file..."
+                            Width="Auto"
+                            Command="{Binding g_InsightsViewModel.ImportEtwEventsVectorDbDataCommand,ValidatesOnNotifyDataErrors=False}"
+                            CommandParameter="{x:Static vm:InsightsViewModel+DataSource.JSONFile}"/>
+                        <Fluent:MenuItem
+                            Header="Live..."
+                            Width="Auto"
+                            Command="{Binding g_InsightsViewModel.ImportEtwEventsVectorDbDataCommand,ValidatesOnNotifyDataErrors=False}"
+                            CommandParameter="{x:Static vm:InsightsViewModel+DataSource.Live}"/>
+                        <Fluent:MenuItem
+                            Header="From collection snapshot..."
+                            Width="Auto"
+                            Command="{Binding g_InsightsViewModel.ImportEtwEventsVectorDbDataCommand,ValidatesOnNotifyDataErrors=False}"
+                            CommandParameter="{x:Static vm:InsightsViewModel+DataSource.CollectionSnapshot}"/>
                     </Fluent:DropDownButton>
-                    <Fluent:Button
-                        Header="Restore"
-                        Width="Auto"
-                        Icon="{DynamicResource open}"
-                        Command="{Binding g_InsightsViewModel.RestoreVectorDbCollectionCommand,ValidatesOnNotifyDataErrors=False}"/>
-                    <Fluent:Button
-                        Header="Save"
-                        Width="Auto"
-                        Icon="{DynamicResource diskette}"
-                        Command="{Binding g_InsightsViewModel.SaveVectorDbCollectionCommand,ValidatesOnNotifyDataErrors=False}"/>
+                    <Fluent:DropDownButton Header="Export" Width="Auto" Icon="{DynamicResource diskette}">
+                        <Fluent:MenuItem
+                            Header="Provider manifests collection snapshot"
+                            Width="Auto"
+                            Margin="0"
+                            HorizontalAlignment="Left"
+                            Command="{Binding g_InsightsViewModel.ExportManifestsVectorDbCommand,ValidatesOnNotifyDataErrors=False}"/>
+                        <Fluent:MenuItem
+                            Header="Etw events collection snapshot"
+                            Width="Auto"
+                            Margin="0"
+                            HorizontalAlignment="Left"
+                            Command="{Binding g_InsightsViewModel.ExportEtwEventsVectorDbCommand,ValidatesOnNotifyDataErrors=False}"/>
+                        </Fluent:DropDownButton>
                 </Fluent:RibbonGroupBox>
             </Fluent:RibbonTabItem>
 

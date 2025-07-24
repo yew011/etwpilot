@@ -19,12 +19,11 @@ under the License.
 using etwlib;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.VectorData;
-using Microsoft.SemanticKernel;
 using Newtonsoft.Json;
 
 namespace EtwPilot.Sk.Vector
 {
-    internal class EtwEventRecord
+    internal class EtwEventRecord : IEtwRecord<ParsedEtwEvent>
     {
         public Guid Id { get; set; }
         public string ProviderName { get; set; }
@@ -45,10 +44,16 @@ namespace EtwPilot.Sk.Vector
             Id = Guid.NewGuid();
         }
 
-        public static VectorStoreCollectionDefinition GetRecordDefinition(int Dimensions, Kernel _Kernel)
+        public static TRecord Create<TRecord>() where TRecord : class, IEtwRecord<ParsedEtwEvent>
         {
-            var embeddingGenerator = _Kernel.GetRequiredService<IEmbeddingGenerator<string, Embedding<float>>>();
+            return new EtwEventRecord() as TRecord ?? throw new InvalidOperationException("Failed to create EtwEventRecord");
+        }
 
+        public static VectorStoreCollectionDefinition GetRecordDefinition(
+            int Dimensions,
+            IEmbeddingGenerator<string, Embedding<float>> EmbeddingGenerator
+            )
+        {
             return new VectorStoreCollectionDefinition()
             {
                 Properties = new List<VectorStoreProperty>
@@ -68,22 +73,22 @@ namespace EtwPilot.Sk.Vector
                     new VectorStoreVectorProperty("Embedding", typeof(string), Dimensions) {
                         IndexKind = IndexKind.Hnsw,
                         DistanceFunction = DistanceFunction.CosineSimilarity,
-                        EmbeddingGenerator = embeddingGenerator
+                        EmbeddingGenerator = EmbeddingGenerator
                     },
                 }
             };
         }
 
-        public void LoadFromParsedEtwEvent(ParsedEtwEvent Event)
+        public void Build(ParsedEtwEvent Event)
         {
-            ProviderName = Event.Provider.Name;
+            ProviderName = Event.Provider.Name!;
             ProviderId = Event.Provider.Id.ToString();
             EventId = Event.EventId;
             EventVersion = Event.Version;
             ProcessId = (int)Event.ProcessId;
             ProcessStartKey = Event.ProcessStartKey;
             ThreadId = (int)Event.ThreadId;
-            UserSid = Event.UserSid;
+            UserSid = Event.UserSid!;
             ActivityId = Event.ActivityId.ToString();
             Timestamp = Event.Timestamp.ToString();
             EventJson = JsonConvert.SerializeObject(Event);

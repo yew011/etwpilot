@@ -252,6 +252,21 @@ namespace EtwPilot.ViewModel
             }
         }
 
+        [JsonIgnore]
+        private PromptExecutionSettingsDto _promptExecutionSettingsDto;
+        public PromptExecutionSettingsDto PromptExecutionSettingsDto
+        {
+            get => _promptExecutionSettingsDto;
+            set
+            {
+                if (_promptExecutionSettingsDto != value)
+                {
+                    _promptExecutionSettingsDto = value;
+                    OnPropertyChanged("PromptExecutionSettingsDto");
+                }
+            }
+        }
+
         private OnnxGenAIConfigModel? _OnnxGenAIConfig;
         public OnnxGenAIConfigModel? OnnxGenAIConfig
         {
@@ -420,6 +435,7 @@ namespace EtwPilot.ViewModel
             TraceLevelEtwlib = SourceLevels.Critical;
             TraceLevelSymbolresolver = SourceLevels.Critical;
             Valid = true;
+            PromptExecutionSettingsDto = new PromptExecutionSettingsDto();
 
             ErrorsChanged += (object? sender, DataErrorsChangedEventArgs e) =>
             {
@@ -667,6 +683,17 @@ namespace EtwPilot.ViewModel
             string json;
             try
             {
+                //
+                // Transfer DTO settings to OllamaConfig and OnnxGenAIConfig
+                //
+                if (OllamaConfig != null)
+                {
+                    OllamaConfig.PromptExecutionSettings = PromptExecutionSettingsDto.ToOllama();
+                }
+                if (OnnxGenAIConfig != null)
+                {
+                    OnnxGenAIConfig.PromptExecutionSettings = PromptExecutionSettingsDto.ToOnnx();
+                }
                 var settings = new JsonSerializerSettings
                 {
                     ReferenceLoopHandling = ReferenceLoopHandling.Ignore,
@@ -698,6 +725,11 @@ namespace EtwPilot.ViewModel
                 //
                 if (settings.OnnxGenAIConfig != null)
                 {
+                    if (settings.OnnxGenAIConfig.PromptExecutionSettings != null)
+                    {
+                        settings.PromptExecutionSettingsDto =
+                            PromptExecutionSettingsDto.FromOnnx(settings.OnnxGenAIConfig.PromptExecutionSettings);
+                    }
                     settings.OnnxGenAIConfig.PropertyChanged += (obj, p) =>
                     {
                         if (!settings.ChangedProperties.Contains(p.PropertyName!))
@@ -708,6 +740,11 @@ namespace EtwPilot.ViewModel
                 }
                 if (settings.OllamaConfig != null)
                 {
+                    if (settings.OllamaConfig.PromptExecutionSettings != null)
+                    {
+                        settings.PromptExecutionSettingsDto =
+                            PromptExecutionSettingsDto.FromOllama(settings.OllamaConfig.PromptExecutionSettings);
+                    }
                     settings.OllamaConfig.PropertyChanged += (obj, p) =>
                     {
                         if (!settings.ChangedProperties.Contains(p.PropertyName!))

@@ -66,7 +66,6 @@
         <converters:NullableBoolConverter x:Key="NullableBoolConverter"/>
         <converters:ParsedEtwManifestEventToString x:Key="ParsedEtwManifestEventToString"/>
         <converters:InverseBooleanConverter x:Key="InverseBooleanConverter"/>
-        <converters:ChatTopicToBool x:Key="ChatTopicToBool"/>
         <converters:MultiValueBooleanConverterOR x:Key="MultiValueBooleanConverterOR"/>
         <converters:StringNullOrEmptyToVisibilityConverter x:Key="StringNullOrEmptyToVisibilityConverter"/>
         <converters:NotNullToBooleanConverter x:Key="NotNullToBooleanConverter"/>
