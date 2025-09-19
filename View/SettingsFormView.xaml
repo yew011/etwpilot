@@ -5,6 +5,7 @@
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              xmlns:vm="clr-namespace:EtwPilot.ViewModel"
              xmlns:view="clr-namespace:EtwPilot.View"
+             xmlns:model="clr-namespace:EtwPilot.Model"
              xmlns:Fluent="urn:fluent-ribbon"
              xmlns:controls="clr-namespace:EtwPilot.Controls"
              mc:Ignorable="d"
@@ -229,8 +230,19 @@
                                         <CheckBox Name="ShowModelReasoningCheckbox" 
                                                   Margin="5"
                                                   Padding="5"
-                                                  IsChecked="{Binding PromptExecutionSettingsDto.ShowReasoning, Mode=TwoWay,ValidatesOnNotifyDataErrors=True}"/>
+                                                  IsChecked="{Binding PromptExecutionSettingsDto.ShowReasoning, Mode=TwoWay,ValidatesOnNotifyDataErrors=True}"
+                                                  IsEnabled="{Binding ., Converter={StaticResource ModelNamePrefixToEnabledConverter}}"
+          />
                                         <Label VerticalAlignment="Top">Show model reasoning output in responses</Label>
+                                    </StackPanel>
+                                    <StackPanel Orientation="Horizontal" Margin="5">
+                                        <Label Width="180">Reasoning level:</Label>
+                                        <ComboBox Name="ReasoningLevel"
+                                                  HorizontalAlignment="Left"
+                                                  ItemsSource="{Binding PromptExecutionSettingsDto.s_ReasoningEfforts}"
+                                                  Width="120"
+                                                  SelectedItem="{Binding PromptExecutionSettingsDto.ReasoningEffort,Mode=TwoWay,ValidatesOnNotifyDataErrors=True}"
+                                                  IsEnabled="{Binding ., Converter={StaticResource ModelNamePrefixToEnabledConverter}}"                 Validation.ErrorTemplate="{StaticResource ErrorTemplateRight}"/>
                                     </StackPanel>
                                 </StackPanel>
                             </AdornerDecorator>

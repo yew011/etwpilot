@@ -21,6 +21,8 @@ using System.Globalization;
 using System.Windows;
 using System.Windows.Data;
 using etwlib;
+using EtwPilot.Model;
+using EtwPilot.ViewModel;
 
 namespace EtwPilot.Utilities.Converters
 {
@@ -345,5 +347,36 @@ namespace EtwPilot.Utilities.Converters
         {
             return this;
         }
+    }
+
+    public class InsightsTabVisibilityConverter : IValueConverter
+    {
+        public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
+        {
+            // Insights tab index is 2
+            if (value is int idx && idx == 2)
+                return Visibility.Visible;
+            return Visibility.Collapsed;
+        }
+
+        public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)
+            => throw new NotImplementedException();
+    }
+
+    public class ModelNamePrefixToEnabledConverter : IValueConverter
+    {
+        public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
+        {
+            var vm = value as SettingsFormViewModel;
+            if (vm == null)
+                return false;
+            string? modelName = vm.OllamaConfig?.ModelName ?? vm.OnnxGenAIConfig?.ModelPath;
+            if (string.IsNullOrEmpty(modelName))
+                return false;
+            return PromptExecutionSettingsDto.ModelSupportsThink(modelName);
+        }
+
+        public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)
+            => throw new NotImplementedException();
     }
 }

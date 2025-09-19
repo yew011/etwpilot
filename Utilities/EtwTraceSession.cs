@@ -17,13 +17,15 @@ specific language governing permissions and limitations
 under the License.
 */
 using etwlib;
-using static etwlib.NativeTraceConsumer;
-using static etwlib.NativeTraceControl;
-using System.Diagnostics;
-using System.Runtime.InteropServices;
-using Meziantou.Framework.WPF.Collections;
 using EtwPilot.Sk.Vector;
 using EtwPilot.ViewModel;
+using Meziantou.Framework.WPF.Collections;
+using Newtonsoft.Json.Linq;
+using OllamaSharp.Models.Chat;
+using System.Diagnostics;
+using System.Runtime.InteropServices;
+using static etwlib.NativeTraceConsumer;
+using static etwlib.NativeTraceControl;
 
 namespace EtwPilot.Utilities
 {
@@ -33,20 +35,17 @@ namespace EtwPilot.Utilities
     {
         public int StopOnSizeMb { get; set; }
         public int StopOnTimeSec { get; set; }
-        public List<string> ProviderNamesOrGuids { get; set; }
+        public Dictionary<string, Dictionary<int, int>> TargetProviderInfo { get; set; }
         public List<int> TargetProcessIds { get; set; }
         public List<string> TargetProcessNames { get; set; }
-
-        public List<int> EventIds { get; set; }
 
         public TraceSessionParameters()
         {
             StopOnSizeMb = 0;
             StopOnTimeSec = 0;
-            ProviderNamesOrGuids = new List<string>();
+            TargetProviderInfo = new Dictionary<string, Dictionary<int, int>>();
             TargetProcessIds = new List<int>();
             TargetProcessNames = new List<string>();
-            EventIds = new List<int>();
         }
 
     }
@@ -81,6 +80,8 @@ namespace EtwPilot.Utilities
         }
 
         private static readonly int s_MaxImportRecords = 5000;
+        private static readonly int s_SessionTimeoutSec = 60;
+        private readonly object _checkStopConditionLock = new();
 
         public EtwTraceSession()
         {
@@ -91,14 +92,16 @@ namespace EtwPilot.Utilities
         }
 
         public async Task<int> RunEtwTraceAsync(
-            List<string> ProviderNamesOrIds,
+            Dictionary<string, Dictionary<int, int>> TargetProviderInfo,
+            List<string> ProcessNames,
+            List<int> ProcessIds,
             int TraceTimeInSeconds,
             CancellationToken Token
             )
         {
-            if (ProviderNamesOrIds == null || ProviderNamesOrIds.Count == 0)
+            if (TargetProviderInfo == null || TargetProviderInfo.Count == 0)
             {
-                throw new Exception("ProviderNamesOrIds is a required parameter");
+                throw new Exception("RunEtwTraceAsync: Invalid parameters");
             }
             else if (TraceTimeInSeconds <= 0 || TraceTimeInSeconds > 60)
             {
@@ -111,17 +114,20 @@ namespace EtwPilot.Utilities
             StartTime = DateTime.Now;
 
             var progress = GlobalStateViewModel.Instance.g_InsightsViewModel.ProgressState;
-            progress.UpdateProgressMessage($"The model has started a trace of provider(s) "+
-                $"{string.Join(",", ProviderNamesOrIds)} ({TraceTimeInSeconds}s)");
-
-            var parameters = new TraceSessionParameters();
-            parameters.StopOnTimeSec = TraceTimeInSeconds;
-            parameters.ProviderNamesOrGuids = ProviderNamesOrIds;
-
+            using var progressContext = progress.CreateProgressContext(2,
+                $"The model has started a trace with duration ({TraceTimeInSeconds}s)");
+            var parameters = new TraceSessionParameters()
+            {
+                StopOnTimeSec = TraceTimeInSeconds,
+                TargetProviderInfo = TargetProviderInfo,
+                TargetProcessIds = ProcessIds,
+                TargetProcessNames = ProcessNames
+            };
+            progress.UpdateProgressValue();
             await Task.Run(() => ConsumeTraceEvents(parameters, Token));
             progress.UpdateProgressMessage($"Trace has finished.");
 
-            if (Data.Count > 0)
+            if (Data.Count <= 0)
             {
                 return 0;
             }
@@ -133,6 +139,7 @@ namespace EtwPilot.Utilities
             var numImported = Math.Min(s_MaxImportRecords, Data.Count);
             await vectorDb.ImportDataAsync<ParsedEtwEvent, EtwEventRecord>(
                 Data.Take(numImported).ToList(), Token, progress);
+            progress.UpdateProgressValue();
             return numImported;
         }
 
@@ -141,6 +148,7 @@ namespace EtwPilot.Utilities
             ValidateParameters(Parameters);
             var providers = GetEnabledProviders(Parameters);
             var randomTraceName = $"etwpilot-chat-trace-{Guid.NewGuid()}";
+            System.Threading.Timer? watchdog = null;
 
             using (var session = new RealTimeTrace(randomTraceName))
             {
@@ -156,6 +164,18 @@ namespace EtwPilot.Utilities
 
                         session.Start();
                         _Stopwatch.Start();
+
+                        //
+                        // Watchdog timer handles stopping the trace session as needed:
+                        //  - if a stop condition is met (size or time)
+                        //  - if the cancellation token is triggered
+                        //  - if no events have been consumed within a reasonable timeframe
+                        // The timer fires every second to account for cancellation token.
+                        //
+                        watchdog = new System.Threading.Timer(_ =>
+                        {
+                            CheckStopCondition(session, Parameters, Token);
+                        }, null, 1000, 1000);
 
                         //
                         // Begin consuming events. This is a blocking call.
@@ -193,16 +213,26 @@ namespace EtwPilot.Utilities
                                 return;
                             }
 
+                            //
+                            // Post-filter on event version now, if necessary.
+                            //
+                            if (!string.IsNullOrEmpty(parsedEvent.Provider.Name) &&
+                                Parameters.TargetProviderInfo.TryGetValue(parsedEvent.Provider.Name, out var eventInfo))
+                            {
+                                if (eventInfo.TryGetValue(parsedEvent.EventId, out var version))
+                                {
+                                    if (parsedEvent.Version != version)
+                                    {
+                                        // version mismatch
+                                        return;
+                                    }
+                                }
+                            }
                             Data.Add(parsedEvent);
                             EventsConsumed++;
                         }),
                         new BufferCallback((LogFile) =>
                         {
-                            if (Token.IsCancellationRequested)
-                            {
-                                return 0;
-                            }
-
                             var logfile = new EVENT_TRACE_LOGFILE();
                             try
                             {
@@ -215,19 +245,7 @@ namespace EtwPilot.Utilities
                                       TraceEventType.Error,
                                       $"Unable to cast EVENT_TRACE_LOGFILE: {ex.Message}");
                             }
-
                             BytesConsumed += logfile.Filled;
-                            var mbConsumed = Math.Round((double)BytesConsumed / 1000000, 2);
-                            var elapsedSec = (int)Math.Floor((decimal)_Stopwatch.ElapsedMilliseconds / 1000);
-
-                            if (Parameters.StopOnSizeMb > 0 && mbConsumed > Parameters.StopOnSizeMb)
-                            {
-                                return 0;
-                            }
-                            else if (Parameters.StopOnTimeSec > 0 && elapsedSec > Parameters.StopOnTimeSec)
-                            {
-                                return 0;
-                            }
                             return 1;
                         }));
                     }
@@ -238,6 +256,10 @@ namespace EtwPilot.Utilities
                               $"An exception occurred when consuming events: {ex.Message}");
                         throw;
                     }
+                    finally
+                    {
+                        watchdog?.Dispose();
+                    }
                 }
 
                 _Stopwatch.Stop();
@@ -246,10 +268,11 @@ namespace EtwPilot.Utilities
 
         private void ValidateParameters(TraceSessionParameters Parameters)
         {
-            if (Parameters.ProviderNamesOrGuids.Count == 0)
+            if (Parameters.TargetProviderInfo.Count == 0)
             {
                 throw new Exception("At least one provider must be added to TraceSessionParameters");
             }
+
             if (Parameters.StopOnSizeMb == 0 && Parameters.StopOnTimeSec == 0)
             {
                 throw new Exception("A non-zero stop condition of event data size (in megabytes) or" +
@@ -263,28 +286,32 @@ namespace EtwPilot.Utilities
             // Gather info about each provider to be enabled in the trace.
             //
             var providers = new List<EnabledProvider>();
-            foreach (var entry in Parameters.ProviderNamesOrGuids)
+            foreach (var kvp in Parameters.TargetProviderInfo)
             {
-                ParsedEtwProvider? provider;
-                if (!Guid.TryParse(entry, out Guid id))
-                {
-                    provider = ProviderParser.GetProvider(entry);
-
-                }
-                else
-                {
-                    provider = ProviderParser.GetProvider(new Guid(entry));
-                }
-
+                var providerName = kvp.Key;
+                var eventInfo = kvp.Value;
+                var provider = ProviderParser.GetProvider(providerName);
                 if (provider == default)
                 {
-                    throw new Exception($"Unable to locate a provider named {entry}");
+                    throw new Exception($"Unable to locate a provider with name {providerName}");
                 }
-                providers.Add(new EnabledProvider(provider.Id,
+                
+                var enabledProvider = new EnabledProvider(provider.Id,
                         provider.Name!,
                         (byte)EventTraceLevel.Information,
                         0,
-                        ulong.MaxValue));
+                        ulong.MaxValue);
+                //
+                // Set an attribute filter now.
+                //
+                // Note: advapi API does not natively support filtered by event ID and version,
+                // only event ID. We'll apply the version filter later.
+                //
+                if (eventInfo.Keys.Count > 0)
+                {
+                    enabledProvider.SetEventIdsFilter(eventInfo.Keys.ToList(), true);
+                }
+                providers.Add(enabledProvider);
             }
 
             //
@@ -306,16 +333,69 @@ namespace EtwPilot.Utilities
                     var str = EtwHelper.GetEtwStringList(Parameters.TargetProcessNames);
                     provider.SetFilteredExeName(str);
                 }
-                //
-                // Attribute filter
-                //
-                if (Parameters.EventIds.Count > 0)
-                {
-                    provider.SetEventIdsFilter(Parameters.EventIds, true);
-                }
             }
 
             return providers;
+        }
+
+        private void CheckStopCondition(RealTimeTrace Session, TraceSessionParameters Parameters, CancellationToken Token)
+        {
+            if (!System.Threading.Monitor.TryEnter(_checkStopConditionLock))
+            {
+                // Another thread is already running this method, bail
+                return;
+            }
+
+            try
+            {
+                //
+                // Always stop the session if cancellation is requested.
+                //
+                if (Token.IsCancellationRequested)
+                {
+                    Trace(TraceLoggerType.InsightsLiveSession,
+                          TraceEventType.Information,
+                          $"Cancellation requested. Stopping trace session.");
+                    Session.Stop();
+                    return;
+                }
+
+                //
+                // Always stop the session if no events have been consumed within the watchdog timeout period.
+                //
+                var elapsedSec = (int)Math.Floor((decimal)_Stopwatch.ElapsedMilliseconds / 1000);
+                if (EventsConsumed == 0 && elapsedSec > s_SessionTimeoutSec)
+                {
+                    Trace(TraceLoggerType.InsightsLiveSession,
+                          TraceEventType.Warning,
+                          $"No events have been consumed within {s_SessionTimeoutSec} seconds. Stopping trace session.");
+                    Session.Stop();
+                    return;
+                }
+
+                //
+                // Check the user-defined stop conditions now.
+                //
+                if (Parameters.StopOnTimeSec > 0 && elapsedSec > Parameters.StopOnTimeSec)
+                {
+                    Session.Stop();
+                    return;
+                }
+                var mbConsumed = Math.Round((double)BytesConsumed / 1000000, 2);
+                if (Parameters.StopOnSizeMb > 0 && mbConsumed > Parameters.StopOnSizeMb)
+                {
+                    Session.Stop();
+                    return;
+                }
+            }
+            catch
+            {
+                // swallow
+            }
+            finally
+            {
+                System.Threading.Monitor.Exit(_checkStopConditionLock);
+            }
         }
     }
 }

@@ -20,6 +20,7 @@ using CommunityToolkit.Mvvm.Input;
 using System.Diagnostics;
 using System.Windows;
 using System.Windows.Controls;
+using EtwPilot.Utilities;
 
 namespace EtwPilot.ViewModel
 {

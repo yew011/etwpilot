@@ -136,6 +136,7 @@ namespace EtwPilot.ViewModel
         private bool StopTaskRunning;
         private TraceSession _TraceSession;
         private Timer _ElapsedSecTimer;
+        private ProgressContext _Context;
 
         //
         // Per-provider trace data, accessed from arbitrary thread ctx.
@@ -173,16 +174,18 @@ namespace EtwPilot.ViewModel
             Tabs = new ObservableCollection<TabItem>();
 
             //
-            // Setup progress bar.
+            // Setup progress tracking.
             //
             if (Configuration.StopCondition == StopCondition.None)
             {
-                ProgressState.InitializeProgress(100); // arbitrary
+                _Context = ProgressState.CreateProgressContext(100, $"Live session running...");
                 ProgressState.ProgressValue = 50;
             }
             else
             {
-                ProgressState.InitializeProgress(Configuration.StopConditionValue);
+                _Context = ProgressState.CreateProgressContext(
+                    Configuration.StopConditionValue,
+                    $"Live session running until {Configuration.StopCondition} {Configuration.StopConditionValue}");
             }
 
             //

@@ -28,8 +28,6 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.SemanticKernel;
 using Microsoft.SemanticKernel.ChatCompletion;
-using Newtonsoft.Json.Linq;
-using System.Collections.Generic;
 using System.ComponentModel;
 using System.Diagnostics;
 using System.Text;
@@ -37,7 +35,6 @@ using System.Text;
 namespace EtwPilot.ViewModel
 {
     using static EtwPilot.Utilities.TraceLogger;
-    using static System.Runtime.InteropServices.JavaScript.JSType;
 
     public class InsightsViewModel : ViewModelBase
     {
@@ -145,13 +142,13 @@ namespace EtwPilot.ViewModel
         public override async Task ViewModelActivated()
         {
             GlobalStateViewModel.Instance.CurrentViewModel = this;
-            if (!Initialized && CanExecuteReinitialize())
+            if (!Initialized && ReinitializeCommand.CanExecute(null))
             {
-                await GlobalStateViewModel.Instance.g_InsightsViewModel.Initialize();
+                await ReinitializeCommand.ExecuteAsync(null);
             }
         }
 
-        public async Task Initialize()
+        public async Task InitializeAsync(CancellationToken Token)
         {
             if (Initialized)
             {
@@ -160,7 +157,7 @@ namespace EtwPilot.ViewModel
                 //
                 return;
             }
-            ProgressState.InitializeProgress(2);
+            using var progressContext = ProgressState.CreateProgressContext(2, $"Initializing insights view model...");
             try
             {
                 ProgressState.UpdateProgressMessage($"Initializing Semantic Kernel....");
@@ -193,17 +190,16 @@ namespace EtwPilot.ViewModel
                     if (!string.IsNullOrEmpty(qdrantHostUri))
                     {
                         var vecDb = new EtwVectorDbService(qdrantHostUri);
-                        await vecDb.InitializeAsync(builder);
+                        await vecDb.InitializeAsync(builder, Token);
                     }
 
                     ProgressState.UpdateProgressValue();
 
                     //
-                    // Chat histories must be accessible to inference runtimes and agents.
+                    // Chat history must be accessible to inference runtimes.
                     //
                     var chatHistory = new ChatHistory();
                     builder.Services.AddSingleton(chatHistory);
-                    builder.Services.AddSingleton(m_ResultHistory);
 
                     //
                     // Build the kernel
@@ -280,7 +276,6 @@ namespace EtwPilot.ViewModel
             var error = "";
             try
             {
-                ProgressState.InitializeProgress(2);
                 ProgressState.m_CurrentCommand = ImportManifestsVectorDbDataCommand;
                 ProgressState.CancelCommandButtonVisibility = System.Windows.Visibility.Visible;
                 await ImportInternal<ParsedEtwManifest, EtwProviderManifestRecord>(Source, Token);
@@ -309,7 +304,6 @@ namespace EtwPilot.ViewModel
             var error = "";
             try
             {
-                ProgressState.InitializeProgress(2);
                 ProgressState.m_CurrentCommand = ImportEtwEventsVectorDbDataCommand;
                 ProgressState.CancelCommandButtonVisibility = System.Windows.Visibility.Visible;
                 await ImportInternal<ParsedEtwEvent, EtwEventRecord>(Source, Token);
@@ -340,7 +334,7 @@ namespace EtwPilot.ViewModel
         {
             var vecDb = m_Kernel.GetRequiredService<EtwVectorDbService>();
             var isSnapshotRestore = false;
-            ProgressState.UpdateProgressMessage("Waiting on data...");
+            using var progressContext = ProgressState.CreateProgressContext(2, $"Gathering requested data...");
             var data = new List<T>();
 
             if (Source == DataSource.Live)
@@ -412,6 +406,7 @@ namespace EtwPilot.ViewModel
                 throw new Exception($"Unsupported data source {Source}");
             }
 
+            ProgressState.UpdateProgressValue();
             if (data == null || data.Count == 0)
             {
                 throw new Exception("No data provided");
@@ -420,9 +415,7 @@ namespace EtwPilot.ViewModel
             if (!isSnapshotRestore)
             {
                 ProgressState.UpdateProgressValue();
-                ProgressState.UpdateProgressMessage($"Importing data...");
-                await vecDb.ImportDataAsync<T, U>(data, Token);
-                ProgressState.FinalizeProgress($"Imported {data.Count} records.");
+                await vecDb.ImportDataAsync<T, U>(data, Token, ProgressState);
             }
             var recordCount = await vecDb.GetRecordCountAsync<T>(Token);
             ProgressState.EphemeralStatusText = $"{recordCount} records available.";
@@ -469,9 +462,7 @@ namespace EtwPilot.ViewModel
             var error = string.Empty;
             try
             {
-                ProgressState.InitializeProgress(2);
-                ProgressState.UpdateProgressValue();
-                ProgressState.UpdateProgressMessage("Exporting vector DB collection...");
+                using var progressContext = ProgressState.CreateProgressContext(1, $"Exporting vector db collection..");
                 var vecDb = m_Kernel.GetRequiredService<EtwVectorDbService>();
                 await vecDb!.SaveCollectionAsync<T>(target, Token);
                 ProgressState.UpdateProgressValue();
@@ -496,47 +487,31 @@ namespace EtwPilot.ViewModel
             }
         }
 
-        private async Task Command_Reinitialize()
+        private async Task Command_Reinitialize(CancellationToken Token)
         {
             Reset();
-            await Initialize();
+            await InitializeAsync(Token);
         }
 
         private async Task Command_RefreshConvo()
         {
-            try
+            if (m_Kernel != null)
             {
                 var chatHistory = m_Kernel.GetRequiredService<ChatHistory>();
-                var resultHistory = m_Kernel.GetRequiredService<ConcurrentObservableCollection<InsightsInferenceResultModel>>();
                 chatHistory.Clear();
-                resultHistory.Clear();
             }
-            catch (Exception)
-            {
-                ProgressState.UpdateEphemeralStatustext("Chat service not ready.");
-            }
+            m_ResultHistory.Clear();
             CanExecuteChanged();
         }
 
         private void Reset()
         {
-            if (m_Kernel == null)
-            {
-                return;
-            }
-
-            try
+            if (m_Kernel != null)
             {
                 var chatHistory = m_Kernel.GetRequiredService<ChatHistory>();
-                var resultHistory = m_Kernel.GetRequiredService<ConcurrentObservableCollection<InsightsInferenceResultModel>>();
                 chatHistory.Clear();
-                resultHistory.Clear();
             }
-            catch (Exception)
-            {
-                ProgressState.UpdateEphemeralStatustext("Chat service not ready.");
-            }
-
+            m_ResultHistory.Clear();
             m_ModelBusy = false;
             m_Kernel = null;
             Prompt = string.Empty;
@@ -546,19 +521,17 @@ namespace EtwPilot.ViewModel
 
         private void Command_Clear()
         {
-            try
+            if (m_Kernel != null)
             {
                 var chatHistory = m_Kernel.GetRequiredService<ChatHistory>();
                 chatHistory.Clear();
             }
-            catch (Exception)
-            {
-                ProgressState.UpdateEphemeralStatustext("Chat service not ready.");
-            }
+            m_ResultHistory.Clear();
         }
+
         private void Command_Copy()
         {
-            try
+            if (m_Kernel != null)
             {
                 var chatHistory = m_Kernel.GetRequiredService<ChatHistory>();
                 if (chatHistory.Count > 0)
@@ -568,26 +541,44 @@ namespace EtwPilot.ViewModel
                     System.Windows.Clipboard.SetText(sb.ToString());
                 }
             }
-            catch (Exception)
-            {
-                ProgressState.UpdateEphemeralStatustext("Chat service not ready.");
-            }
         }
 
         private async Task Command_Generate(CancellationToken Token)
         {
             m_ModelBusy = true;
-            ProgressState.InitializeProgress(1); // runtime will adjust manually.
             ProgressState.m_CurrentCommand = GenerateCommand;
             ProgressState.CancelCommandButtonVisibility = System.Windows.Visibility.Visible;
 
             try
             {
                 var service = m_Kernel.GetRequiredService<InferenceService>();
-                _ = await service.RunInferenceAsync(AuthorRole.User,
+                var userPrompt = Prompt;
+                m_ResultHistory.Add(new InsightsInferenceResultModel()
+                {
+                    Type = InsightsInferenceResultModel.ContentType.UserInput,
+                    Content = userPrompt
+                }); // Add message to the chat history pane
+                Prompt = ""; // Clear the prompt in the UI
+                var fullResponse = await service.RunInferenceAsync(AuthorRole.User,
                     new ChatMessageContentItemCollection() {
-                        new Microsoft.SemanticKernel.TextContent(Prompt)
+                        new Microsoft.SemanticKernel.TextContent(userPrompt)
                 }, Token);
+                if (!string.IsNullOrEmpty(fullResponse))
+                {
+                    m_ResultHistory.Add(new InsightsInferenceResultModel()
+                    {
+                        Type = InsightsInferenceResultModel.ContentType.ModelOutput,
+                        Content = fullResponse!
+                    }); // Add model response to the chat history pane
+                }
+                else
+                {
+                    m_ResultHistory.Add(new InsightsInferenceResultModel()
+                    {
+                        Type = InsightsInferenceResultModel.ContentType.SystemMessage,
+                        Content = "No response from model"
+                    });
+                }
             }
             catch (OperationCanceledException)
             {
@@ -616,9 +607,9 @@ namespace EtwPilot.ViewModel
             EraseResultHistory(InsightsInferenceResultModel.ContentType.ErrorMessage);
 
             //
-            // Show form errors
+            // Show form errors - some errors are not shown in the UI but still prevent submission (like Prompt)
             //
-            var fields = new string[] { nameof(Initialized), nameof(Prompt) };
+            var fields = new string[] { nameof(Initialized) };
             foreach (var field in fields)
             {
                 if (PropertyHasErrors(field))
@@ -631,13 +622,8 @@ namespace EtwPilot.ViewModel
 
         private void AddSystemMessageToResult(string Message)
         {
-            if (m_Kernel == null)
-            {
-                return;
-            }
             var message = Message.Substring(0, Math.Min(Message.Length, 5000));
-            var resultHistory = m_Kernel.GetRequiredService<ConcurrentObservableCollection<InsightsInferenceResultModel>>();
-            resultHistory.Add(new InsightsInferenceResultModel()
+            m_ResultHistory.Add(new InsightsInferenceResultModel()
             {
                 Type = InsightsInferenceResultModel.ContentType.SystemMessage,
                 Content = message
@@ -646,13 +632,8 @@ namespace EtwPilot.ViewModel
 
         private void AddErrorMessageToResult(string Message)
         {
-            if (m_Kernel == null)
-            {
-                return;
-            }
             var message = Message.Substring(0, Math.Min(Message.Length, 5000));
-            var resultHistory = m_Kernel.GetRequiredService<ConcurrentObservableCollection<InsightsInferenceResultModel>>();
-            resultHistory.Add(new InsightsInferenceResultModel()
+            m_ResultHistory.Add(new InsightsInferenceResultModel()
             {
                 Type = InsightsInferenceResultModel.ContentType.ErrorMessage,
                 Content = message
@@ -661,19 +642,14 @@ namespace EtwPilot.ViewModel
 
         private void EraseResultHistory(InsightsInferenceResultModel.ContentType ContentType = InsightsInferenceResultModel.ContentType.None)
         {
-            if (m_Kernel == null)
-            {
-                return;
-            }
-            var resultHistory = m_Kernel.GetRequiredService<ConcurrentObservableCollection<InsightsInferenceResultModel>>();
             if (ContentType != InsightsInferenceResultModel.ContentType.None)
             {
-                resultHistory.Where(item => item.Type == ContentType).ToList().
-                    ForEach(item => resultHistory.Remove(item));
+                m_ResultHistory.Where(item => item.Type == ContentType).ToList().
+                    ForEach(item => m_ResultHistory.Remove(item));
             }
             else
             {
-                resultHistory.ToList().ForEach(item => resultHistory.Remove(item));
+                m_ResultHistory.ToList().ForEach(item => m_ResultHistory.Remove(item));
             }
         }
 

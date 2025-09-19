@@ -200,12 +200,12 @@ namespace EtwPilot.ViewModel
 
         private async Task LoadProviders()
         {
-            ProgressState.InitializeProgress(2);
+            using var progressContext = ProgressState.CreateProgressContext(2, $"Loading providers...");
             var providers = await Model.GetProviders();
             ProgressState.UpdateProgressValue();
             if (providers == null)
             {
-                ProgressState.FinalizeProgress($"No providers available");
+                ProgressState.FinalizeProgress($"No providers available", Sticky:true);
                 return;
             }
             Providers.Clear();
@@ -219,12 +219,12 @@ namespace EtwPilot.ViewModel
             {
                 filtered.ForEach(f => Providers.Add(f));
                 int hidden = providers.Count - filtered.Count;
-                ProgressState.FinalizeProgress($"Loaded {Providers.Count} providers (hiding {hidden} with no manifest).");
+                ProgressState.FinalizeProgress($"Loaded {Providers.Count} providers (hiding {hidden} with no manifest).", Sticky: true);
             }
             else
             {
                 providers.ForEach(f => Providers.Add(f));
-                ProgressState.FinalizeProgress($"Loaded {Providers.Count} providers.");
+                ProgressState.FinalizeProgress($"Loaded {Providers.Count} providers.", Sticky: true);
             }
         }
 
@@ -280,7 +280,7 @@ namespace EtwPilot.ViewModel
                 return null;
             }
 
-            ProgressState.InitializeProgress(providers.Count);
+            using var progressContext = ProgressState.CreateProgressContext(providers.Count, $"Dumping provider manifests...");
             ProgressState.m_CurrentCommand = DumpProviderManifestsCommand;
             ProgressState.CancelCommandButtonVisibility = Visibility.Visible;
 
@@ -307,7 +307,7 @@ namespace EtwPilot.ViewModel
                 ProgressState.UpdateProgressValue();
             }
             ProgressState.FinalizeProgress(
-                $"Dumped {providers.Count} manifests to {root} ({numErrors} errors)");
+                $"Dumped {providers.Count} manifests to {root} ({numErrors} errors)", Sticky:true);
             ProgressState.CancelCommandButtonVisibility = Visibility.Hidden;
             ProgressState.m_CurrentCommand = null;
             return root;
@@ -324,11 +324,11 @@ namespace EtwPilot.ViewModel
 
         protected override async Task ExportData(DataExporter.ExportFormat Format, CancellationToken Token)
         {
-            ProgressState.InitializeProgress(1);
+            using var progressContext = ProgressState.CreateProgressContext(2, $"Exporting providers...");
             var list = GetAvailableProviders();
             if (list.Count == 0)
             {
-                ProgressState.FinalizeProgress("No providers available for export.");
+                ProgressState.FinalizeProgress("No providers available for export.", Sticky:true);
                 return;
             }
             try
@@ -337,11 +337,10 @@ namespace EtwPilot.ViewModel
                     list, Format, "Providers", Token);
                 if (result.Item1 == 0 || result.Item2 == null)
                 {
-                    ProgressState.FinalizeProgress("");
                     return;
                 }
                 ProgressState.UpdateProgressValue();
-                ProgressState.FinalizeProgress($"Exported {result.Item1} records to {result.Item2}");
+                ProgressState.FinalizeProgress($"Exported {result.Item1} records to {result.Item2}", Sticky:true);
                 if (Format != DataExporter.ExportFormat.Clip)
                 {
                     ProgressState.SetFollowupActionCommand.Execute(
@@ -361,7 +360,7 @@ namespace EtwPilot.ViewModel
             }
             catch (Exception ex)
             {
-                ProgressState.FinalizeProgress($"ExportData failed: {ex.Message}");
+                ProgressState.FinalizeProgress($"ExportData failed: {ex.Message}", Sticky:true);
             }
         }
 

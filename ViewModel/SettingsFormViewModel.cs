@@ -252,8 +252,8 @@ namespace EtwPilot.ViewModel
             }
         }
 
-        [JsonIgnore]
         private PromptExecutionSettingsDto _promptExecutionSettingsDto;
+        [JsonIgnore]
         public PromptExecutionSettingsDto PromptExecutionSettingsDto
         {
             get => _promptExecutionSettingsDto;

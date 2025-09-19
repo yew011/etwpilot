@@ -315,7 +315,7 @@ namespace EtwPilot.ViewModel
                 Debug.Assert(false);
                 return;
             }
-            ProgressState.InitializeProgress(2);
+            using var progressContext = ProgressState.CreateProgressContext(2, $"");
 
             if (SystemInfo.ActiveProcessList.Count == 0)
             {
@@ -330,7 +330,7 @@ namespace EtwPilot.ViewModel
             var manifest = await GlobalStateViewModel.Instance.g_ProviderViewModel.GetProviderManifest(Provider.Id);
             if (manifest == null)
             {
-                ProgressState.FinalizeProgress($"Unable to locate manifest for provider {Provider}");
+                ProgressState.FinalizeProgress($"Unable to locate manifest for provider {Provider}", Sticky:true);
                 return;
             }
 

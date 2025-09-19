@@ -116,14 +116,14 @@ namespace EtwPilot.ViewModel
 
         private async Task Command_LoadSessions()
         {
-            ProgressState.InitializeProgress(1);
+            using var progressContext = ProgressState.CreateProgressContext(1, $"");
             var sessions = await Model.GetSessions();
             if (sessions == null)
             {
                 ProgressState.FinalizeProgress($"No sessions available");
                 return;
             }
-            ProgressState.FinalizeProgress($"Loaded {sessions.Count} sessions");
+            ProgressState.FinalizeProgress($"Loaded {sessions.Count} sessions", Sticky: true);
             Sessions.Clear();
             sessions.ForEach(s => Sessions.Add(s));
         }
@@ -239,7 +239,7 @@ namespace EtwPilot.ViewModel
         {
             var total = LiveSessions.Count;
             var i = 1;
-            ProgressState.InitializeProgress(total);
+            using var progressContext = ProgressState.CreateProgressContext(total, $"");
             foreach (var session in LiveSessions)
             {
                 ProgressState.UpdateProgressMessage(
@@ -253,7 +253,7 @@ namespace EtwPilot.ViewModel
                 ProgressState.UpdateProgressMessage($"Live session stopped");
                 ProgressState.UpdateProgressValue();
             }
-            ProgressState.FinalizeProgress("All live sessions stopped.");
+            ProgressState.FinalizeProgress("All live sessions stopped.", Sticky: true);
             NotifyCanExecuteChanged();
             return true;
         }
@@ -288,7 +288,7 @@ namespace EtwPilot.ViewModel
 
         protected override async Task ExportData(DataExporter.ExportFormat Format, CancellationToken Token)
         {
-            ProgressState.InitializeProgress(1);
+            using var progressContext = ProgressState.CreateProgressContext(1, $"Exporting data...");
             List<ParsedEtwSession> sessions = SelectedSessions;
             if (sessions == null || sessions.Count == 0)
             {
@@ -324,10 +324,9 @@ namespace EtwPilot.ViewModel
                 }
                 if (result.Item1 == 0 || result.Item2 == null)
                 {
-                    ProgressState.FinalizeProgress("");
                     return;
                 }
-                ProgressState.FinalizeProgress($"Exported {result.Item1} records to {result.Item2}");
+                ProgressState.FinalizeProgress($"Exported {result.Item1} records to {result.Item2}", Sticky: true);
                 if (Format != DataExporter.ExportFormat.Clip)
                 {
                     ProgressState.SetFollowupActionCommand.Execute(
@@ -347,7 +346,7 @@ namespace EtwPilot.ViewModel
             }
             catch (Exception ex)
             {
-                ProgressState.FinalizeProgress($"ExportData failed: {ex.Message}");
+                ProgressState.FinalizeProgress($"ExportData failed: {ex.Message}", Sticky: true);
             }
         }
 

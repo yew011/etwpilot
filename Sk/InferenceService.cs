@@ -18,11 +18,9 @@ under the License.
 */
 using EtwPilot.Model;
 using EtwPilot.ViewModel;
-using Meziantou.Framework.WPF.Collections;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.SemanticKernel;
 using Microsoft.SemanticKernel.ChatCompletion;
-using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using System.Diagnostics;
 
@@ -90,8 +88,8 @@ namespace EtwPilot.Sk
         {
             var kernel = GlobalStateViewModel.Instance.g_InsightsViewModel.m_Kernel;
             var progress = GlobalStateViewModel.Instance.g_InsightsViewModel.ProgressState;
+            using var progressContext = progress.CreateProgressContext(4, $"Inference started...");
             var chatHistory = kernel.GetRequiredService<ChatHistory>();
-            var resultHistory = kernel.GetRequiredService<ConcurrentObservableCollection<InsightsInferenceResultModel>>();
             var isOllama = GlobalStateViewModel.Instance.Settings.OllamaConfig != null;
             var isOnnx = GlobalStateViewModel.Instance.Settings.OnnxGenAIConfig != null;
 
@@ -100,7 +98,6 @@ namespace EtwPilot.Sk
                 Debug.Assert(false);
                 throw new Exception("Prompt execution settings are not initialized.");
             }
-            progress.UpdateProgressMessage("Performing inference...");
 
             if (chatHistory.Count == 0)
             {
@@ -116,23 +113,6 @@ namespace EtwPilot.Sk
             // images, function call, tool input, etc.
             //
             chatHistory.Add(new ChatMessageContent(Role, Items));
-
-            //
-            // If the input was from a user role, add the user prompt to the UI.
-            //
-            if (Role == AuthorRole.User)
-            {
-                var text = Items[0] as TextContent;
-                if (text == null || string.IsNullOrEmpty(text.Text))
-                {
-                    throw new Exception("User message was empty");
-                }
-                resultHistory.Add(new InsightsInferenceResultModel()
-                {
-                    Type = InsightsInferenceResultModel.ContentType.UserInput,
-                    Content = text.Text
-                });
-            }
 
             m_PromptExecutionSettings.FunctionChoiceBehavior = FunctionChoiceBehavior.Auto(
                 options: new FunctionChoiceBehaviorOptions()
@@ -154,7 +134,7 @@ namespace EtwPilot.Sk
                 kernel.Data["ProgressState"] = progress;
             }
 
-            string? fullResponse;
+            string? fullResponse = null;
 
             if (isOllama)
             {
@@ -169,25 +149,13 @@ namespace EtwPilot.Sk
                 //
                 // Onnx does not support tool calling
                 //
-                fullResponse = await GetInferenceResultWithManualToolCalling(Token);
+                //fullResponse = await GetInferenceResultWithManualToolCalling(Token);
             }
 
             if (string.IsNullOrEmpty(fullResponse))
             {
                 return null;
-            }
-
-            //
-            // If the input was from a user role, add the model response to the UI.
-            //
-            if (Role == AuthorRole.User)
-            {
-                resultHistory.Add(new InsightsInferenceResultModel()
-                {
-                    Type = InsightsInferenceResultModel.ContentType.ModelOutput,
-                    Content = fullResponse
-                });
-            }    
+            }   
 
             progress.UpdateProgressValue();
             //
@@ -195,97 +163,6 @@ namespace EtwPilot.Sk
             //
             chatHistory.AddAssistantMessage(fullResponse);
             return fullResponse;
-        }
-
-        private async Task<string?> GetInferenceResultWithManualToolCalling(CancellationToken Token)
-        {
-            var charsProcessed = 0;
-            var isJsonResponse = false;
-            var inferenceResult = new InsightsInferenceResultModel();
-            var kernel = GlobalStateViewModel.Instance.g_InsightsViewModel.m_Kernel;
-            var progress = GlobalStateViewModel.Instance.g_InsightsViewModel.ProgressState;
-            var chatHistory = kernel.GetRequiredService<ChatHistory>();
-            var resultHistory = kernel.GetRequiredService<ConcurrentObservableCollection<InsightsInferenceResultModel>>();
-            //
-            // On first invocation, we must add the initial tool prompt to the chat history
-            //
-            var fullResponse = await GetInferenceResultStreaming(Token, (content) =>
-            {
-                if (content.Content is { Length: > 0 })
-                {
-                    if (charsProcessed == 0 && content.Content.Substring(0, 1) == "{")
-                    {
-                        //
-                        // On first character of response, determine if we want to treat it
-                        // like a JSON response for tool consumption as opposed to a response
-                        // to the user. In this case, we don't send each character to the UI
-                        // but instead wait for the full JSON response to parse it.
-                        //
-                        isJsonResponse = true;
-                        progress.UpdateProgressMessage("Awaiting model instructions...");
-                    }
-
-                    if (!isJsonResponse)
-                    {
-                        if (charsProcessed == 0)
-                        {
-                            progress.ProgressValue = 3; // skips 3 steps
-                            progress.UpdateProgressMessage("Receiving model response...");
-                            //
-                            // Add a new message object to the UI, which we will continually update as
-                            // characters from the response comes in.
-                            //
-                            inferenceResult.Type = InsightsInferenceResultModel.ContentType.ModelOutput;
-                            resultHistory.Add(inferenceResult);
-                        }
-                        inferenceResult.Content += content.Content;
-                    }
-                    charsProcessed++;
-                }
-            });
-
-            progress.UpdateProgressValue();
-
-            if (!isJsonResponse)
-            {
-                //
-                // The response was directed at the user
-                //
-                return fullResponse;
-            }
-            else
-            {
-                //
-                // The response was directed at a tool, as part of our hack at function
-                // calling. Parse it now and do not keep it in the history.
-                //
-                // We will use the model's plugin/function/argument selections to craft
-                // another prompt with additional context to answer the user's original
-                // question. This prompt might result in a vector search or some other
-                // action (like launching an ETW trace session to gather events),
-                // depending on the plugin choice.
-                //
-                progress.UpdateProgressMessage("Parsing model instructions...");
-                var json = JsonConvert.DeserializeObject(fullResponse) as JObject;
-                var prompt = await BuildRenderedPromptForFunction(json!);
-                var promptSettings = GlobalStateViewModel.Instance.Settings.OnnxGenAIConfig!.PromptExecutionSettings;
-                progress.UpdateProgressValue();
-                progress.UpdateProgressMessage("Performing task...");
-                var result2 = await kernel.InvokePromptAsync(prompt, arguments: new KernelArguments(promptSettings));
-                //
-                // Add a tool response to the chat history containing the rendered prompt, to give the
-                // model the additional context and then issue the query again.
-                //
-                chatHistory.Add(new() { Role = AuthorRole.Tool, Content = result2.RenderedPrompt });
-                //
-                // Issue the final request to the model, which contains all of the additional context
-                //
-                progress.UpdateProgressValue();
-                progress.UpdateProgressMessage("Issuing final prompt...");
-                fullResponse = await GetInferenceResult(Token);
-                progress.UpdateProgressValue();
-                return fullResponse;
-            }
         }
 
         private async Task<string> GetInferenceResultStreaming(CancellationToken Token, Action<StreamingChatMessageContent> ResponseCallback)
@@ -324,54 +201,24 @@ namespace EtwPilot.Sk
         private void AddInitialToolPrompt(bool IncludeFunctionDefinitions = false)
         {
             var kernel = GlobalStateViewModel.Instance.g_InsightsViewModel.m_Kernel;
-            //
-            // The sentence about 'function_call' is added to nudge the model to make chained
-            // function calls when appropriate. For example, ollama with llama3.2 doesn't seem
-            // to honor calling a second function when the first one returned a directive to
-            // call a second plugin function.
-            // 
-            /*var prompt = $"Your job is to answer questions about ETW events and providers using the provided tools. Follow " +
-                $"these rules:{Environment.NewLine}" +
-                $"1) If you already have sufficient context about the event(s) or provider(s) in question from a prior " +
-                $"tool invocation, use that context to answer the question directly. Use the appropriate tool(s) again if "+
-                $"the prior context is insufficient, but stop if a tool returns error messages.{Environment.NewLine}" +
-                $"2) If you do not have context about the event(s) or provider(s), select an appropriate plugin and function " +
-                $"(tool) from the list provided to you in the conversation history.{Environment.NewLine}" +
-                $"3) If the question does not appear to relate to either ETW events or providers, ask the user to clarify." +
-                $"{Environment.NewLine}" +
-                $"4) If a tool result includes a 'next_step', select an appropriate function from the available tools to "+
-                $"fulfill it, passing relevant arguments based on the conversation history. If you do not have a value for "+
-                $"a required parameter, do not invent one. Ask the user for the value."+
-                $"5) If unsure, pick a function that matches the intent of the 'next_step' or ask for clarification."+
-                $"{Environment.NewLine}" +
-                $"6) Arguments to tool functions must come from the conversation history, do not make up values. If you do "+
-                $"not know what value to provide to a required function parameter, ask the user."+
-                $"7) If a tool fails or there is a problem with user input, do not provide information about ETW providers or events " +
-                $"from your training data. You should only be using this user's real-time system data. If the tool mentions an error, " +
-                $"include it in your response.";*/
-            var prompt = $"Your job is to answer questions about the user's system by collecting and analyzing ETW events. " +
-                $"When the user asks a question (the analysis goal) that requires ETW data, follow these steps:{Environment.NewLine}" +
-                $"1) Start an ETW analysis agent using the appropriate tool/function. To start an agent, you will need to " +
-                $"provide the agent an ETW provider name, GUID/ID, or keywords that might match providers on the system. Base your " +
-                $"selections on the user's question (analysis goal).{Environment.NewLine}" +
-                $"2) The agent will send you the complete manifest(s) of one or more ETW providers that match your initial input. " +
-                $"From this list, pick up to 10 providers that seem most relevant to the analysis goal, and of those providers, pick " +
-                $"relevant events. Using the provided manifest format of these events, create a reasonable set of exemplar events " +
-                $"to be used in a vector similarity search against realtime events. Populate the fields in your events with values that " +
-                $"are useful for accomplishing the analysis goal, using constants available in the manifest or other values that " +
-                $"could match real events. Fields of particular interest include task, channel, opcode, keyword and template fields. " +
-                $"You must include the event ID in the exemplar events.{Environment.NewLine}"+
-                $"Send the list of provider IDs and the exemplar events to the agent using the correct tool/function.{Environment.NewLine}" +
-                $"3) The agent will start an ETW trace to capture events from the selected providers. It will perform a similarity " +
-                $"search against the exemplar events you provided, and return a list of realtime events that resemble the exemplar events. " +
-                $"Use these realtime events to answer the user's question and achieve the analysis goal.{Environment.NewLine}" +
-                $"While performing these steps, follow these general rules:{Environment.NewLine}" +
-                $"1) Follow the instructions contained in messages in the chat history from the tools/functions.{Environment.NewLine}" +
-                $"2) Stop if a tool returns error messages.{Environment.NewLine}" +
-                $"3) If a tool result includes a 'next_step', select an appropriate function from the available tools to " +
-                $"fulfill it, passing relevant arguments based on the conversation history.{Environment.NewLine}" +
-                $"4) If you are unsure, pick a function that matches the intent of the 'next_step' or ask for clarification." +
-                $"{Environment.NewLine}";
+            var prompt = @$"Your job is to answer questions about the user's system by collecting and analyzing ETW events. 
+                When the user asks a question (the analysis goal) that requires ETW data, follow these steps: 
+
+                1) Identify up to 5 ETW providers that produce ETW events related to the analysis goal: 
+                   a) Obtain the list of ETW providers on the system using the appropriate tool.
+                   b) Select up to 10 providers from this list. If the user provides direction or specific criteria on what providers to select, use it. Otherwise, use your own knowledge of the purpose of providers in the provided list to choose those that might suggest a good fit for the analysis goal. Do NOT invent or make up names. Pass the list of selected provider names to the appropriate tool to retrieve their manifests. The tool will send you a list of JSON-encoded manifests for each provider. 
+                {EtwManifestCompressor.GetSystemPromptHint()} 
+                   c) Study the manifests to understand what information the providers expose: the events, opcodes, tasks, channels, strings and other keywords. Repeat steps b-c until you feel you have chosen up to 5 providers that are strongly related to the confidence goal.
+                2) Pass the provider names to the appropriate tool to start a real-time ETW trace session. Always start a trace with no reduction strategy (ie, specify only provider name).
+                   a) When the trace completes, invoke the appropriate tool to retrieve the collected events iteratively until there are no more events.
+                   b) If the trace produced too many events, retry the trace using one of these data reduction strategies:
+                    i) Consult the manifest of each selected provider and select event ID and version of events of interest, limiting the trace to just the selected events. Do this for each provider you have selected, and pass this information to the appropriate tool to produce a more scoped set of events in a new trace session. Return to step 2a.
+                    ii) Limit the trace to one or more processes of interest:
+                        1. Call the appropriate tool to get a list of process names/IDs
+                        2. Based on name alone, select up to 5 processes from this list. Choose processes whose name might suggest a good fit for the analysis goal. Do not invent or make up names. For example, if the user wants to investigate performance of their browser software, you might select process names that correlate to browsers, such as 'chrome', 'msedge', 'firefox', etc.
+                        3. Pass the list of process names and/or IDs to the appropriate tool to limit the trace to events from just these processes. Return to step 2a.
+                   c) If the trace produced too few (or no) events, go back to step 1b and select different providers.
+                3) Analyze the collected events to achieve the analysis goal.";
             if (IncludeFunctionDefinitions)
             {
                 //

@@ -20,7 +20,7 @@ using Microsoft.SemanticKernel.Connectors.Ollama;
 using Microsoft.SemanticKernel.Connectors.Onnx;
 using System.Text.Json.Serialization;
 
-public class PromptExecutionSettingsDto
+public class PromptExecutionSettingsDto // Data Transfer Object
 {
     // Standard properties offered by all runtimes
     public float? Temperature { get; set; }
@@ -29,11 +29,21 @@ public class PromptExecutionSettingsDto
     // ExtensionData properties - specific to runtime
     public int? MaxTokens { get; set; }     // Context window size; Onnx: "max_tokens", Ollama: "num_ctx"
     public int? NumPredict { get; set; }    // only offered by ollama (max model response tokens only)
-    public bool ShowReasoning { get; set; } = true; // For Ollama, whether to show reasoning steps (eg, qwen3)
+    public bool ShowReasoning { get; set; } = false; // For Ollama, whether to show reasoning steps (eg, qwen3)
+    public string ReasoningEffort { get; set; } = "low"; // only gpt-oss for now, "low", "medium", "high"
 
     // For any other extension fields
     [JsonExtensionData]
     public Dictionary<string, object> ExtensionData { get; set; } = new();
+
+    private static readonly string[] s_ModelsSupportingThink = new[]
+        {
+            "gpt-oss", "deepseek-r1", "qwen3", "magistral", "deepseek-v3.1"
+        };
+    [JsonIgnore] // ui only
+    public string[] s_ReasoningEfforts { get; private set; } = new[] {
+            "low", "medium", "high"
+        };
 
     public static PromptExecutionSettingsDto FromOllama(OllamaPromptExecutionSettings src)
     {
@@ -100,7 +110,15 @@ public class PromptExecutionSettingsDto
             settings.ExtensionData["num_ctx"] = MaxTokens.Value;
         if (NumPredict.HasValue)
             settings.ExtensionData["num_predict"] = NumPredict.Value;
-        settings.ExtensionData["think"] = ShowReasoning;
+        // Important: ollama will throw an exception if the 'think' key
+        // appears at all, when the model doesn't support it and regardless
+        // of the value being set for it.
+        if (ShowReasoning)
+        {
+            // gpt-oss model supports levels of thinking, otherwise just a bool
+            settings.ExtensionData["reasoning_effort"] = ReasoningEffort;
+            settings.ExtensionData["think"] = ShowReasoning;
+        }
         foreach (var kv in ExtensionData)
             settings.ExtensionData[kv.Key] = kv.Value;
         return settings;
@@ -120,5 +138,10 @@ public class PromptExecutionSettingsDto
         foreach (var kv in ExtensionData)
             settings.ExtensionData[kv.Key] = kv.Value;
         return settings;
+    }
+
+    public static bool ModelSupportsThink(string modelName)
+    {
+        return s_ModelsSupportingThink.Any(prefix => modelName.StartsWith(prefix, StringComparison.OrdinalIgnoreCase));
     }
 }

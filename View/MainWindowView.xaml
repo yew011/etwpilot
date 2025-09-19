@@ -399,6 +399,31 @@
                         Visibility="{Binding CurrentViewModel.ProgressState.CancelCommandButtonVisibility}"
                         Height="20"/>
             </StatusBarItem>
+            <!-- Insights ready status text -->
+            <StatusBarItem HorizontalAlignment="Right" DockPanel.Dock="Right">
+                <StackPanel Orientation="Horizontal">
+                    <TextBlock Cursor="Hand"
+                               MouseLeftButtonUp="InsightsStatusTextBlock_MouseLeftButtonUp"
+                               Visibility="{Binding g_MainWindowViewModel.RibbonTabControlSelectedIndex, Converter={StaticResource InsightsTabVisibilityConverter}}">
+                        <TextBlock.Style>
+                            <Style TargetType="TextBlock">
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding g_InsightsViewModel.Initialized}" Value="True">
+                                        <Setter Property="Text" Value="Insights ready" />
+                                        <Setter Property="Background" Value="Green"/>
+                                        <Setter Property="Foreground" Value="White"/>
+                                    </DataTrigger>
+                                    <DataTrigger Binding="{Binding g_InsightsViewModel.Initialized}" Value="False">
+                                        <Setter Property="Text" Value="Insights not ready" />
+                                        <Setter Property="Background" Value="Red"/>
+                                        <Setter Property="Foreground" Value="White"/>
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </TextBlock.Style>
+                    </TextBlock>
+                </StackPanel>
+            </StatusBarItem>
             <!-- settings status text -->
             <StatusBarItem HorizontalAlignment="Right" DockPanel.Dock="Right">
                 <StackPanel Orientation="Horizontal">

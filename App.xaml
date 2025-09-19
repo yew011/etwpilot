@@ -72,7 +72,9 @@
         <converters:HasErrorConverter x:Key="HasErrorConverter"/>
         <converters:ErrorMessageConverter x:Key="ErrorMessageConverter"/>
         <BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter"/>
-                
+        <converters:InsightsTabVisibilityConverter x:Key="InsightsTabVisibilityConverter"/>
+        <converters:ModelNamePrefixToEnabledConverter x:Key="ModelNamePrefixToEnabledConverter"/>
+        
         <ControlTemplate x:Key="ErrorTemplateRight">
         <Grid Margin="5">
             <Grid.ColumnDefinitions>

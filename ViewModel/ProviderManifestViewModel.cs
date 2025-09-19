@@ -61,7 +61,7 @@ namespace EtwPilot.ViewModel
 
         protected override async Task ExportData(DataExporter.ExportFormat Format, CancellationToken Token)
         {
-            ProgressState.InitializeProgress(1);
+            using var progressContext = ProgressState.CreateProgressContext(2, $"Exporting data...");
             try
             {
                 if (Format == ExportFormat.Csv)
@@ -86,11 +86,10 @@ namespace EtwPilot.ViewModel
                         m_Manifest, Format, "ProviderManifest", Token);
                 if (result.Item1 == 0 || result.Item2 == null)
                 {
-                    ProgressState.FinalizeProgress("");
                     return;
                 }
                 ProgressState.UpdateProgressValue();
-                ProgressState.FinalizeProgress($"Exported {result.Item1} records to {result.Item2}");
+                ProgressState.FinalizeProgress($"Exported {result.Item1} records to {result.Item2}", Sticky:true);
                 if (Format != DataExporter.ExportFormat.Clip)
                 {
                     ProgressState.SetFollowupActionCommand.Execute(
@@ -110,7 +109,7 @@ namespace EtwPilot.ViewModel
             }
             catch (Exception ex)
             {
-                ProgressState.FinalizeProgress($"ExportData failed: {ex.Message}");
+                ProgressState.FinalizeProgress($"ExportData failed: {ex.Message}", Sticky:true);
             }
         }
     }

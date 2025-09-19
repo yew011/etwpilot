@@ -19,6 +19,9 @@ under the License.
 using EtwPilot.ViewModel;
 using Fluent;
 using System.Diagnostics;
+using System.Windows;
+using System.Windows.Input;
+using System.IO;
 
 namespace EtwPilot
 {
@@ -72,6 +75,14 @@ namespace EtwPilot
                 return;
             }
             MainWindowRibbon.TitleBar.HideContextTabs = false;
+        }
+
+        private void InsightsStatusTextBlock_MouseLeftButtonUp(object sender, MouseButtonEventArgs e)
+        {
+            if (GlobalStateViewModel.Instance.g_MainWindowViewModel.ShowDebugLogsCommand.CanExecute(null))
+            {
+                GlobalStateViewModel.Instance.g_MainWindowViewModel.ShowDebugLogsCommand.Execute(null);
+            }
         }
     }
 }

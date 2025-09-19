@@ -23,11 +23,12 @@
                                 Command="{Binding g_InsightsViewModel.CopyCommand}"/>
                     </UniformGrid>
                     <Button Content="Send" 
+                            Name="SendChatMessageButton"
                             Command="{Binding g_InsightsViewModel.GenerateCommand}"
                             IsDefault="True"/>
                 </DockPanel>
             </DockPanel>
-            <TextBox Text="{Binding g_InsightsViewModel.Prompt,Mode=TwoWay,UpdateSourceTrigger=PropertyChanged,ValidatesOnNotifyDataErrors=True}"
+            <TextBox Text="{Binding g_InsightsViewModel.Prompt,Mode=TwoWay,UpdateSourceTrigger=PropertyChanged,ValidatesOnNotifyDataErrors=False}"
                      Name="PromptTextbox"
                      TextWrapping="Wrap"/>
         </DockPanel>

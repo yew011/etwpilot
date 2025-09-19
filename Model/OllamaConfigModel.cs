@@ -27,11 +27,6 @@ using System.Collections.Concurrent;
 using Meziantou.Framework.WPF.Collections;
 using System.Windows;
 
-//
-// Remove supression after ollama connector is out of alpha
-//
-#pragma warning disable SKEXP0070
-
 namespace EtwPilot.Model
 {
     using static EtwPilot.Utilities.TraceLogger;
@@ -99,8 +94,8 @@ namespace EtwPilot.Model
             }
         }
 
-        [JsonIgnore] // UI Only
         private Visibility _CancelModelDownloadButtonVisibility;
+        [JsonIgnore] // UI Only
         public Visibility CancelModelDownloadButtonVisibility
         {
             get => _CancelModelDownloadButtonVisibility;

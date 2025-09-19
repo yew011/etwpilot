@@ -16,6 +16,8 @@ KIND, either express or implied.  See the License for the
 specific language governing permissions and limitations
 under the License.
 */
+using ControlzEx.Behaviors;
+using EtwPilot.Utilities;
 using EtwPilot.ViewModel;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.DependencyInjection;
@@ -47,15 +49,16 @@ namespace EtwPilot.Sk.Vector
             m_ClientUri = clientUri;
         }
 
-        public async Task InitializeAsync(IKernelBuilder Builder)
+        public async Task InitializeAsync(IKernelBuilder Builder, CancellationToken Token)
         {
             var progress = GlobalStateViewModel.Instance.g_InsightsViewModel.ProgressState;
+            using var progressContext = progress.CreateProgressContext(4, $"Initializing vector store service...");
             //
             // Create client and test connection to the Qdrant server.
             //
             progress.UpdateProgressMessage($"Initializing qdrant host {m_ClientUri} vector db...");
             m_Client = new QdrantClient(m_ClientUri, grpcTimeout: TimeSpan.FromSeconds(s_GrpcTimeoutSec));
-            var health = await m_Client.HealthAsync();
+            var health = await m_Client.HealthAsync(Token);
             progress.UpdateProgressMessage($"{health.Title} version {health.Version} commit {health.Commit}");
             m_QdrantStore = new QdrantVectorStore(m_Client, false, new() { HasNamedVectors = true });
             //
@@ -65,7 +68,7 @@ namespace EtwPilot.Sk.Vector
             var tmpKernel = Builder.Build();
             m_EmbeddingGenerator = tmpKernel.GetRequiredService<IEmbeddingGenerator<string, Embedding<float>>>();
             var text = "This is a test sentence.";
-            var embeddings = await m_EmbeddingGenerator.GenerateAsync(new[] { text });
+            var embeddings = await m_EmbeddingGenerator.GenerateAsync(new[] { text }, cancellationToken:Token);
             var embedding = embeddings.First();  // Get the first embedding
             m_Dimensions = embedding.Dimensions;  // Number of elements in the vector
             //
@@ -77,16 +80,16 @@ namespace EtwPilot.Sk.Vector
             //
             // Create collections if needed.
             //
-            var collections = m_QdrantStore.ListCollectionNamesAsync().ToBlockingEnumerable().ToList();
+            var collections = m_QdrantStore.ListCollectionNamesAsync(Token).ToBlockingEnumerable().ToList();
             if (collections == null || !collections.Contains(s_EtwProviderManifestCollectionName))
             {
                 var collection = GetCollection<Guid, EtwProviderManifestRecord>(s_EtwProviderManifestCollectionName);
-                await collection.EnsureCollectionExistsAsync();
+                await collection.EnsureCollectionExistsAsync(Token);
             }
             if (collections == null || !collections.Contains(s_EtwEventCollectionName))
             {
                 var collection = GetCollection<Guid, EtwEventRecord>(s_EtwEventCollectionName);
-                await collection.EnsureCollectionExistsAsync();
+                await collection.EnsureCollectionExistsAsync(Token);
             }
             m_Initialized = true;
             Builder.Services.AddSingleton(this);
@@ -148,7 +151,7 @@ namespace EtwPilot.Sk.Vector
             // Generate the snapshot on the qdrant node's local storage
             //
             var snapshotName = "";
-            var result = await m_Client.CreateSnapshotAsync(collectionName);
+            var result = await m_Client.CreateSnapshotAsync(collectionName, cancellationToken: Token);
             if (string.IsNullOrEmpty(result.Name))
             {
                 throw new Exception("The returned snapshot name is empty");
@@ -167,15 +170,16 @@ namespace EtwPilot.Sk.Vector
                 var uri = $"collections/{collectionName}/snapshots/" +
                         $"{snapshotName}";
                 var request = new HttpRequestMessage(HttpMethod.Get, uri);
-                var response = await httpClient.SendAsync(request, HttpCompletionOption.ResponseHeadersRead).ConfigureAwait(false);
+                var response = await httpClient.SendAsync(
+                    request, HttpCompletionOption.ResponseHeadersRead, cancellationToken: Token).ConfigureAwait(false);
                 if (response.StatusCode != HttpStatusCode.OK)
                 {
                     throw new Exception($"HTTP status code is {response.StatusCode}");
                 }
                 var target = Path.Combine(OutputPath, snapshotName);
-                using var downloadStream = await response.Content.ReadAsStreamAsync().ConfigureAwait(false);
+                using var downloadStream = await response.Content.ReadAsStreamAsync(Token).ConfigureAwait(false);
                 using var fileStream = new FileStream(target, FileMode.Create, FileAccess.Write, FileShare.None, bufferSize: 4096, useAsync: true);
-                await downloadStream.CopyToAsync(fileStream).ConfigureAwait(false);
+                await downloadStream.CopyToAsync(fileStream, cancellationToken: Token).ConfigureAwait(false);
             }
         }
 
@@ -197,7 +201,7 @@ namespace EtwPilot.Sk.Vector
                     {
                         {new ByteArrayContent(snapshotData), "snapshot"}
                     };
-                var response = await httpClient.PostAsync(uri, content).ConfigureAwait(false);
+                var response = await httpClient.PostAsync(uri, content, cancellationToken: Token).ConfigureAwait(false);
                 if (response.StatusCode != HttpStatusCode.OK)
                 {
                     throw new Exception($"HTTP status code is {response.StatusCode}");
@@ -220,7 +224,7 @@ namespace EtwPilot.Sk.Vector
             // Oddly, SK's QdrantCollection does not have a CountAsync method, so we'll use the
             // qdrant client directly.
             //
-            return await m_Client.CountAsync(collectionName);
+            return await m_Client.CountAsync(collectionName, cancellationToken:Token);
         }
 
         public async Task<List<T>?> GetAsync<T>(
@@ -265,32 +269,21 @@ namespace EtwPilot.Sk.Vector
             //   3. Call Collection.SearchAsync with a "neutral vector" that essentially is a no-op.
             // #3 is the only viable option at this time.
             //
-            var neutralVector = new float[m_Dimensions];
-            var searchOptions = new VectorSearchOptions<T>
-            {
-                Skip = 0,  // Starting offset
-            };
-
-            bool hasMoreRecords = true;
-            var records = new List<T>();
-            var retrieved = 0;
-            while (hasMoreRecords)
-            {
-                var results = collection.SearchAsync(
-                    searchValue: new ReadOnlyMemory<float>(neutralVector),
-                    top: top,
-                    options: searchOptions
-                );
-                retrieved = 0;
-                await foreach (var record in results)
-                {
-                    records.Add(record.Record);
-                    retrieved++;
-                }
-                searchOptions.Skip += retrieved;
-                hasMoreRecords = retrieved == top;
-            }
-            return records;
+            var searchOptions = new VectorSearchOptions<T>();
+            return await Paginate(
+                Collection: collection,
+                SearchOptions: searchOptions,
+                Top: top,
+                ScoreThreshold: 0,
+                SearchFunction: () =>
+                    collection.SearchAsync(
+                            searchValue: GetNeutralVector(),
+                            top: top,
+                            options: searchOptions,
+                            cancellationToken: Token
+                        ),
+                Token
+            );
         }
 
         public async Task<List<T>?> SearchAsync<T>(
@@ -303,115 +296,177 @@ namespace EtwPilot.Sk.Vector
         {
             var collectionName = GetCollectionName<T>();
             var collection = GetCollection<Guid, T>(collectionName);
-            if (!await collection.CollectionExistsAsync())
+            if (!await collection.CollectionExistsAsync(Token))
             {
                 throw new InvalidOperationException($"Collection {collectionName} does not exist");
             }
-            var results = collection.SearchAsync(Query, Top, Options, Token);
-            var records = new List<T>();
-            await foreach (var result in results)
-            {
-                if (!result.Score.HasValue)
-                {
-                    continue;
-                }
-                var score = Math.Round(result.Score.Value * 100);
-                if (score >= ScoreThreshold)
-                {
-                    records.Add(result.Record);
-                }
-            }
-            return records;
+            return await Paginate(
+                Collection: collection,
+                SearchOptions: Options,
+                Top: Top,
+                ScoreThreshold: ScoreThreshold,
+                SearchFunction: () =>
+                    collection.SearchAsync(
+                            searchValue: Query,
+                            top: Top,
+                            options: Options,
+                            cancellationToken: Token
+                        ),
+                Token);
         }
 
-        public async Task<List<T>?> HybridSearchAsync<T>(
-            string VectorSearchValue,
+        public async Task<List<T>?> SearchAsync<T, TInput>(
+            TInput VectorSearchValue,
+            int Top,
+            int ScoreThreshold,  // 0 - 100
+            VectorSearchOptions<T> Options,
+            CancellationToken Token
+            ) where T : class where TInput : notnull
+        {
+            var collectionName = GetCollectionName<T>();
+            var collection = GetCollection<Guid, T>(collectionName);
+            if (!await collection.CollectionExistsAsync(Token))
+            {
+                throw new InvalidOperationException($"Collection {collectionName} does not exist");
+            }
+            return await Paginate(
+                Collection: collection,
+                SearchOptions: Options,
+                Top: Top,
+                ScoreThreshold: ScoreThreshold,
+                SearchFunction: () =>
+                    collection.SearchAsync(
+                            searchValue: VectorSearchValue,
+                            top: Top,
+                            options: Options,
+                            cancellationToken: Token
+                        ),
+                Token);
+        }
+
+        public async Task<List<T>?> HybridSearchAsync<T, TInput>(
+            TInput VectorSearchValue,
             List<string> Keywords,
             int Top,
             int ScoreThreshold,  // 0 - 100
             HybridSearchOptions<T> Options,
             CancellationToken Token
-            ) where T : class
+            ) where T : class where TInput : notnull
         {
             var collectionName = GetCollectionName<T>();
             var collection = GetCollection<Guid, T>(collectionName);
-            if (!await collection.CollectionExistsAsync())
+            if (!await collection.CollectionExistsAsync(Token))
             {
                 throw new InvalidOperationException($"Collection {collectionName} does not exist");
             }
-            var results = collection.HybridSearchAsync(VectorSearchValue, Keywords, Top, Options, Token);
-            var records = new List<T>();
-            await foreach (var result in results)
-            {
-                if (!result.Score.HasValue)
-                {
-                    continue;
-                }
-                var score = Math.Round(result.Score.Value * 100);
-                if (score >= ScoreThreshold)
-                {
-                    records.Add(result.Record);
-                }
-            }
-            return records;
+            return await Paginate(
+                Collection: collection,
+                SearchOptions: Options,
+                Top: Top,
+                ScoreThreshold: ScoreThreshold,
+                SearchFunction: () =>
+                    collection.HybridSearchAsync(
+                            searchValue: VectorSearchValue,
+                            keywords: Keywords,
+                            top: Top,
+                            options: Options,
+                            cancellationToken: Token
+                        ),
+                Token);
+        }
+
+        public ReadOnlyMemory<float> GetNeutralVector()
+        {
+            return new ReadOnlyMemory<float>(new float[m_Dimensions]);
         }
 
         public async Task EraseAsync<T>(CancellationToken Token) where T: class
         {
             var collectionName = GetCollectionName<T>();
             var collection = GetCollection<Guid, T>(collectionName);
-            if (!await collection.CollectionExistsAsync())
+            if (!await collection.CollectionExistsAsync(Token))
             {
                 return;
             }
-            await collection.EnsureCollectionDeletedAsync();
+            //
+            // Qdrant does not have a "delete all records" operation, so we drop and recreate the collection.
+            //
+            await collection.EnsureCollectionDeletedAsync(Token);
+            await collection.EnsureCollectionExistsAsync(Token);
         }
 
         public async Task ImportDataAsync<T, U>(
             List<T> Data,   // eg, T = ParsedEtwEvent, U = EtwEventRecord
             CancellationToken Token,
-            ProgressState? Progress = null
+            ProgressState Progress
             ) where T : class where U : class, IEtwRecord<T>
         {
-            var oldProgressValue = Progress?.ProgressValue;
-            var oldProgressMax = Progress?.ProgressMax;
-            if (Progress != null)
-            {
-                Progress.ProgressMax = Data.Count;
-                Progress.ProgressValue = 0;
-            }
+            using var progressContext = Progress.CreateProgressContext(Data.Count, $"Importing data...");
             var recordNumber = 1;
 
             var collectionName = GetCollectionName<U>();
             var collection = GetCollection<Guid, U>(collectionName);
-            if (!await collection.CollectionExistsAsync())
+            if (!await collection.CollectionExistsAsync(Token))
             {
                 throw new InvalidOperationException($"Collection {collectionName} does not exist");
             }
 
-            try
+            foreach (var item in Data)
             {
-                foreach (var item in Data)
+                if (Token.IsCancellationRequested)
                 {
-                    if (Token.IsCancellationRequested)
+                    throw new OperationCanceledException();
+                }
+                Progress.UpdateProgressMessage($"Importing vector data (record {recordNumber++} of {Data.Count})...");
+                var record = U.Create<U>();
+                record.Build(item);
+                await collection.UpsertAsync(record, cancellationToken: Token);
+                Progress.UpdateProgressValue();
+            }
+        }
+
+        private async Task<List<T>> Paginate<T>(
+            QdrantCollection<Guid, T> Collection,
+            dynamic SearchOptions, // can be VectorSearchOptions<T> or HybridSearchOptions<T>
+            int Top,
+            int ScoreThreshold,  // 0 - 100 (0 = all)
+            Func<IAsyncEnumerable<VectorSearchResult<T>>> SearchFunction,
+            CancellationToken Token
+            ) where T : class
+        {
+            bool keepGoing = true;
+            var records = new List<T>();
+            SearchOptions.Skip = 0;
+            while (keepGoing)
+            {
+                var results = SearchFunction();
+                var retrieved = 0;
+                if (Token.IsCancellationRequested)
+                {
+                    break;
+                }
+                await foreach (var result in results)
+                {
+                    retrieved++;
+                    if (ScoreThreshold > 0)
                     {
-                        throw new OperationCanceledException();
+                        if (!result.Score.HasValue)
+                        {
+                            continue;
+                        }
+                        var score = Math.Round(result.Score.Value * 100);
+                        if (score >= ScoreThreshold)
+                        {
+                            records.Add(result.Record);
+                        }
+                        continue;
                     }
-                    Progress?.UpdateProgressMessage($"Importing vector data (record {recordNumber++} of {Data.Count})...");
-                    var record = U.Create<U>();
-                    record.Build(item);
-                    await collection.UpsertAsync(record, cancellationToken: Token);
-                    Progress?.UpdateProgressValue();
+                    records.Add(result.Record);
                 }
+                SearchOptions.Skip += retrieved;
+                keepGoing = (retrieved == Top && records.Count < Top);
             }
-            finally
-            {
-                if (Progress != null)
-                {
-                    Progress.ProgressMax = oldProgressMax!.Value;
-                    Progress.ProgressValue = oldProgressValue!.Value;
-                }
-            }
+            return records;
         }
     }
 }
