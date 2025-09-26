@@ -331,7 +331,7 @@ namespace EtwPilot.Model
             {
                 return null;
             }
-            return ParseModelFileLocation(ModelInfo[ModelName].ShowModelResponse.Modelfile);
+            return ParseModelFileLocation(ModelInfo[ModelName].ShowModelResponse.Modelfile, isOllamaLocal());
         }
 
         #region validation routines
@@ -395,7 +395,7 @@ namespace EtwPilot.Model
             }
 
             if (string.IsNullOrEmpty(ParseModelFileLocation(
-                ModelInfo[ModelName].ShowModelResponse.Modelfile)))
+                ModelInfo[ModelName].ShowModelResponse.Modelfile, isOllamaLocal())))
             {
                 AddError(nameof(ModelName), "Model file not found");
                 return;
@@ -412,7 +412,7 @@ namespace EtwPilot.Model
                 return;
             }
             if (string.IsNullOrEmpty(ParseModelFileLocation(
-                ModelInfo[TextEmbeddingModelName].ShowModelResponse.Modelfile)))
+                ModelInfo[TextEmbeddingModelName].ShowModelResponse.Modelfile, isOllamaLocal())))
             {
                 AddError(nameof(TextEmbeddingModelName), "Text embedding model file not found");
                 return;
@@ -422,10 +422,14 @@ namespace EtwPilot.Model
         #endregion
 
 
-        private string? ParseModelFileLocation(string? Contents)
+        private string? ParseModelFileLocation(string? Contents, bool requireLocalFile = true)
         {
             //
             // Parse the MODELFILE .. this might be brittle..
+            //
+            // Only require a local file when the configured endpoint is local. If the
+            // endpoint is remote the model file path is server-local and cannot be
+            // validated from here.
             //
             if (string.IsNullOrEmpty(Contents))
             {
@@ -448,9 +452,12 @@ namespace EtwPilot.Model
                     if (parts.Length == 2)
                     {
                         var fullpath = parts[1];
-                        if (!File.Exists(fullpath))
+                        if (requireLocalFile)
                         {
-                            return null;
+                            if (!File.Exists(fullpath))
+                            {
+                                return null;
+                            }
                         }
                         return fullpath;
                     }
@@ -462,6 +469,29 @@ namespace EtwPilot.Model
             //
             Debug.Assert(false);
             return null;
+        }
+
+        private bool isOllamaLocal()
+        {
+            if (string.IsNullOrEmpty(EndpointUri))
+            {
+                return true;
+            }
+            try
+            {
+                var uri = new Uri(EndpointUri);
+                var host = uri.Host;
+                return uri.IsLoopback ||
+                       host.Equals("localhost", System.StringComparison.OrdinalIgnoreCase) ||
+                       host.Equals("127.0.0.1") ||
+                       host.Equals("::1") ||
+                       host.Equals(System.Environment.MachineName, System.StringComparison.OrdinalIgnoreCase);
+            }
+            catch
+            {
+                // If parsing fails, treat as local to avoid false remote assumptions
+                return true;
+            }
         }
 
         private void ResetForm()
