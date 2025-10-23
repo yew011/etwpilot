@@ -48,6 +48,21 @@ dotnet build EtwPilot.sln
 dotnet run --project EtwPilot  
 ```  
 
+## Requirements  
+
+- Operating System: Windows 10 or later.  
+- Windows SDK: Required for ETW providers. Install via winget:  
+
+  ```powershell
+  winget install --id=Microsoft.WindowsSDK -e
+  ```  
+
+  Or download the installer from the [Windows SDK download page](https://developer.microsoft.com/windows/downloads/windows-sdk/).  
+- .NET SDK: Required to build and run ETWPilot. If .NET is not installed, download from the [official .NET download site](https://dotnet.microsoft.com/download) or install via winget:  
+
+  ```powershell
+  winget install --id=Microsoft.DotNet.SDK.8 -e
+  ```
 ## Configuration  
 The sample configuration file is under:  
 ```
